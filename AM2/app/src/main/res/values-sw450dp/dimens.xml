@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- General Spacing - STB / Large Phones / Small Tablets (sw450dp) -->
+    <dimen name="padding_xsmall">4dp</dimen>
+    <dimen name="padding_small">8dp</dimen>
+    <dimen name="padding_10dp">10dp</dimen>
+    <dimen name="padding_medium">12dp</dimen>
+    <dimen name="padding_large">16dp</dimen>
+
+    <dimen name="margin_xsmall">4dp</dimen>
+    <dimen name="margin_6dp">6dp</dimen>
+    <dimen name="margin_small">8dp</dimen>
+    <dimen name="margin_10dp">10dp</dimen>
+    <dimen name="margin_12dp">12dp</dimen>
+    <dimen name="margin_medium">12dp</dimen>
+    <dimen name="margin_20dp">16dp</dimen>
+    <dimen name="margin_large">20dp</dimen>
+    <dimen name="margin_xlarge">24dp</dimen>
+    <dimen name="margin_huge">24dp</dimen>
+    <dimen name="margin_giant">8dp</dimen> <!-- Lebih mepet lagi -->
+
+    <!-- Specific common values -->
+    <dimen name="logo_watermark_size">240dp</dimen>
+    <dimen name="card_corner_radius">10dp</dimen>
+    <dimen name="divider_height_small">1dp</dimen>
+    <dimen name="divider_height_medium">2dp</dimen>
+    <dimen name="box_stroke_width">2dp</dimen>
+    <dimen name="elevation_medium">8dp</dimen>
+    <dimen name="loading_spinner_size">48dp</dimen>
+
+    <!-- Text Sizes General -->
+    <dimen name="text_size_tiny">10sp</dimen>
+    <dimen name="text_size_small">12sp</dimen>
+    <dimen name="text_size_11sp">11sp</dimen>
+    <dimen name="text_size_medium">16sp</dimen>
+    <dimen name="text_size_large">20sp</dimen>
+
+    <!-- Main Screen -->
+    <dimen name="main_screen_padding">16dp</dimen>
+    <dimen name="text_main_header">24sp</dimen>
+    <dimen name="common_drawable_padding">10dp</dimen>
+    <dimen name="view_divider_height">1.5dp</dimen>
+    <dimen name="view_divider_margin_vertical">12dp</dimen>
+    <dimen name="menu_bar_padding_vertical">8dp</dimen>
+    <dimen name="btn_menu_width">100dp</dimen>
+    <dimen name="btn_menu_height">44dp</dimen>
+    <dimen name="text_button_menu">18sp</dimen>
+    <dimen name="last_speaking_margin_start">16dp</dimen>
+    <dimen name="text_last_speaking">20sp</dimen>
+    <dimen name="info_box_padding">18dp</dimen>
+    <dimen name="info_box_margin_top">16dp</dimen>
+    <dimen name="text_weather">22sp</dimen>
+    <dimen name="weather_drawable_padding">10dp</dimen>
+    <dimen name="text_ptt_timer">22sp</dimen>
+    <dimen name="text_digital_clock">44sp</dimen>
+    <dimen name="text_date">20sp</dimen>
+    <dimen name="btn_ptt_size">130dp</dimen>
+
+    <!-- Login Screen (Compact Mode) -->
+    <dimen name="login_logo_size">80dp</dimen> <!-- Diperkecil dari 100dp -->
+    <dimen name="text_login_title">18sp</dimen> <!-- Diperkecil dari 20sp -->
+    <dimen name="login_input_height">32dp</dimen>
+    <dimen name="login_input_padding">6dp</dimen>
+    <dimen name="login_input_margin_horizontal">100dp</dimen> <!-- Lebih ramping -->
+    <dimen name="login_password_margin_horizontal">100dp</dimen>
+    <dimen name="login_btn_padding_horizontal">40dp</dimen>
+    <dimen name="text_login_button">15sp</dimen>
+    <dimen name="login_btn_height">36dp</dimen>
+    <dimen name="login_server_status_icon_size">10dp</dimen>
+    <dimen name="login_server_status_margin_top">4dp</dimen>
+    <dimen name="login_server_status_margin_end">4dp</dimen>
+    <dimen name="login_server_status_text_size">10sp</dimen>
+
+    <!-- About and Settings Screen -->
+    <dimen name="setting_screen_padding">16dp</dimen>
+    <dimen name="setting_header_margin_bottom">20dp</dimen>
+    <dimen name="text_setting_title">22sp</dimen>
+    <dimen name="setting_audio_list_padding">12dp</dimen>
+    <dimen name="text_setting_label_small">14sp</dimen>
+    <dimen name="setting_card_margin_bottom">16dp</dimen>
+    <dimen name="list_divider_height">1dp</dimen>
+    <dimen name="text_setting_caption">14sp</dimen>
+    <dimen name="margin_status_top">8dp</dimen>
+    <dimen name="text_setting_section_title">18sp</dimen>
+    <dimen name="setting_icon_size">24dp</dimen>
+    <dimen name="setting_header_line_width">40dp</dimen>
+    <dimen name="setting_header_line_height">2dp</dimen>
+    <dimen name="setting_card_padding">16dp</dimen>
+    <dimen name="text_detected_key">16sp</dimen>
+
+    <dimen name="text_about_title">22sp</dimen>
+    <dimen name="text_about_version">14sp</dimen>
+    <dimen name="about_logo_size">100dp</dimen>
+    <dimen name="text_about_footer">12sp</dimen>
+    <dimen name="about_btn_update_width">110dp</dimen>
+    <dimen name="about_btn_update_height">44dp</dimen>
+    <dimen name="text_about_update">13sp</dimen>
+
+    <!-- Group & User Screen -->
+    <dimen name="group_screen_padding">16dp</dimen>
+    <dimen name="group_header_margin_bottom">16dp</dimen>
+    <dimen name="text_group_title">18sp</dimen>
+    <dimen name="group_header_line_width">40dp</dimen>
+    <dimen name="group_header_line_height">2dp</dimen>
+    <dimen name="group_icon_size">40dp</dimen>
+    <dimen name="user_screen_padding">16dp</dimen>
+    <dimen name="user_header_margin_bottom">16dp</dimen>
+    <dimen name="user_icon_size">40dp</dimen>
+    <dimen name="text_user_list_title">18sp</dimen>
+    <dimen name="user_header_line_width">40dp</dimen>
+    <dimen name="user_header_line_height">2dp</dimen>
+
+    <!-- Menu Screen -->
+    <dimen name="menu_screen_padding">16dp</dimen>
+    <dimen name="menu_drawable_padding">14dp</dimen>
+    <dimen name="menu_item_padding">18dp</dimen>
+    <dimen name="menu_text_size">18sp</dimen>
+    <dimen name="menu_divider_height">1dp</dimen>
+
+    <!-- Overlay Dialogs (Professional 60% Width) -->
+    <dimen name="overlay_inner_padding">16dp</dimen>
+    <dimen name="overlay_dialog_width">270dp</dimen>
+    <dimen name="text_overlay_title">18sp</dimen>
+    <dimen name="text_overlay_body">15sp</dimen>
+
+    <!-- List Items (Channel & User) -->
+    <dimen name="item_padding">12dp</dimen>
+    <dimen name="item_icon_size">32dp</dimen>
+    <dimen name="item_user_icon_size">32dp</dimen>
+    <dimen name="text_item_name">16sp</dimen>
+    <dimen name="item_text_margin_start">12dp</dimen>
+    <dimen name="item_status_icon_size">20dp</dimen>
+
+    <!-- Volume Overlay (Professional 60% Width Style) -->
+    <dimen name="volume_overlay_width">270dp</dimen>
+    <dimen name="volume_overlay_padding">16dp</dimen>
+    <dimen name="volume_overlay_margin_bottom">12dp</dimen>
+    <dimen name="volume_overlay_title_size">16sp</dimen>
+    <dimen name="volume_overlay_icon_size">24dp</dimen>
+    <dimen name="volume_overlay_icon_margin_end">12dp</dimen>
+    <dimen name="volume_overlay_slider_height">20dp</dimen>
+
+    <!-- Maps -->
+    <dimen name="maps_ptt_margin_bottom">120dp</dimen>
+</resources>

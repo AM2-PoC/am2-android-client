@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="@dimen/padding_large"
+    android:gravity="center_horizontal"
+    android:background="@android:color/black">
+
+    <com.google.android.material.imageview.ShapeableImageView
+        android:id="@+id/ivLogo"
+        android:layout_width="@dimen/login_logo_size"
+        android:layout_height="@dimen/login_logo_size"
+        android:layout_marginTop="@dimen/margin_giant"
+        android:src="@mipmap/ic_launcher"
+        app:shapeAppearanceOverlay="@style/ShapeAppearance.Circle" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="@dimen/login_server_status_margin_top">
+
+        <ImageView
+            android:id="@+id/ivServerStatus"
+            android:layout_width="@dimen/login_server_status_icon_size"
+            android:layout_height="@dimen/login_server_status_icon_size"
+            android:src="@drawable/ic_server"
+            android:layout_marginEnd="@dimen/login_server_status_margin_end"
+            app:tint="@android:color/holo_red_dark" />
+
+        <TextView
+            android:id="@+id/tvConnectionStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Server Offline"
+            android:textColor="@android:color/holo_red_dark"
+            android:textSize="@dimen/login_server_status_text_size"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/tilUsername"
+        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/margin_huge"
+        android:layout_marginStart="@dimen/login_input_margin_horizontal"
+        android:layout_marginEnd="@dimen/login_input_margin_horizontal"
+        android:hint="Username"
+        android:textStyle="bold"
+        android:textColorHint="#888888"
+        android:background="@drawable/white_input_background"
+        app:hintTextColor="#888888"
+        app:boxStrokeWidth="0dp"
+        app:boxStrokeWidthFocused="0dp"
+        app:boxBackgroundMode="none">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etUsername"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/login_input_height"
+            android:inputType="text"
+            android:autofillHints="username"
+            android:importantForAutofill="yes"
+            android:textColor="@android:color/black"
+            android:padding="@dimen/login_input_padding"
+            android:textSize="@dimen/text_size_small"
+            android:includeFontPadding="false"
+            android:gravity="center_vertical" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/tilPassword"
+        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/margin_medium"
+        android:layout_marginStart="@dimen/login_password_margin_horizontal"
+        android:layout_marginEnd="@dimen/login_password_margin_horizontal"
+        android:hint="Password"
+        android:textStyle="bold"
+        android:textColorHint="#888888"
+        android:background="@drawable/white_input_background"
+        app:hintTextColor="#888888"
+        app:boxStrokeWidth="0dp"
+        app:boxStrokeWidthFocused="0dp"
+        app:passwordToggleEnabled="true"
+        app:passwordToggleTint="@android:color/black"
+        app:boxBackgroundMode="none">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etPassword"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/login_input_height"
+            android:inputType="textPassword"
+            android:autofillHints="password"
+            android:importantForAutofill="yes"
+            android:textColor="@android:color/black"
+            android:padding="@dimen/login_input_padding"
+            android:textSize="@dimen/text_size_small"
+            android:includeFontPadding="false"
+            android:gravity="center_vertical" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/margin_xlarge">
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnLogin"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/login_btn_height"
+            android:layout_centerHorizontal="true"
+            android:text="LOGIN"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/text_login_button"
+            android:textStyle="bold"
+            android:background="@drawable/button_selector"
+            android:paddingStart="@dimen/login_btn_padding_horizontal"
+            android:paddingEnd="@dimen/login_btn_padding_horizontal"
+            android:focusable="true"
+            android:clickable="true" />
+
+        <CheckBox
+            android:id="@+id/cbRememberMe"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_toEndOf="@id/btnLogin"
+            android:layout_centerVertical="true"
+            android:layout_marginStart="@dimen/login_remember_me_margin_start"
+            android:buttonTint="#808080" />
+    </RelativeLayout>
+
+</LinearLayout>

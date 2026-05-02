@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/main_background">
+
+    <!-- Background Logo (Watermark) -->
+    <com.google.android.material.imageview.ShapeableImageView
+        android:layout_width="@dimen/logo_watermark_size"
+        android:layout_height="@dimen/logo_watermark_size"
+        android:layout_centerInParent="true"
+        android:src="@mipmap/ic_launcher"
+        android:alpha="0.15"
+        android:scaleType="fitCenter"
+        app:shapeAppearanceOverlay="@style/ShapeAppearance.Circle" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:scrollbarStyle="outsideOverlay">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="@dimen/menu_screen_padding">
+
+            <TextView
+                android:id="@+id/menuGroup"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/menu_item_background"
+                android:clickable="true"
+                android:focusable="true"
+                android:drawableLeft="@drawable/ic_channel"
+                android:drawableStart="@drawable/ic_channel"
+                android:drawablePadding="@dimen/menu_drawable_padding"
+                android:gravity="center_vertical"
+                android:padding="@dimen/menu_item_padding"
+                android:text="Group"
+                android:textColor="#FFFFFF"
+                android:textSize="@dimen/menu_text_size" />
+
+            <View
+                android:id="@+id/dividerUser"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/menu_divider_height"
+                android:background="@color/dark_orange" />
+
+            <TextView
+                android:id="@+id/menuUser"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/menu_item_background"
+                android:clickable="true"
+                android:focusable="true"
+                android:drawableLeft="@drawable/ic_user"
+                android:drawableStart="@drawable/ic_user"
+                android:drawablePadding="@dimen/menu_drawable_padding"
+                android:gravity="center_vertical"
+                android:padding="@dimen/menu_item_padding"
+                android:text="User"
+                android:textColor="#FFFFFF"
+                android:textSize="@dimen/menu_text_size" />
+
+            <View
+                android:id="@+id/dividerVideo"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/menu_divider_height"
+                android:background="@color/dark_orange" />
+
+            <!-- MENU VIDEO -->
+            <TextView
+                android:id="@+id/menuVideo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/menu_item_background"
+                android:clickable="true"
+                android:focusable="true"
+                android:drawableLeft="@drawable/ic_video"
+                android:drawableStart="@drawable/ic_video"
+                android:drawablePadding="@dimen/menu_drawable_padding"
+                android:gravity="center_vertical"
+                android:padding="@dimen/menu_item_padding"
+                android:text="Video"
+                android:textColor="#FFFFFF"
+                android:textSize="@dimen/menu_text_size" />
+
+            <View
+                android:id="@+id/dividerMap"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/menu_divider_height"
+                android:background="@color/dark_orange" />
+
+            <TextView
+                android:id="@+id/menuMap"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/menu_item_background"
+                android:clickable="true"
+                android:focusable="true"
+                android:drawableLeft="@drawable/ic_maps"
+                android:drawableStart="@drawable/ic_maps"
+                android:drawablePadding="@dimen/menu_drawable_padding"
+                android:gravity="center_vertical"
+                android:padding="@dimen/menu_item_padding"
+                android:text="Maps"
+                android:textColor="#FFFFFF"
+                android:textSize="@dimen/menu_text_size" />
+
+            <View
+                android:id="@+id/dividerSettings"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/menu_divider_height"
+                android:background="@color/dark_orange" />
+
+            <TextView
+                android:id="@+id/menuSettings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/menu_item_background"
+                android:clickable="true"
+                android:focusable="true"
+                android:drawableLeft="@drawable/ic_setting"
+                android:drawableStart="@drawable/ic_setting"
+                android:drawablePadding="@dimen/menu_drawable_padding"
+                android:gravity="center_vertical"
+                android:padding="@dimen/menu_item_padding"
+                android:text="Settings"
+                android:textColor="#FFFFFF"
+                android:textSize="@dimen/menu_text_size" />
+
+            <View
+                android:id="@+id/dividerAbout"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/menu_divider_height"
+                android:background="@color/dark_orange" />
+
+            <TextView
+                android:id="@+id/menuAbout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/menu_item_background"
+                android:clickable="true"
+                android:focusable="true"
+                android:drawableLeft="@drawable/ic_info"
+                android:drawableStart="@drawable/ic_info"
+                app:drawableTint="#00FF00"
+                android:drawablePadding="@dimen/menu_drawable_padding"
+                android:gravity="center_vertical"
+                android:padding="@dimen/menu_item_padding"
+                android:text="About"
+                android:textColor="#FFFFFF"
+                android:textSize="@dimen/menu_text_size" />
+
+            <View
+                android:id="@+id/dividerLogout"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/menu_divider_height"
+                android:background="@color/dark_orange" />
+
+            <TextView
+                android:id="@+id/menuLogout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/menu_item_background"
+                android:clickable="true"
+                android:focusable="true"
+                android:drawableLeft="@drawable/ic_logout"
+                android:drawableStart="@drawable/ic_logout"
+                android:drawablePadding="@dimen/menu_drawable_padding"
+                android:gravity="center_vertical"
+                android:padding="@dimen/menu_item_padding"
+                android:text="Logout"
+                android:textColor="#FF5252"
+                android:textSize="@dimen/menu_text_size" />
+
+        </LinearLayout>
+    </ScrollView>
+</RelativeLayout>

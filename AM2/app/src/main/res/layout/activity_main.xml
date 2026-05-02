@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/main_background"
+    android:fitsSystemWindows="true">
+
+    <com.google.android.material.imageview.ShapeableImageView
+        android:layout_width="@dimen/logo_watermark_size"
+        android:layout_height="@dimen/logo_watermark_size"
+        android:layout_centerInParent="true"
+        android:src="@mipmap/ic_launcher"
+        android:alpha="0.15"
+        android:scaleType="fitCenter"
+        app:shapeAppearanceOverlay="@style/ShapeAppearance.Circle" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="@dimen/main_screen_padding"
+        android:focusable="false"
+        android:descendantFocusability="afterDescendants">
+
+        <TextView
+            android:id="@+id/tvUserName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="User: -"
+            android:textColor="@color/white"
+            android:textSize="@dimen/text_main_header"
+            android:textStyle="bold"
+            app:drawableStartCompat="@drawable/ic_user"
+            android:drawablePadding="@dimen/common_drawable_padding"
+            android:gravity="center_vertical"
+            android:singleLine="true"
+            android:ellipsize="marquee"
+            android:marqueeRepeatLimit="marquee_forever"
+            android:scrollHorizontally="true"
+            android:focusable="false"
+            android:clickable="false" />
+
+        <View android:layout_width="match_parent"
+            android:layout_height="@dimen/view_divider_height"
+            android:layout_marginTop="@dimen/view_divider_margin_vertical"
+            android:layout_marginBottom="@dimen/view_divider_margin_vertical"
+            android:background="@color/dark_orange" />
+
+        <TextView
+            android:id="@+id/tvChannelName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Channel Utama"
+            android:textColor="@color/white"
+            android:textStyle="bold"
+            android:textSize="@dimen/text_main_header"
+            app:drawableStartCompat="@drawable/ic_channel"
+            android:drawablePadding="@dimen/common_drawable_padding"
+            android:gravity="center_vertical"
+            android:singleLine="true"
+            android:ellipsize="marquee"
+            android:marqueeRepeatLimit="marquee_forever"
+            android:scrollHorizontally="true"
+            android:focusable="false"
+            android:clickable="true" />
+
+        <View android:layout_width="match_parent"
+            android:layout_height="@dimen/view_divider_height"
+            android:layout_marginTop="@dimen/view_divider_margin_vertical"
+            android:layout_marginBottom="@dimen/view_divider_margin_vertical"
+            android:background="@color/dark_orange" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="IDLE"
+            android:textColor="@color/white"
+            android:textSize="@dimen/text_main_header"
+            android:textStyle="bold"
+            app:drawableStartCompat="@drawable/ic_status"
+            android:drawablePadding="@dimen/common_drawable_padding"
+            android:gravity="center_vertical"
+            android:ellipsize="marquee"
+            android:marqueeRepeatLimit="marquee_forever"
+            android:singleLine="true"
+            android:scrollHorizontally="true"
+            android:focusable="false"
+            android:clickable="false" />
+
+        <View android:layout_width="match_parent"
+            android:layout_height="@dimen/view_divider_height"
+            android:layout_marginTop="@dimen/view_divider_margin_vertical"
+            android:layout_marginBottom="@dimen/view_divider_margin_vertical"
+            android:background="@color/dark_orange" />
+
+        <TextView
+            android:id="@+id/tvProvider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Mencari Sinyal..."
+            android:textColor="@color/white"
+            android:textSize="@dimen/text_main_header"
+            android:textStyle="bold"
+            app:drawableStartCompat="@drawable/ic_no_network"
+            android:drawablePadding="@dimen/common_drawable_padding"
+            android:gravity="center_vertical"
+            android:singleLine="true"
+            android:focusable="false" />
+
+        <View android:layout_width="match_parent"
+            android:layout_height="@dimen/view_divider_height"
+            android:layout_marginTop="@dimen/view_divider_margin_vertical"
+            android:layout_marginBottom="@dimen/view_divider_margin_vertical"
+            android:background="@color/dark_orange" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingTop="@dimen/menu_bar_padding_vertical"
+            android:paddingBottom="@dimen/menu_bar_padding_vertical"
+            android:gravity="center_vertical"
+            android:baselineAligned="false">
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/btnMenu"
+                android:layout_width="@dimen/btn_menu_width"
+                android:layout_height="@dimen/btn_menu_height"
+                android:text="MENU"
+                android:textColor="@color/white"
+                android:textSize="@dimen/text_button_menu"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:background="@drawable/frame_background"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/tvLastSpeaking"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/last_speaking_margin_start"
+                android:text="Terakhir: -"
+                android:textColor="@color/orange_accent"
+                android:textSize="@dimen/text_last_speaking"
+                android:textStyle="bold"
+                android:ellipsize="marquee"
+                android:marqueeRepeatLimit="marquee_forever"
+                android:singleLine="true"
+                android:scrollHorizontally="true"
+                android:focusable="false"
+                android:clickable="false" />
+        </LinearLayout>
+
+        <RelativeLayout
+            android:id="@+id/layoutInfoBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/frame_background"
+            android:padding="@dimen/info_box_padding"
+            android:layout_marginTop="@dimen/info_box_margin_top"
+            android:focusable="false">
+
+            <TextView
+                android:id="@+id/tvWeather"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentStart="true"
+                android:text="--°C"
+                android:textColor="@color/white"
+                android:textSize="@dimen/text_weather"
+                android:textStyle="bold"
+                app:drawableStartCompat="@android:drawable/ic_menu_day"
+                android:drawablePadding="@dimen/weather_drawable_padding"
+                android:gravity="center_vertical"
+                android:focusable="false" />
+
+            <TextView
+                android:id="@+id/tvPttTimer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:text="00:00"
+                android:textColor="@color/white"
+                android:textSize="@dimen/text_ptt_timer"
+                android:textStyle="bold"
+                android:focusable="false" />
+
+            <TextView
+                android:id="@+id/tvDigitalClock"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/tvWeather"
+                android:gravity="center"
+                android:text="00:00:00"
+                android:textColor="@color/orange_accent"
+                android:textSize="@dimen/text_digital_clock"
+                android:textStyle="bold"
+                android:typeface="monospace"
+                android:focusable="false" />
+
+            <TextView
+                android:id="@+id/tvDate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/tvDigitalClock"
+                android:gravity="center"
+                android:text="Senin, 02 Februari 2026"
+                android:textColor="#BBBBBB"
+                android:textStyle="bold"
+                android:textSize="@dimen/text_date"
+                android:focusable="false" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/tvDate"
+                android:layout_marginTop="@dimen/margin_small"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:weightSum="3">
+
+                <androidx.appcompat.widget.AppCompatImageButton
+                    android:id="@+id/ivShortcutMaps"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="?attr/selectableItemBackground"
+                    app:srcCompat="@drawable/ic_maps"
+                    android:scaleType="centerInside"
+                    android:contentDescription="Shortcut Map"
+                    android:focusable="false"
+                    android:clickable="true" />
+
+                <androidx.appcompat.widget.AppCompatImageButton
+                    android:id="@+id/ivShortcutUsers"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="?attr/selectableItemBackground"
+                    app:srcCompat="@drawable/ic_user"
+                    android:scaleType="centerInside"
+                    android:contentDescription="Shortcut User"
+                    android:focusable="false"
+                    android:clickable="true" />
+
+                <androidx.appcompat.widget.AppCompatImageButton
+                    android:id="@+id/ivShortcutVideo"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="?attr/selectableItemBackground"
+                    app:srcCompat="@drawable/ic_video"
+                    android:scaleType="centerInside"
+                    android:contentDescription="Shortcut Video"
+                    android:focusable="false"
+                    android:clickable="true" />
+            </LinearLayout>
+        </RelativeLayout>
+
+        <RelativeLayout
+            android:id="@+id/layoutPttContainer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:focusable="false">
+
+            <FrameLayout
+                android:id="@+id/btnPtt"
+                android:layout_width="@dimen/btn_ptt_size"
+                android:layout_height="@dimen/btn_ptt_size"
+                android:clickable="true"
+                android:focusable="true">
+
+                <View
+                    android:id="@+id/btnPttBackground"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/ptt_button_selector"
+                    android:duplicateParentState="true" />
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/btnPttIcon"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerInside"
+                    app:srcCompat="@android:drawable/ic_btn_speak_now"
+                    android:duplicateParentState="true"
+                    android:contentDescription="Tombol PTT Icon" />
+            </FrameLayout>
+        </RelativeLayout>
+    </LinearLayout>
+
+</RelativeLayout>

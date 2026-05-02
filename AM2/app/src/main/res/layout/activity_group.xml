@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/main_background">
+
+    <!-- Background Logo (Watermark) -->
+    <com.google.android.material.imageview.ShapeableImageView
+        android:layout_width="@dimen/logo_watermark_size"
+        android:layout_height="@dimen/logo_watermark_size"
+        android:layout_centerInParent="true"
+        android:src="@mipmap/ic_launcher"
+        android:alpha="0.15"
+        android:scaleType="fitCenter"
+        app:shapeAppearanceOverlay="@style/ShapeAppearance.Circle" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="@dimen/group_screen_padding">
+
+        <TextView
+            android:id="@+id/tvHeaderGroup"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="@dimen/margin_small"
+            android:text="Group"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/text_group_title"
+            android:textStyle="bold"
+            app:drawableStartCompat="@drawable/ic_channel"
+            android:drawablePadding="@dimen/common_drawable_padding"
+            android:gravity="center" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/group_header_line_height"
+            android:layout_marginBottom="@dimen/group_header_margin_bottom"
+            android:background="@color/gray" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvChannels"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+</RelativeLayout>

@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:padding="8dp"
+    android:background="@drawable/menu_item_background"
+    android:addStatesFromChildren="true"
+    android:focusable="true"
+    android:clickable="true"
+    android:descendantFocusability="afterDescendants">
+
+    <!-- Area Info User -->
+    <LinearLayout
+        android:id="@+id/layoutUserArea"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="4dp"
+        android:focusable="false"
+        android:clickable="false">
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/imgUserIcon"
+            android:layout_width="@dimen/item_user_icon_size"
+            android:layout_height="@dimen/item_user_icon_size"
+            android:src="@drawable/ic_user"
+            android:background="@android:color/transparent"
+            app:tint="#BBBBBB"
+            android:contentDescription="User Icon" />
+
+        <TextView
+            android:id="@+id/tvUserName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/item_text_margin_start"
+            android:textColor="#FFFFFF"
+            android:textSize="@dimen/text_item_name"
+            android:textStyle="bold"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:gravity="center_vertical"
+            tools:text="Nama User" />
+    </LinearLayout>
+
+    <!-- Area untuk P2P AUDIO -->
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/ivAudioCall"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginStart="8dp"
+        android:src="@drawable/ic_call"
+        android:visibility="visible"
+        app:tint="@color/selector_p2p_icon_tint"
+        android:contentDescription="Audio Call"
+        android:padding="10dp"
+        android:focusable="true"
+        android:clickable="true"
+        android:background="@drawable/bg_p2p_audio" />
+
+    <!-- Area untuk P2P VIDEO -->
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/ivVideoCall"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="4dp"
+        android:src="@drawable/ic_video"
+        android:visibility="visible"
+        app:tint="@color/selector_p2p_icon_tint"
+        android:contentDescription="Video Call"
+        android:padding="10dp"
+        android:focusable="true"
+        android:clickable="true"
+        android:background="@drawable/bg_p2p_video" />
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/ivPrivateStatus"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="8dp"
+        android:src="@drawable/ic_lock"
+        android:visibility="gone"
+        app:tint="#FFA500"
+        android:contentDescription="Private Status" />
+
+</LinearLayout>

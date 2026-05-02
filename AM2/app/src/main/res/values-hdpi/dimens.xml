@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="padding_xsmall">2dp</dimen>
+    <dimen name="padding_small">4dp</dimen>
+    <dimen name="padding_10dp">6dp</dimen>
+    <dimen name="padding_medium">8dp</dimen>
+    <dimen name="padding_large">12dp</dimen>
+
+    <dimen name="margin_xsmall">2dp</dimen>
+    <dimen name="margin_6dp">4dp</dimen>
+    <dimen name="margin_small">4dp</dimen>
+    <dimen name="margin_10dp">6dp</dimen>
+    <dimen name="margin_12dp">8dp</dimen>
+    <dimen name="margin_medium">8dp</dimen>
+    <dimen name="margin_20dp">12dp</dimen>
+    <dimen name="margin_large">12dp</dimen>
+    <dimen name="margin_xlarge">16dp</dimen>
+    <dimen name="margin_huge">24dp</dimen>
+    <dimen name="margin_giant">32dp</dimen>
+
+    <dimen name="logo_watermark_size">120dp</dimen>
+    <dimen name="card_corner_radius">4dp</dimen>
+    <dimen name="divider_height_small">1dp</dimen>
+    <dimen name="divider_height_medium">1dp</dimen>
+    <dimen name="box_stroke_width">1dp</dimen>
+    <dimen name="elevation_medium">2dp</dimen>
+    <dimen name="loading_spinner_size">24dp</dimen>
+
+    <dimen name="text_size_tiny">7sp</dimen>
+    <dimen name="text_size_small">9sp</dimen>
+    <dimen name="text_size_11sp">10sp</dimen>
+    <dimen name="text_size_medium">12sp</dimen>
+    <dimen name="text_size_large">16sp</dimen>
+
+    <dimen name="main_screen_padding">8dp</dimen>
+    <dimen name="text_main_header">20sp</dimen>
+    <dimen name="common_drawable_padding">4dp</dimen>
+
+    <dimen name="view_divider_height">1dp</dimen>
+    <dimen name="view_divider_margin_vertical">6dp</dimen>
+    <dimen name="menu_bar_padding_vertical">4dp</dimen>
+
+    <dimen name="btn_menu_width">60dp</dimen>
+    <dimen name="btn_menu_height">36dp</dimen>
+    <dimen name="text_button_menu">14sp</dimen>
+
+    <dimen name="last_speaking_margin_start">8dp</dimen>
+    <dimen name="text_last_speaking">18sp</dimen>
+
+    <dimen name="login_logo_size">60dp</dimen>
+    <dimen name="text_login_title">14sp</dimen>
+    <dimen name="login_input_height">32dp</dimen>
+    <dimen name="login_input_padding">6dp</dimen>
+    <dimen name="login_input_margin_horizontal">20dp</dimen>
+    <dimen name="login_password_margin_horizontal">20dp</dimen>
+    <dimen name="login_btn_padding_horizontal">24dp</dimen>
+    <dimen name="text_login_button">12sp</dimen>
+    <dimen name="login_btn_height">36dp</dimen>
+
+    <dimen name="setting_screen_padding">8dp</dimen>
+    <dimen name="text_setting_title">14sp</dimen>
+    <dimen name="setting_card_margin_bottom">8dp</dimen>
+    <dimen name="text_setting_caption">10sp</dimen>
+    <dimen name="text_setting_section_title">12sp</dimen>
+    <dimen name="setting_icon_size">18dp</dimen>
+    <dimen name="about_logo_size">60dp</dimen>
+    <dimen name="text_about_title">14sp</dimen>
+    <dimen name="text_about_version">10sp</dimen>
+
+    <dimen name="about_btn_update_width">80dp</dimen>
+    <dimen name="about_btn_update_height">32dp</dimen>
+    <dimen name="text_about_update">10sp</dimen>
+
+    <!-- Added common missing values -->
+    <dimen name="info_box_padding">12dp</dimen>
+    <dimen name="info_box_margin_top">12dp</dimen>
+    <dimen name="text_weather">16sp</dimen>
+    <dimen name="weather_drawable_padding">6dp</dimen>
+    <dimen name="text_ptt_timer">16sp</dimen>
+    <dimen name="text_digital_clock">32sp</dimen>
+    <dimen name="text_date">14sp</dimen>
+    <dimen name="btn_ptt_size">110dp</dimen>
+    <dimen name="maps_ptt_margin_bottom">80dp</dimen>
+</resources>

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:padding="@dimen/item_padding"
+    android:gravity="center_vertical"
+    android:minHeight="?android:attr/listPreferredItemHeightSmall"
+    android:background="@drawable/menu_item_background"
+    android:focusable="true"
+    android:clickable="true">
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/imgChannel"
+        android:layout_width="@dimen/item_icon_size"
+        android:layout_height="@dimen/item_icon_size"
+        android:src="@drawable/ic_channel"
+        android:contentDescription="@null"
+        app:tint="#FF9800"
+        android:duplicateParentState="true"
+        tools:ignore="ContentDescription" />
+
+    <TextView
+        android:id="@+id/tvChannelName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginLeft="@dimen/item_text_margin_start"
+        android:layout_marginStart="@dimen/item_text_margin_start"
+        android:textColor="#FFFFFF"
+        android:textSize="@dimen/text_item_name"
+        android:textStyle="bold"
+        android:ellipsize="end"
+        android:singleLine="true"
+        android:gravity="center_vertical"
+        android:duplicateParentState="true"
+        tools:text="Nama Channel" />
+
+</LinearLayout>

@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <!-- Local Camera Preview (Background/Full or PIP) -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/cvLocalPreview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:cardCornerRadius="0dp"
+        app:cardElevation="0dp"
+        android:layout_margin="0dp">
+        <SurfaceView
+            android:id="@+id/svLocalPreview"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </androidx.cardview.widget.CardView>
+
+    <!-- Incoming Video Stream (ImageView for display) -->
+    <ImageView
+        android:id="@+id/ivIncomingVideo"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+
+    <!-- Overlay Info -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:background="#80000000"
+        android:orientation="vertical"
+        android:padding="@dimen/video_info_padding">
+        <TextView
+            android:id="@+id/tvStreamerName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#00FF00"
+            android:gravity="center"
+            android:textSize="@dimen/text_size_small" />
+    </LinearLayout>
+
+    <!-- PTT Video Button Container -->
+    <RelativeLayout
+        android:id="@+id/layoutPttContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_marginBottom="30dp"
+        android:clickable="false"
+        android:focusable="false">
+
+        <!-- PTT Button - Resized to be larger (110dp) for better grip -->
+        <FrameLayout
+            android:id="@+id/btnPttVideo"
+            android:layout_width="110dp"
+            android:layout_height="110dp"
+            android:layout_centerHorizontal="true"
+            android:clickable="true"
+            android:focusable="true">
+
+            <View
+                android:id="@+id/btnPttBackground"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/ptt_button_selector"
+                android:duplicateParentState="true" />
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/btnPttIcon"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerInside"
+                android:src="@android:drawable/ic_btn_speak_now"
+                android:duplicateParentState="true"
+                android:contentDescription="Tombol PTT Icon" />
+        </FrameLayout>
+
+        <!-- Switch Camera Button - Clean Icon Style -->
+        <ImageButton
+            android:id="@+id/btnSwitchCamera"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_alignParentEnd="true"
+            android:layout_alignParentRight="true"
+            android:layout_centerVertical="true"
+            android:layout_marginEnd="32dp"
+            android:layout_marginRight="32dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_rotate"
+            android:tint="#FFFFFF"
+            android:padding="8dp"
+            android:scaleType="fitCenter"
+            android:elevation="@dimen/elevation_medium"
+            android:visibility="gone" />
+
+    </RelativeLayout>
+
+</RelativeLayout>

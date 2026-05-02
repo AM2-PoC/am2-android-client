@@ -1,0 +1,405 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/main_background">
+
+    <!-- Background Logo (Watermark) -->
+    <com.google.android.material.imageview.ShapeableImageView
+        android:layout_width="@dimen/logo_watermark_size"
+        android:layout_height="@dimen/logo_watermark_size"
+        android:layout_centerInParent="true"
+        android:src="@mipmap/ic_launcher"
+        android:alpha="0.15"
+        android:scaleType="fitCenter"
+        app:shapeAppearanceOverlay="@style/ShapeAppearance.Circle" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:paddingTop="@dimen/setting_screen_padding"
+            android:layout_marginBottom="@dimen/margin_small">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:layout_width="@dimen/setting_icon_size"
+                android:layout_height="@dimen/setting_icon_size"
+                app:srcCompat="@drawable/ic_setting"
+                android:layout_marginBottom="@dimen/divider_height_medium"
+                app:tint="@color/orange_accent" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="PENGATURAN"
+                android:textColor="@color/white"
+                android:textSize="@dimen/text_setting_title"
+                android:textStyle="bold" />
+
+            <View
+                android:layout_width="@dimen/setting_header_line_width"
+                android:layout_height="@dimen/setting_header_line_height"
+                android:background="@color/dark_orange"
+                android:layout_marginTop="@dimen/divider_height_medium"/>
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:fillViewport="true"
+                android:scrollbars="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingLeft="@dimen/setting_screen_padding"
+                    android:paddingStart="@dimen/setting_screen_padding"
+                    android:paddingRight="@dimen/setting_screen_padding"
+                    android:paddingEnd="@dimen/setting_screen_padding"
+                    android:paddingBottom="@dimen/setting_screen_padding">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="#22000000"
+                        android:orientation="vertical"
+                        android:padding="@dimen/setting_card_padding"
+                        android:layout_marginBottom="@dimen/setting_card_margin_bottom">
+
+                        <TextView
+                            android:id="@+id/tvDetectedKey"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:text="MENUNGGU INPUT..."
+                            android:textColor="@color/orange_accent"
+                            android:textSize="@dimen/text_detected_key"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvSource"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Sumber: None"
+                            android:textColor="#888888"
+                            android:gravity="center"
+                            android:textSize="@dimen/text_setting_label_small"
+                            android:layout_marginTop="@dimen/margin_xsmall"
+                            android:textAllCaps="true" />
+
+                        <TextView
+                            android:id="@+id/tvMacAddress"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="MAC: 00:00:00:00:00:00"
+                            android:textColor="#555555"
+                            android:gravity="center"
+                            android:textSize="@dimen/text_size_small"
+                            android:layout_marginTop="@dimen/divider_height_medium"
+                            tools:ignore="SmallSp" />
+
+                        <androidx.appcompat.widget.AppCompatButton
+                            android:id="@+id/btnSetPtt"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center_horizontal"
+                            android:layout_marginTop="@dimen/margin_12dp"
+                            android:background="@drawable/button_selector"
+                            android:paddingLeft="@dimen/margin_large"
+                            android:paddingRight="@dimen/margin_large"
+                            android:text="SET TOMBOL PTT"
+                            android:textColor="@color/orange_accent"
+                            android:textSize="@dimen/text_setting_label_small"
+                            android:textStyle="bold"
+                            android:focusable="true"
+                            android:clickable="true" />
+
+                        <androidx.appcompat.widget.AppCompatCheckBox
+                            android:id="@+id/cbPttToggle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/margin_small"
+                            android:text="PTT Toggle Mode"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/text_setting_label_small"
+                            android:background="@drawable/menu_item_background"
+                            android:padding="@dimen/padding_10dp"
+                            android:focusable="true"
+                            android:buttonTint="@color/orange_accent" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="*Aktifkan jika ingin sekali tekan untuk bicara dan tekan lagi untuk berhenti."
+                            android:textColor="#666666"
+                            android:textSize="@dimen/text_size_tiny"
+                            android:layout_marginTop="@dimen/divider_height_medium"
+                            android:paddingLeft="@dimen/padding_xsmall"
+                            android:paddingStart="@dimen/padding_xsmall"
+                            tools:ignore="SmallSp" />
+
+                        <androidx.appcompat.widget.AppCompatCheckBox
+                            android:id="@+id/cbVox"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/margin_small"
+                            android:text="VOX"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/text_setting_label_small"
+                            android:background="@drawable/menu_item_background"
+                            android:padding="@dimen/padding_10dp"
+                            android:focusable="true"
+                            android:buttonTint="@color/orange_accent" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="*Aktifkan jika ingin transmisi otomatis saat mendeteksi suara."
+                            android:textColor="#666666"
+                            android:textSize="@dimen/text_size_tiny"
+                            android:layout_marginTop="@dimen/divider_height_medium"
+                            android:paddingLeft="@dimen/padding_xsmall"
+                            android:paddingStart="@dimen/padding_xsmall"
+                            tools:ignore="SmallSp" />
+
+                        <LinearLayout
+                            android:id="@+id/layoutVirtualPttContainer"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/margin_small"
+                            android:orientation="vertical">
+
+                            <androidx.appcompat.widget.AppCompatCheckBox
+                                android:id="@+id/cbShowVirtualPtt"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Tombol PTT Layar"
+                                android:textColor="@color/white"
+                                android:textSize="@dimen/text_setting_label_small"
+                                android:background="@drawable/menu_item_background"
+                                android:padding="@dimen/padding_10dp"
+                                android:focusable="true"
+                                android:buttonTint="@color/orange_accent" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/layoutInfoBoxSettingContainer"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/margin_small"
+                            android:orientation="vertical">
+
+                            <androidx.appcompat.widget.AppCompatCheckBox
+                                android:id="@+id/cbShowInfoBox"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Tampilkan Kotak Info"
+                                android:textColor="@color/white"
+                                android:textSize="@dimen/text_setting_label_small"
+                                android:background="@drawable/menu_item_background"
+                                android:padding="@dimen/padding_10dp"
+                                android:focusable="true"
+                                android:buttonTint="@color/orange_accent" />
+                        </LinearLayout>
+
+                        <androidx.appcompat.widget.AppCompatCheckBox
+                            android:id="@+id/cbStartOnBoot"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/margin_12dp"
+                            android:text="Auto Login"
+                            android:textColor="#BBBBBB"
+                            android:textSize="@dimen/text_setting_label_small"
+                            android:background="@drawable/menu_item_background"
+                            android:padding="@dimen/padding_10dp"
+                            android:focusable="true"
+                            android:buttonTint="@color/orange_accent" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="KONTROL LAYAR"
+                            android:textColor="#888888"
+                            android:textSize="@dimen/text_size_small"
+                            android:textStyle="bold"
+                            android:layout_marginTop="@dimen/margin_12dp"
+                            android:layout_marginBottom="@dimen/margin_xsmall"
+                            tools:ignore="SmallSp" />
+
+                        <androidx.appcompat.widget.AppCompatCheckBox
+                            android:id="@+id/cbKeepScreenOn"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Layar Selalu Menyala"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/text_setting_label_small"
+                            android:background="@drawable/menu_item_background"
+                            android:padding="@dimen/padding_10dp"
+                            android:focusable="true"
+                            android:buttonTint="@color/orange_accent" />
+
+                        <androidx.appcompat.widget.AppCompatCheckBox
+                            android:id="@+id/cbAutoWake"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/margin_xsmall"
+                            android:text="Bangunkan Layar Saat RX/TX"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/text_setting_label_small"
+                            android:background="@drawable/menu_item_background"
+                            android:padding="@dimen/padding_10dp"
+                            android:focusable="true"
+                            android:buttonTint="@color/orange_accent" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="KONFIGURASI NADA"
+                        android:textColor="#888888"
+                        android:textSize="@dimen/text_setting_section_title"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="@dimen/margin_6dp"/>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="#22000000"
+                        android:orientation="vertical"
+                        android:padding="@dimen/padding_xsmall">
+
+                        <androidx.appcompat.widget.AppCompatCheckBox
+                            android:id="@+id/cbGatewayMode"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Mode Gateway"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/text_setting_label_small"
+                            android:background="@drawable/menu_item_background"
+                            android:padding="@dimen/margin_12dp"
+                            android:focusable="true"
+                            android:buttonTint="@color/orange_accent" />
+
+                        <androidx.appcompat.widget.AppCompatCheckBox
+                            android:id="@+id/cbDtmfMode"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Mode DTMF"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/text_setting_label_small"
+                            android:background="@drawable/menu_item_background"
+                            android:padding="@dimen/margin_12dp"
+                            android:focusable="true"
+                            android:buttonTint="@color/orange_accent" />
+
+                        <androidx.appcompat.widget.AppCompatCheckBox
+                            android:id="@+id/cbSoundPush"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Nada Mulai"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/text_setting_label_small"
+                            android:background="@drawable/menu_item_background"
+                            android:padding="@dimen/margin_12dp"
+                            android:focusable="true"
+                            android:buttonTint="@color/orange_accent" />
+
+                        <androidx.appcompat.widget.AppCompatCheckBox
+                            android:id="@+id/cbSoundRx"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Nada Rx"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/text_setting_label_small"
+                            android:background="@drawable/menu_item_background"
+                            android:padding="@dimen/margin_12dp"
+                            android:focusable="true"
+                            android:buttonTint="@color/orange_accent" />
+                    </LinearLayout>
+                </LinearLayout>
+            </ScrollView>
+
+            <RelativeLayout
+                android:id="@+id/layoutRecordingOverlay"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#E6000000"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="@dimen/overlay_dialog_width"
+                    android:layout_height="wrap_content"
+                    android:layout_centerInParent="true"
+                    android:background="@drawable/frame_background"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="@dimen/overlay_inner_padding">
+
+                    <ProgressBar
+                        android:layout_width="@dimen/loading_spinner_size"
+                        android:layout_height="@dimen/loading_spinner_size"
+                        android:indeterminateTint="@color/orange_accent" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/margin_20dp"
+                        android:text="MENUNGGU INPUT"
+                        android:textColor="@color/white"
+                        android:textSize="@dimen/text_overlay_title"
+                        android:textStyle="bold"
+                        android:gravity="center" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/margin_small"
+                        android:text="Tekan tombol pada PTT atau Handsfree Anda sekarang..."
+                        android:textColor="#AAAAAA"
+                        android:textSize="@dimen/text_overlay_body"
+                        android:gravity="center"/>
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnCancelRecording"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/margin_large"
+                        android:background="@drawable/menu_item_background"
+                        android:text="BATAL"
+                        android:textColor="#FF5252"
+                        android:textSize="@dimen/text_setting_label_small"
+                        android:textStyle="bold"
+                        android:focusable="true" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/btnResetToDefault"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/margin_small"
+                        android:background="@android:color/transparent"
+                        android:text="RESET KE DEFAULT"
+                        android:textColor="@color/orange_accent"
+                        android:textSize="@dimen/text_size_11sp"
+                        android:textStyle="normal"
+                        android:focusable="true" />
+                </LinearLayout>
+            </RelativeLayout>
+        </FrameLayout>
+    </LinearLayout>
+</RelativeLayout>

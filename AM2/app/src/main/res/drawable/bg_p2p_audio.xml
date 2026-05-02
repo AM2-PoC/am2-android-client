@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Saat Fokus (D-Pad) -->
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/orange_accent" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+    <!-- Saat Ditekan -->
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#CC9800" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+    <!-- Kondisi Default -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#1E1E1E" />
+            <stroke
+                android:width="2dp"
+                android:color="@color/orange_accent" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+</selector>
