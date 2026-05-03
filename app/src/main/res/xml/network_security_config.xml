@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">global.poc-id.my.id</domain>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">webadmin.am2-poc.com</domain>
+        <domain includeSubdomains="true">apiapi.am2-poc.com</domain>
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">ip-api.com</domain>
         <domain includeSubdomains="true">openstreetmap.org</domain>

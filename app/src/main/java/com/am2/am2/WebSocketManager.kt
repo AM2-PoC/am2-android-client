@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit
 
 object WebSocketManager {
     private const val TAG = "WebSocketManager"
-    private const val SERVER_URL = "ws://global.poc-id.my.id:5000"
+    private const val SERVER_URL = "wss://apiapi.am2-poc.com"
     private const val PREFS_NAME = "AM2_PREFS"
 
     private const val DEBOUNCE_DISCONNECT_MS = 5000L
