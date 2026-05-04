@@ -18,10 +18,7 @@ import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
-import java.security.SecureRandom
-import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.*
 import kotlin.concurrent.thread
 
 class AboutActivity : BaseActivity() {
@@ -37,21 +34,8 @@ class AboutActivity : BaseActivity() {
             .followRedirects(true)
             .followSslRedirects(true)
 
-        try {
-            val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-                override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-                override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-            })
-            val sslContext = SSLContext.getInstance("TLS")
-            sslContext.init(null, trustAllCerts, SecureRandom())
-            builder.sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
-            builder.hostnameVerifier { _, _ -> true }
-        } catch (e: Exception) {
-            Log.e("AboutActivity", "SSL Setup Error", e)
-        }
-
         builder.build()
+        TlsCompat.applyBundledCaForOldAndroid(this, builder).build()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

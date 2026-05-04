@@ -1,0 +1,119 @@
+package com.am2.am2
+
+import android.content.Context
+import android.os.Build
+import okhttp3.OkHttpClient
+import java.security.KeyStore
+import java.security.cert.CertificateException
+import java.security.cert.CertificateFactory
+import java.security.cert.X509Certificate
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.TrustManagerFactory
+import javax.net.ssl.X509TrustManager
+
+object TlsCompat {
+
+    fun applyBundledCaForOldAndroid(
+        context: Context,
+        builder: OkHttpClient.Builder
+    ): OkHttpClient.Builder {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            return builder
+        }
+
+        val systemTrustManager = createSystemTrustManager()
+        val bundledTrustManager = createBundledTrustManager(context)
+
+        val compositeTrustManager = CompositeX509TrustManager(
+            listOf(systemTrustManager, bundledTrustManager)
+        )
+
+        val sslContext = SSLContext.getInstance("TLS")
+        sslContext.init(null, arrayOf<TrustManager>(compositeTrustManager), null)
+
+        return builder.sslSocketFactory(
+            sslContext.socketFactory,
+            compositeTrustManager
+        )
+
+    }
+
+    private fun createSystemTrustManager(): X509TrustManager {
+        val tmf = TrustManagerFactory.getInstance(
+            TrustManagerFactory.getDefaultAlgorithm()
+        )
+        tmf.init(null as KeyStore?)
+        return tmf.trustManagers
+            .filterIsInstance<X509TrustManager>()
+            .first()
+    }
+
+    private fun createBundledTrustManager(context: Context): X509TrustManager {
+        val certificateFactory = CertificateFactory.getInstance("X.509")
+
+        val caCertificate = context.resources.openRawResource(R.raw.isrg_root_x1).use {
+            certificateFactory.generateCertificate(it)
+        }
+
+        val keyStore = KeyStore.getInstance(KeyStore.getDefaultType())
+        keyStore.load(null, null)
+        keyStore.setCertificateEntry("isrg_root_x1", caCertificate)
+
+        val tmf = TrustManagerFactory.getInstance(
+            TrustManagerFactory.getDefaultAlgorithm()
+        )
+        tmf.init(keyStore)
+
+        return tmf.trustManagers
+            .filterIsInstance<X509TrustManager>()
+            .first()
+    }
+
+    private class CompositeX509TrustManager(
+        private val trustManagers: List<X509TrustManager>
+    ) : X509TrustManager {
+
+        override fun checkClientTrusted(
+            chain: Array<out X509Certificate>,
+            authType: String
+        ) {
+            var lastException: CertificateException? = null
+
+            for (trustManager in trustManagers) {
+                try {
+                    trustManager.checkClientTrusted(chain, authType)
+                    return
+                } catch (e: CertificateException) {
+                    lastException = e
+                }
+            }
+
+            throw lastException ?: CertificateException("Client certificate is not trusted")
+        }
+
+        override fun checkServerTrusted(
+            chain: Array<out X509Certificate>,
+            authType: String
+        ) {
+            var lastException: CertificateException? = null
+
+            for (trustManager in trustManagers) {
+                try {
+                    trustManager.checkServerTrusted(chain, authType)
+                    return
+                } catch (e: CertificateException) {
+                    lastException = e
+                }
+            }
+
+            throw lastException ?: CertificateException("Server certificate is not trusted")
+        }
+
+        override fun getAcceptedIssuers(): Array<X509Certificate> {
+            return trustManagers
+                .flatMap { it.acceptedIssuers.toList() }
+                .toTypedArray()
+        }
+    }
+}

@@ -12,7 +12,11 @@ import android.util.Log
 import android.widget.Toast
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import okhttp3.*
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
 import okio.ByteString
 import org.json.JSONArray
 import org.json.JSONObject
@@ -20,7 +24,10 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Collections
+import java.util.Date
+import java.util.LinkedHashSet
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 object WebSocketManager {
@@ -29,20 +36,25 @@ object WebSocketManager {
     private const val PREFS_NAME = "AM2_PREFS"
 
     private const val DEBOUNCE_DISCONNECT_MS = 5000L
+    private const val MAX_RECONNECT_DELAY = 10000L
+
+    private val RECONNECT_TOKEN = Any()
 
     private var client: OkHttpClient? = null
     private var webSocket: WebSocket? = null
     private var prefs: SharedPreferences? = null
     private var deviceId: String? = null
     private var appContext: Context? = null
+
     private var lastSentLat: Double = 0.0
     private var lastSentLon: Double = 0.0
 
     @Volatile private var isConnecting = false
     @Volatile private var reconnectDelay = 2000L
-    private const val MAX_RECONNECT_DELAY = 10000L
-    private var disconnectDebounceRunnable: Runnable? = null
     @Volatile private var actualSocketConnected = false
+    @Volatile private var socketGeneration = 0
+
+    private var disconnectDebounceRunnable: Runnable? = null
 
     var myUserId: String? = null
     var myUserName: String? = null
@@ -82,43 +94,50 @@ object WebSocketManager {
     private val _incomingVideoFrame = MutableLiveData<Pair<String, ByteArray>>()
     val incomingVideoFrame: LiveData<Pair<String, ByteArray>> = _incomingVideoFrame
 
-    // --- ENUM STATUS KOMUNIKASI UNTUK UI ---
-    enum class CommState { OFFLINE, RECONNECTING, IDLE, TX, RX, CALLING }
+    enum class CommState {
+        OFFLINE,
+        RECONNECTING,
+        IDLE,
+        TX,
+        RX,
+        CALLING
+    }
+
     private val _communicationState = MutableLiveData<CommState>(CommState.OFFLINE)
     val communicationState: LiveData<CommState> = _communicationState
 
-    private val _talkingStatus = MutableLiveData<String>("OFFLINE")
+    private val _talkingStatus = MutableLiveData("OFFLINE")
     val talkingStatus: LiveData<String> = _talkingStatus
 
-    private val _channelName = MutableLiveData<String>("Connecting...")
+    private val _channelName = MutableLiveData("Connecting...")
     val channelName: LiveData<String> = _channelName
     private var lastChannelName: String = "Connecting..."
 
-    private val _lastSpeaker = MutableLiveData<String>("Terakhir: -")
+    private val _lastSpeaker = MutableLiveData("Terakhir: -")
     val lastSpeaker: LiveData<String> = _lastSpeaker
 
-    private val _connectionStatus = MutableLiveData<Boolean>(false)
+    private val _connectionStatus = MutableLiveData(false)
     val connectionStatus: LiveData<Boolean> = _connectionStatus
 
-    private val _isTalking = MutableLiveData<Boolean>(false)
+    private val _isTalking = MutableLiveData(false)
     val isTalking: LiveData<Boolean> = _isTalking
 
-    private val _isCommunicationActive = MutableLiveData<Boolean>(false)
+    private val _isCommunicationActive = MutableLiveData(false)
     val isCommunicationActive: LiveData<Boolean> = _isCommunicationActive
 
-    private val _isRxOnly = MutableLiveData<Boolean>(false)
+    private val _isRxOnly = MutableLiveData(false)
     val isRxOnly: LiveData<Boolean> = _isRxOnly
 
-    private val _isVideoEnabled = MutableLiveData<Boolean>(true)
+    private val _isVideoEnabled = MutableLiveData(true)
     val isVideoEnabled: LiveData<Boolean> = _isVideoEnabled
 
-    private val _isPtpEnabled = MutableLiveData<Boolean>(true)
+    private val _isPtpEnabled = MutableLiveData(true)
     val isPtpEnabled: LiveData<Boolean> = _isPtpEnabled
 
-    private val _isMapsEnabled = MutableLiveData<Boolean>(true)
+    private val _isMapsEnabled = MutableLiveData(true)
     val isMapsEnabled: LiveData<Boolean> = _isMapsEnabled
 
-    private val _duplexMode = MutableLiveData<String>("HALF DUPLEX")
+    private val _duplexMode = MutableLiveData("HALF DUPLEX")
     val duplexMode: LiveData<String> = _duplexMode
 
     private val _loginEvent = MutableLiveData<LoginEvent?>()
@@ -134,13 +153,13 @@ object WebSocketManager {
     private val _ptpTargetName = MutableLiveData<String?>(null)
     val ptpTargetName: LiveData<String?> = _ptpTargetName
 
-    private val _isPrivateRx = MutableLiveData<Boolean>(false)
+    private val _isPrivateRx = MutableLiveData(false)
     val isPrivateRx: LiveData<Boolean> = _isPrivateRx
 
-    private val _isPtpVideo = MutableLiveData<Boolean>(false)
+    private val _isPtpVideo = MutableLiveData(false)
     val isPtpVideo: LiveData<Boolean> = _isPtpVideo
 
-    private val _navigateToVideo = MutableLiveData<Boolean>(false)
+    private val _navigateToVideo = MutableLiveData(false)
     val navigateToVideo: LiveData<Boolean> = _navigateToVideo
 
     private val _ptpHandshakeEvent = MutableLiveData<PtpHandshakeEvent?>(null)
@@ -158,8 +177,7 @@ object WebSocketManager {
         object ForceLogout : LoginEvent()
     }
 
-    @Volatile
-    private var internalIsTalking = false
+    @Volatile private var internalIsTalking = false
     private var mapListener: OnMessageListener? = null
 
     private val pttHandler = Handler(Looper.getMainLooper())
@@ -170,17 +188,18 @@ object WebSocketManager {
         override fun run() {
             updateTalkingStatusUI()
             if (activeSpeakers.isEmpty() && !AudioPlayer.isActuallyPlaying()) {
-                // Done
-            } else {
-                pttHandler.postDelayed(this, 200)
+                return
             }
+            pttHandler.postDelayed(this, 200)
         }
     }
 
     private val ptpTimeoutRunnable = Runnable {
         if (ptpRequestPending) {
             ptpRequestPending = false
-            _ptpHandshakeEvent.postValue(PtpHandshakeEvent.Failed("Permintaan waktu habis. Personel tidak merespon."))
+            _ptpHandshakeEvent.postValue(
+                PtpHandshakeEvent.Failed("Permintaan waktu habis. Personel tidak merespon.")
+            )
             updateTalkingStatusUI()
         }
     }
@@ -189,21 +208,31 @@ object WebSocketManager {
         fun onMessage(text: String?)
     }
 
-    init {
-        client = OkHttpClient.Builder()
+    private fun createWebSocketClient(context: Context): OkHttpClient {
+        val builder = OkHttpClient.Builder()
             .readTimeout(0, TimeUnit.MILLISECONDS)
             .connectTimeout(15, TimeUnit.SECONDS)
             .writeTimeout(15, TimeUnit.SECONDS)
-            .pingInterval(10, TimeUnit.SECONDS)
+            .pingInterval(25, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
-            .build()
+
+        return TlsCompat.applyBundledCaForOldAndroid(
+            context.applicationContext,
+            builder
+        ).build()
     }
 
     fun init(context: Context) {
-        if (prefs != null) return
+        if (prefs != null && client != null) return
+
         appContext = context.applicationContext
+        client = createWebSocketClient(context.applicationContext)
+
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        deviceId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+        deviceId = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ANDROID_ID
+        )
 
         savedUsername = prefs?.getString("username", null)
         savedPassword = prefs?.getString("password", null)
@@ -219,15 +248,22 @@ object WebSocketManager {
                         savedPassword = parts[1]
                     }
                 }
-            } catch (e: Exception) {}
+            } catch (_: Exception) {
+            }
         }
 
         currentChannelSlug = prefs?.getString("last_channel_slug", null)
 
         val startOnBoot = prefs?.getBoolean("start_on_boot", false) ?: false
-        isAuthorizedSession = startOnBoot && !savedUsername.isNullOrEmpty() && !savedPassword.isNullOrEmpty()
+        isAuthorizedSession = startOnBoot &&
+                !savedUsername.isNullOrEmpty() &&
+                !savedPassword.isNullOrEmpty()
 
-        val lastSavedName = prefs?.getString("last_channel_name", "Connecting...") ?: "Connecting..."
+        val lastSavedName = prefs?.getString(
+            "last_channel_name",
+            "Connecting..."
+        ) ?: "Connecting..."
+
         lastChannelName = lastSavedName
         _channelName.postValue(lastChannelName)
     }
@@ -237,7 +273,7 @@ object WebSocketManager {
     }
 
     fun setMapListener(listener: OnMessageListener?) {
-        this.mapListener = listener
+        mapListener = listener
     }
 
     private fun resetTalkingState() {
@@ -252,9 +288,11 @@ object WebSocketManager {
 
     fun setPtpTarget(userId: String?, userName: String?) {
         pttHandler.removeCallbacks(ptpTimeoutRunnable)
+
         ptpRequestPending = false
         internalPtpTargetId = userId
         internalPtpTargetName = userName
+
         _ptpTargetId.postValue(userId)
         _ptpTargetName.postValue(userName)
 
@@ -272,10 +310,12 @@ object WebSocketManager {
 
     fun startPtpWith(userId: String, userName: String) {
         if (_isPtpEnabled.value == false) return
+
         ptpRequestPending = true
         internalPtpTargetName = userName
         _isPtpVideo.postValue(false)
         _ptpHandshakeEvent.postValue(PtpHandshakeEvent.Requesting(userName))
+
         updateTalkingStatusUI()
         emit("request_ptp", JSONObject().put("target_id", userId))
 
@@ -285,10 +325,12 @@ object WebSocketManager {
 
     fun startPtpVideoWith(userId: String, userName: String) {
         if (_isVideoEnabled.value == false || _isPtpEnabled.value == false) return
+
         ptpRequestPending = true
         internalPtpTargetName = userName
         _isPtpVideo.postValue(true)
         _ptpHandshakeEvent.postValue(PtpHandshakeEvent.Requesting(userName))
+
         updateTalkingStatusUI()
         emit("request_ptp_video", JSONObject().put("target_id", userId))
 
@@ -298,10 +340,12 @@ object WebSocketManager {
 
     fun endPtp() {
         pttHandler.removeCallbacks(ptpTimeoutRunnable)
+
         val targetId = internalPtpTargetId
         if (targetId != null) {
             emit("cancel_ptp", JSONObject().put("target_id", targetId))
         }
+
         setPtpTarget(null, null)
     }
 
@@ -309,110 +353,243 @@ object WebSocketManager {
         _ptpHandshakeEvent.postValue(null)
     }
 
+    private fun isCurrentSocket(generation: Int): Boolean {
+        return generation == socketGeneration
+    }
+
+    private fun cancelReconnect() {
+        pttHandler.removeCallbacksAndMessages(RECONNECT_TOKEN)
+    }
+
+    @Synchronized
     fun connect() {
         if (isConnecting) return
         if (actualSocketConnected && webSocket != null) return
 
-        webSocket?.close(1000, "Reconnecting")
+        val context = appContext
+        if (context == null) {
+            isConnecting = false
+            _talkingStatus.postValue("OFFLINE")
+            _communicationState.postValue(CommState.OFFLINE)
+            Log.e(TAG, "WebSocketManager.init(context) must be called before connect()")
+            return
+        }
+
+        if (client == null) {
+            client = createWebSocketClient(context)
+        }
+
+        /*
+         * Increment generation BEFORE closing old socket.
+         * This invalidates all late callbacks from old sockets.
+         */
+        val generation = socketGeneration + 1
+        socketGeneration = generation
+
+        val oldSocket = webSocket
         webSocket = null
         actualSocketConnected = false
+        isAuthenticatedOnCurrentSocket = false
+
+        try {
+            oldSocket?.close(1000, "Reconnecting")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to close old socket cleanly", e)
+        }
 
         isConnecting = true
         _talkingStatus.postValue("RECONNECTING...")
         _communicationState.postValue(CommState.RECONNECTING)
 
-        val request = Request.Builder().url(SERVER_URL).build()
+        val request = Request.Builder()
+            .url(SERVER_URL)
+            .build()
 
-        if (client == null) {
-            client = OkHttpClient.Builder()
-                .pingInterval(10, TimeUnit.SECONDS)
-                .retryOnConnectionFailure(true)
-                .build()
-        }
+        Log.i(TAG, "Opening WebSocket generation=$generation url=$SERVER_URL")
 
-        webSocket = client?.newWebSocket(request, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.i(TAG, "WebSocket Connected ✅")
-                isConnecting = false
-                reconnectDelay = 2000L
-                actualSocketConnected = true
-                isAuthenticatedOnCurrentSocket = false
-                _connectionStatus.postValue(true)
+        val newSocket = client?.newWebSocket(
+            request,
+            object : WebSocketListener() {
+                override fun onOpen(socket: WebSocket, response: Response) {
+                    if (!isCurrentSocket(generation)) {
+                        Log.d(
+                            TAG,
+                            "Ignoring stale onOpen generation=$generation current=$socketGeneration"
+                        )
+                        try {
+                            socket.close(1000, "Stale socket")
+                        } catch (_: Exception) {
+                        }
+                        return
+                    }
 
-                cancelDisconnectDebounce()
+                    Log.i(TAG, "WebSocket Connected ✅ generation=$generation")
 
-                if (isAuthorizedSession && !savedUsername.isNullOrEmpty() && !savedPassword.isNullOrEmpty()) {
-                    executeLogin(savedUsername!!, savedPassword!!)
+                    webSocket = socket
+                    isConnecting = false
+                    reconnectDelay = 2000L
+                    actualSocketConnected = true
+                    isAuthenticatedOnCurrentSocket = false
+
+                    _connectionStatus.postValue(true)
+
+                    cancelDisconnectDebounce()
+                    cancelReconnect()
+
+                    if (
+                        isAuthorizedSession &&
+                        !savedUsername.isNullOrEmpty() &&
+                        !savedPassword.isNullOrEmpty()
+                    ) {
+                        executeLogin(savedUsername!!, savedPassword!!)
+                    } else {
+                        updateTalkingStatusUI()
+                    }
+                }
+
+                override fun onMessage(socket: WebSocket, text: String) {
+                    if (!isCurrentSocket(generation)) {
+                        Log.d(
+                            TAG,
+                            "Ignoring stale text message generation=$generation current=$socketGeneration"
+                        )
+                        return
+                    }
+
+                    handleMessage(text)
+                }
+
+                override fun onMessage(socket: WebSocket, bytes: ByteString) {
+                    if (!isCurrentSocket(generation)) {
+                        Log.d(
+                            TAG,
+                            "Ignoring stale binary message generation=$generation current=$socketGeneration"
+                        )
+                        return
+                    }
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        try {
+                            android.os.Process.setThreadPriority(
+                                android.os.Process.THREAD_PRIORITY_URGENT_AUDIO
+                            )
+                        } catch (_: Exception) {
+                        }
+                    }
+
+                    handleBinaryMessage(bytes)
+                }
+
+                override fun onClosing(socket: WebSocket, code: Int, reason: String) {
+                    if (!isCurrentSocket(generation)) {
+                        Log.d(
+                            TAG,
+                            "Ignoring stale onClosing code=$code reason=$reason generation=$generation current=$socketGeneration"
+                        )
+                        return
+                    }
+
+                    Log.w(TAG, "WebSocket closing code=$code reason=$reason generation=$generation")
+                }
+
+                override fun onClosed(socket: WebSocket, code: Int, reason: String) {
+                    if (!isCurrentSocket(generation)) {
+                        Log.d(
+                            TAG,
+                            "Ignoring stale onClosed code=$code reason=$reason generation=$generation current=$socketGeneration"
+                        )
+                        return
+                    }
+
+                    Log.w(TAG, "WebSocket closed code=$code reason=$reason generation=$generation")
+
+                    isConnecting = false
+                    actualSocketConnected = false
+                    isAuthenticatedOnCurrentSocket = false
+
+                    if (webSocket === socket) {
+                        webSocket = null
+                    }
+
+                    handleDisconnectCleanup(immediate = (code == 1000))
+
+                    if (code != 1000 && isAuthorizedSession) {
+                        attemptReconnect()
+                    }
+                }
+
+                override fun onFailure(socket: WebSocket, t: Throwable, response: Response?) {
+                    if (!isCurrentSocket(generation)) {
+                        Log.d(
+                            TAG,
+                            "Ignoring stale onFailure message=${t.message} generation=$generation current=$socketGeneration"
+                        )
+                        return
+                    }
+
+                    Log.e(
+                        TAG,
+                        "WebSocket failure generation=$generation message=${t.message}",
+                        t
+                    )
+
+                    isConnecting = false
+                    actualSocketConnected = false
+                    isAuthenticatedOnCurrentSocket = false
+
+                    if (webSocket === socket) {
+                        webSocket = null
+                    }
+
+                    handleDisconnectCleanup(immediate = false)
+
+                    if (isAuthorizedSession) {
+                        attemptReconnect()
+                    }
                 }
             }
+        )
 
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                handleMessage(text)
-            }
-
-            override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    try {
-                        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
-                    } catch (e: Exception) {}
-                }
-                handleBinaryMessage(bytes)
-            }
-
-            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {}
-
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                isConnecting = false
-                actualSocketConnected = false
-                handleDisconnectCleanup(immediate = (code == 1000))
-                if (code != 1000 && isAuthorizedSession) {
-                    attemptReconnect()
-                }
-            }
-
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "WebSocket Failure: ${t.message}")
-                isConnecting = false
-                actualSocketConnected = false
-                handleDisconnectCleanup(immediate = false)
-                if (isAuthorizedSession) {
-                    attemptReconnect()
-                }
-            }
-        })
+        webSocket = newSocket
     }
 
     private fun cancelDisconnectDebounce() {
-        disconnectDebounceRunnable?.let { pttHandler.removeCallbacks(it) }
+        disconnectDebounceRunnable?.let {
+            pttHandler.removeCallbacks(it)
+        }
         disconnectDebounceRunnable = null
     }
 
     private fun handleDisconnectCleanup(immediate: Boolean = false) {
         if (immediate) {
             performActualCleanup()
-        } else {
-            cancelDisconnectDebounce()
-            val runnable = Runnable {
-                if (!actualSocketConnected) {
-                    performActualCleanup()
-                }
-            }
-            disconnectDebounceRunnable = runnable
-            pttHandler.postDelayed(runnable, DEBOUNCE_DISCONNECT_MS)
+            return
         }
+
+        cancelDisconnectDebounce()
+
+        val runnable = Runnable {
+            if (!actualSocketConnected) {
+                performActualCleanup()
+            }
+        }
+
+        disconnectDebounceRunnable = runnable
+        pttHandler.postDelayed(runnable, DEBOUNCE_DISCONNECT_MS)
     }
 
     private fun performActualCleanup() {
         isAuthenticatedOnCurrentSocket = false
         _connectionStatus.postValue(false)
-        
+
         if (isAuthorizedSession) {
             _talkingStatus.postValue("RECONNECTING...")
             _communicationState.postValue(CommState.RECONNECTING)
         } else {
             _talkingStatus.postValue("OFFLINE")
+            _communicationState.postValue(CommState.OFFLINE)
         }
-        
+
         _usersOnline.postValue(JSONArray())
 
         if (internalPtpTargetId != null) {
@@ -420,7 +597,9 @@ object WebSocketManager {
         }
 
         if (internalIsTalking) {
-            pttHandler.post { stopTalking() }
+            pttHandler.post {
+                stopTalking()
+            }
         }
 
         resetTalkingState()
@@ -429,21 +608,31 @@ object WebSocketManager {
     private fun attemptReconnect() {
         if (!isAuthorizedSession) return
 
-        pttHandler.removeCallbacksAndMessages("reconnect_tag")
+        cancelReconnect()
+
+        val delay = reconnectDelay
+
         val runnable = Runnable {
-            if (isAuthorizedSession && (!actualSocketConnected || webSocket == null)) {
-                Log.d(TAG, "Attempting automatic reconnect... Delay: $reconnectDelay ms")
+            if (
+                isAuthorizedSession &&
+                (!actualSocketConnected || webSocket == null)
+            ) {
+                Log.d(TAG, "Attempting automatic reconnect. Delay was $delay ms")
                 connect()
-                // Exponential backoff
                 reconnectDelay = (reconnectDelay * 2).coerceAtMost(MAX_RECONNECT_DELAY)
             }
         }
-        // Gunakan postAtTime dengan token untuk management callback yang lebih baik
-        pttHandler.postAtTime(runnable, "reconnect_tag", SystemClock.uptimeMillis() + reconnectDelay)
+
+        pttHandler.postAtTime(
+            runnable,
+            RECONNECT_TOKEN,
+            SystemClock.uptimeMillis() + delay
+        )
     }
 
     private fun handleMessage(text: String) {
         mapListener?.onMessage(text)
+
         try {
             val payload = JSONObject(text)
             val type = payload.optString("type")
@@ -453,12 +642,16 @@ object WebSocketManager {
                 "login_success" -> {
                     isAuthorizedSession = true
                     isAuthenticatedOnCurrentSocket = true
-                    reconnectDelay = 2000L // Reset delay sukses login
+                    reconnectDelay = 2000L
+
                     myUserId = dataObj.optString("id")
                     myUserName = dataObj.optString("username")
-                    Log.i(TAG, "LOGIN_SUCCESS")
+
+                    Log.i(TAG, "LOGIN_SUCCESS user=$myUserName id=$myUserId")
 
                     cancelDisconnectDebounce()
+                    cancelReconnect()
+
                     _connectionStatus.postValue(true)
 
                     _availableChannels.postValue(dataObj.optJSONArray("channels"))
@@ -470,9 +663,12 @@ object WebSocketManager {
                     _duplexMode.postValue(dataObj.optString("duplex_mode", "HALF DUPLEX"))
 
                     _loginEvent.postValue(LoginEvent.Success(myUserId!!, myUserName!!))
+
                     reportLocation(force = true)
 
-                    val channelToJoin = currentChannelSlug ?: dataObj.optString("default_channel_slug")
+                    val channelToJoin = currentChannelSlug
+                        ?: dataObj.optString("default_channel_slug")
+
                     if (!channelToJoin.isNullOrEmpty()) {
                         joinChannel(channelToJoin)
                     } else {
@@ -489,8 +685,7 @@ object WebSocketManager {
                     isAuthenticatedOnCurrentSocket = false
                     val msg = dataObj.optString("message", "Login Gagal")
                     _loginEvent.postValue(LoginEvent.Error(msg))
-                    // Jika login gagal karena kredensial, mungkin sebaiknya berhenti mencoba
-                    // Tapi jika karena server error, attemptReconnect akan tetap jalan dari onClosed/onFailure
+                    updateTalkingStatusUI()
                 }
 
                 "force_logout" -> {
@@ -506,13 +701,15 @@ object WebSocketManager {
                     }
                 }
 
-                "channels_updated", "channels_update" -> {
+                "channels_updated",
+                "channels_update" -> {
                     val channels = dataObj.optJSONArray("channels")
                     if (channels != null) {
                         _availableChannels.postValue(channels)
                         Log.i(TAG, "Realtime sync: ${channels.length()} channels received")
 
                         var currentStillExists = false
+
                         for (i in 0 until channels.length()) {
                             val chanObj = channels.optJSONObject(i)
                             if (chanObj?.optString("slug") == currentChannelSlug) {
@@ -524,15 +721,20 @@ object WebSocketManager {
                                     if (internalPtpTargetName == null) {
                                         _channelName.postValue(lastChannelName)
                                         if (isAuthorizedSession) {
-                                            prefs?.edit()?.putString("last_channel_name", lastChannelName)?.apply()
+                                            prefs?.edit()
+                                                ?.putString("last_channel_name", lastChannelName)
+                                                ?.apply()
                                         }
                                     }
                                 }
+
                                 break
                             }
                         }
+
                         if (!currentStillExists && currentChannelSlug != null) {
                             Log.w(TAG, "Access to current channel revoked by Admin")
+
                             if (channels.length() > 0) {
                                 joinChannel(channels.optJSONObject(0).optString("slug"))
                             } else {
@@ -546,23 +748,44 @@ object WebSocketManager {
 
                 "permission_update" -> {
                     Log.i(TAG, "Permission update received: $dataObj")
+
                     if (dataObj.has("channels")) {
                         _availableChannels.postValue(dataObj.optJSONArray("channels"))
                     }
+
                     if (dataObj.has("username")) {
                         myUserName = dataObj.optString("username")
                     }
+
                     if (dataObj.has("is_rx_only")) {
                         val newRxOnly = dataObj.getBoolean("is_rx_only")
                         _isRxOnly.postValue(newRxOnly)
+
                         if (newRxOnly && internalIsTalking && internalPtpTargetId == null) {
-                            pttHandler.post { stopTalking() }
+                            pttHandler.post {
+                                stopTalking()
+                            }
                         }
                     }
-                    if (dataObj.has("enable_ptt_video")) _isVideoEnabled.postValue(dataObj.getBoolean("enable_ptt_video"))
-                    if (dataObj.has("enable_p2p")) _isPtpEnabled.postValue(dataObj.getBoolean("enable_p2p"))
-                    if (dataObj.has("enable_maps")) _isMapsEnabled.postValue(dataObj.getBoolean("enable_maps"))
-                    if (dataObj.has("duplex_mode")) _duplexMode.postValue(dataObj.optString("duplex_mode", "HALF DUPLEX"))
+
+                    if (dataObj.has("enable_ptt_video")) {
+                        _isVideoEnabled.postValue(dataObj.getBoolean("enable_ptt_video"))
+                    }
+
+                    if (dataObj.has("enable_p2p")) {
+                        _isPtpEnabled.postValue(dataObj.getBoolean("enable_p2p"))
+                    }
+
+                    if (dataObj.has("enable_maps")) {
+                        _isMapsEnabled.postValue(dataObj.getBoolean("enable_maps"))
+                    }
+
+                    if (dataObj.has("duplex_mode")) {
+                        _duplexMode.postValue(
+                            dataObj.optString("duplex_mode", "HALF DUPLEX")
+                        )
+                    }
+
                     updateTalkingStatusUI()
                 }
 
@@ -583,11 +806,13 @@ object WebSocketManager {
                     }
 
                     val speakersArray = dataObj.optJSONArray("speakers")
+
                     synchronized(activeSpeakers) {
                         activeSpeakers.clear()
                         speakerLastSeen.clear()
                         lastSpeakersBeforeEmpty = emptySet()
                         wasSomeoneElseTalking = false
+
                         if (speakersArray != null) {
                             for (i in 0 until speakersArray.length()) {
                                 val sName = speakersArray.optString(i)
@@ -597,10 +822,12 @@ object WebSocketManager {
                                 }
                             }
                         }
+
                         if (activeSpeakers.isNotEmpty()) {
                             startIdleMonitoring()
                         }
                     }
+
                     updateTalkingStatusUI()
                 }
 
@@ -617,15 +844,23 @@ object WebSocketManager {
 
                     if (isPrivate || incomingChannel == currentChannelSlug) {
                         _isPrivateRx.postValue(isPrivate)
+
                         val speakersArray = dataObj.optJSONArray("speakers")
+
                         synchronized(activeSpeakers) {
                             val wasEmpty = activeSpeakers.isEmpty()
-                            val currentSpeaker = if (activeSpeakers.isNotEmpty()) activeSpeakers.first() else null
+                            val currentSpeaker = if (activeSpeakers.isNotEmpty()) {
+                                activeSpeakers.first()
+                            } else {
+                                null
+                            }
 
                             activeSpeakers.clear()
+
                             if (speakersArray != null) {
                                 for (i in 0 until speakersArray.length()) {
                                     val sName = speakersArray.optString(i)
+
                                     if (!sName.equals(myUserName, ignoreCase = true)) {
                                         if (targetName != null && isPrivate) {
                                             if (sName.equals(targetName, ignoreCase = true)) {
@@ -639,30 +874,42 @@ object WebSocketManager {
                                     }
                                 }
                             }
+
                             val isNowTalking = activeSpeakers.isNotEmpty()
+
                             if (!wasEmpty && !isNowTalking) {
                                 currentSpeaker?.let {
-                                    val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+                                    val time = SimpleDateFormat(
+                                        "HH:mm",
+                                        Locale.getDefault()
+                                    ).format(Date())
+
                                     _lastSpeaker.postValue("Terakhir: $it @ $time")
                                 }
                             }
 
-                            if (isNowTalking) startIdleMonitoring()
+                            if (isNowTalking) {
+                                startIdleMonitoring()
+                            }
                         }
+
                         updateTalkingStatusUI()
                     }
                 }
 
                 "ptt_error" -> {
                     val msg = dataObj.optString("message", "Gagal Bicara")
+
                     appContext?.let {
                         Handler(Looper.getMainLooper()).post {
                             Toast.makeText(it, msg, Toast.LENGTH_SHORT).show()
                         }
                     }
-                    // Batalkan status bicara lokal jika server menolak
+
                     if (internalIsTalking) {
-                        pttHandler.post { stopTalking() }
+                        pttHandler.post {
+                            stopTalking()
+                        }
                     }
                 }
 
@@ -683,18 +930,23 @@ object WebSocketManager {
                     if (isPrivate || incomingChannel == currentChannelSlug) {
                         val streamersArray = dataObj.optJSONArray("streamers")
                         val streamers = mutableSetOf<String>()
+
                         if (streamersArray != null) {
                             for (i in 0 until streamersArray.length()) {
                                 val sName = streamersArray.optString(i)
+
                                 if (!sName.equals(myUserName, ignoreCase = true)) {
                                     if (targetName != null && isPrivate) {
-                                        if (sName.equals(targetName, ignoreCase = true)) streamers.add(sName)
+                                        if (sName.equals(targetName, ignoreCase = true)) {
+                                            streamers.add(sName)
+                                        }
                                     } else {
                                         streamers.add(sName)
                                     }
                                 }
                             }
                         }
+
                         _activeVideoStreamers.postValue(streamers)
                     }
                 }
@@ -702,28 +954,46 @@ object WebSocketManager {
                 "ptp_invitation" -> {
                     if (_isPtpEnabled.value == true) {
                         _isPtpVideo.postValue(false)
-                        setPtpTarget(dataObj.optString("sender_id"), dataObj.optString("sender_name"))
-                        emit("accept_ptp", JSONObject().put("target_id", dataObj.optString("sender_id")))
+                        setPtpTarget(
+                            dataObj.optString("sender_id"),
+                            dataObj.optString("sender_name")
+                        )
+                        emit(
+                            "accept_ptp",
+                            JSONObject().put("target_id", dataObj.optString("sender_id"))
+                        )
                     }
                 }
 
                 "ptp_confirmed" -> {
                     _isPtpVideo.postValue(false)
-                    setPtpTarget(dataObj.optString("target_id"), dataObj.optString("target_name"))
+                    setPtpTarget(
+                        dataObj.optString("target_id"),
+                        dataObj.optString("target_name")
+                    )
                     startIdleMonitoring()
                 }
 
                 "ptp_video_invitation" -> {
                     if (_isPtpEnabled.value == true && _isVideoEnabled.value == true) {
-                        setPtpTarget(dataObj.optString("sender_id"), dataObj.optString("sender_name"))
+                        setPtpTarget(
+                            dataObj.optString("sender_id"),
+                            dataObj.optString("sender_name")
+                        )
                         _isPtpVideo.postValue(true)
-                        emit("accept_ptp_video", JSONObject().put("target_id", dataObj.optString("sender_id")))
+                        emit(
+                            "accept_ptp_video",
+                            JSONObject().put("target_id", dataObj.optString("sender_id"))
+                        )
                         _navigateToVideo.postValue(true)
                     }
                 }
 
                 "ptp_video_confirmed" -> {
-                    setPtpTarget(dataObj.optString("target_id"), dataObj.optString("target_name"))
+                    setPtpTarget(
+                        dataObj.optString("target_id"),
+                        dataObj.optString("target_name")
+                    )
                     _isPtpVideo.postValue(true)
                     _navigateToVideo.postValue(true)
                     startIdleMonitoring()
@@ -737,22 +1007,28 @@ object WebSocketManager {
                 "ptp_failed" -> {
                     pttHandler.removeCallbacks(ptpTimeoutRunnable)
                     ptpRequestPending = false
+
                     val msg = dataObj.optString("message", "Permintaan Gagal")
                     _ptpHandshakeEvent.postValue(PtpHandshakeEvent.Failed(msg))
+
                     updateTalkingStatusUI()
                 }
 
                 "users_online" -> {
                     val data = payload.opt("data")
+
                     if (data is JSONArray) {
                         myUserId?.let { id ->
                             for (i in 0 until data.length()) {
                                 val user = data.optJSONObject(i)
+
                                 if (user?.optString("id") == id) {
                                     val newName = user.optString("name")
+
                                     if (!newName.isNullOrEmpty() && newName != myUserName) {
                                         myUserName = newName
                                     }
+
                                     break
                                 }
                             }
@@ -763,30 +1039,39 @@ object WebSocketManager {
                         val targetId = internalPtpTargetId
                         if (targetId != null) {
                             var isTargetStillOnline = false
+
                             for (i in 0 until data.length()) {
                                 if (data.optJSONObject(i)?.optString("id") == targetId) {
                                     isTargetStillOnline = true
                                     break
                                 }
                             }
+
                             if (!isTargetStillOnline) {
                                 setPtpTarget(null, null)
                             }
                         }
+
                         updateTalkingStatusUI()
                     }
                 }
             }
-        } catch (e: Exception) { Log.e(TAG, "HandleMessage Error", e) }
+        } catch (e: Exception) {
+            Log.e(TAG, "HandleMessage Error", e)
+        }
     }
 
     private fun handleBinaryMessage(bytes: ByteString) {
         if (bytes.size() <= 5) return
+
         try {
             val dataArray = bytes.toByteArray()
             val type = dataArray[0].toInt()
 
-            val buffer = ByteBuffer.wrap(dataArray, 1, 4).order(ByteOrder.LITTLE_ENDIAN)
+            val buffer = ByteBuffer
+                .wrap(dataArray, 1, 4)
+                .order(ByteOrder.LITTLE_ENDIAN)
+
             val userIdTruncated = buffer.int
 
             var senderName = findUserNameById(userIdTruncated)
@@ -808,33 +1093,50 @@ object WebSocketManager {
                         if (userIdTruncated != targetIdInt) return
                     }
 
-                    speakerLastSeen[senderName!!] = System.currentTimeMillis()
+                    speakerLastSeen[senderName] = System.currentTimeMillis()
 
-                    if (!activeSpeakers.contains(senderName) && !senderName.equals(myUserName, ignoreCase = true)) {
+                    if (
+                        !activeSpeakers.contains(senderName) &&
+                        !senderName.equals(myUserName, ignoreCase = true)
+                    ) {
                         activeSpeakers.add(senderName)
-                        pttHandler.post { updateTalkingStatusUI() }
+                        pttHandler.post {
+                            updateTalkingStatusUI()
+                        }
                         startIdleMonitoring()
                     }
                 }
-                AudioPlayer.playAudio(senderName!!, payload)
+
+                AudioPlayer.playAudio(senderName, payload)
             } else if (type == 2) {
                 if (targetId != null && !ptpRequestPending) {
                     if (userIdTruncated != targetIdInt) return
                 }
-                _incomingVideoFrame.postValue(Pair(senderName!!, payload))
+
+                _incomingVideoFrame.postValue(Pair(senderName, payload))
             }
-        } catch (e: Exception) { Log.e(TAG, "Binary Error", e) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Binary Error", e)
+        }
     }
 
     private fun findUserNameById(id: Int): String? {
         val users = _usersOnline.value ?: return null
+
         for (i in 0 until users.length()) {
             val user = users.optJSONObject(i) ?: continue
+
             val userIdStr = user.optString("id")
-            if (userIdStr.toTruncatedId() == id) return user.optString("name")
+            if (userIdStr.toTruncatedId() == id) {
+                return user.optString("name")
+            }
+
             val usernameStr = user.optString("username")
-            if (usernameStr.toTruncatedId() == id) return user.optString("name")
+            if (usernameStr.toTruncatedId() == id) {
+                return user.optString("name")
+            }
         }
+
         return null
     }
 
@@ -846,13 +1148,15 @@ object WebSocketManager {
     private fun updateTalkingStatusUI() {
         synchronized(activeSpeakers) {
             val now = System.currentTimeMillis()
-            val it = activeSpeakers.iterator()
-            while (it.hasNext()) {
-                val s = it.next()
-                val last = speakerLastSeen[s] ?: 0L
+            val iterator = activeSpeakers.iterator()
+
+            while (iterator.hasNext()) {
+                val speaker = iterator.next()
+                val last = speakerLastSeen[speaker] ?: 0L
+
                 if (now - last > 2000) {
-                    it.remove()
-                    speakerLastSeen.remove(s)
+                    iterator.remove()
+                    speakerLastSeen.remove(speaker)
                 }
             }
 
@@ -882,27 +1186,63 @@ object WebSocketManager {
                 }
             }
 
-            val isIdle = !isMeTalking && effectiveSpeakers.isEmpty()
             val ptpName = internalPtpTargetName
 
             val status = when {
                 !actualSocketConnected || !isAuthenticatedOnCurrentSocket -> {
                     if (isAuthorizedSession) "RECONNECTING..." else "OFFLINE"
                 }
-                ptpRequestPending -> "Memanggil $ptpName..."
-                isMeTalking -> "You are Speaking"
+
+                ptpRequestPending -> {
+                    "Memanggil $ptpName..."
+                }
+
+                isMeTalking -> {
+                    "You are Speaking"
+                }
+
                 effectiveSpeakers.isNotEmpty() -> {
                     val names = effectiveSpeakers.joinToString(", ")
-                    if (effectiveSpeakers.size == 1) "$names is Speaking"
-                    else "$names are Speaking"
+                    if (effectiveSpeakers.size == 1) {
+                        "$names is Speaking"
+                    } else {
+                        "$names are Speaking"
+                    }
                 }
-                else -> "IDLE"
+
+                else -> {
+                    "IDLE"
+                }
             }
 
-            val displayStatus = status
+            val commState = when {
+                !actualSocketConnected || !isAuthenticatedOnCurrentSocket -> {
+                    if (isAuthorizedSession) CommState.RECONNECTING else CommState.OFFLINE
+                }
 
-            if (_talkingStatus.value != displayStatus) {
-                _talkingStatus.postValue(displayStatus)
+                ptpRequestPending -> {
+                    CommState.CALLING
+                }
+
+                isMeTalking -> {
+                    CommState.TX
+                }
+
+                effectiveSpeakers.isNotEmpty() -> {
+                    CommState.RX
+                }
+
+                else -> {
+                    CommState.IDLE
+                }
+            }
+
+            if (_talkingStatus.value != status) {
+                _talkingStatus.postValue(status)
+            }
+
+            if (_communicationState.value != commState) {
+                _communicationState.postValue(commState)
             }
 
             if (_activeSpeakersList.value != effectiveSpeakers) {
@@ -915,7 +1255,7 @@ object WebSocketManager {
         savedUsername = user.uppercase().trim()
         savedPassword = pass.trim()
         isAuthorizedSession = true
-        reconnectDelay = 2000L // Reset delay saat login baru
+        reconnectDelay = 2000L
 
         prefs?.edit()
             ?.putString("username", savedUsername)
@@ -934,6 +1274,7 @@ object WebSocketManager {
             .put("username", user)
             .put("password", pass)
             .put("current_device_id", deviceId)
+
         emit("app_login", data)
     }
 
@@ -945,27 +1286,30 @@ object WebSocketManager {
         _navigateToVideo.postValue(false)
     }
 
-    fun isTalkingNow(): Boolean = internalIsTalking
+    fun isTalkingNow(): Boolean {
+        return internalIsTalking
+    }
 
     fun startTalking() {
-        // Blokir jika tidak terhubung ke server
         if (!isConnectedOnSocket() || myUserId == null) return
 
         val isRx = _isRxOnly.value ?: false
         val ptpId = internalPtpTargetId
-        if (isRx && ptpId == null) return
 
+        if (isRx && ptpId == null) return
         if (internalIsTalking || ptpRequestPending) return
 
         val now = System.currentTimeMillis()
-        // Cegah spam tombol (debouncing) - minimal 300ms antar PTT
         if (now - lastPttEndTime < 300) return
+
         lastPttStartTime = now
 
-        // --- VALIDASI LOCAL HALF DUPLEX ---
         val duplex = _duplexMode.value ?: "HALF DUPLEX"
         if (duplex == "HALF DUPLEX" && ptpId == null) {
-            val someoneElseTalking = synchronized(activeSpeakers) { activeSpeakers.isNotEmpty() }
+            val someoneElseTalking = synchronized(activeSpeakers) {
+                activeSpeakers.isNotEmpty()
+            }
+
             if (someoneElseTalking) {
                 appContext?.let {
                     Handler(Looper.getMainLooper()).post {
@@ -976,29 +1320,24 @@ object WebSocketManager {
             }
         }
 
-        // --- PENANGANAN GATEWAY MODE ---
         val isGateway = prefs?.getBoolean("gateway_mode", false) ?: false
 
-        // 1. Set status bicara SEGERA (gunakan value= jika di main thread untuk respons instan)
         internalIsTalking = true
+
         if (Looper.myLooper() == Looper.getMainLooper()) {
             _isTalking.value = true
         } else {
             _isTalking.postValue(true)
         }
 
-        // 2. Kirim status bicara ke server SEGERA agar "Speaking" muncul di rekan secepat mungkin
         executePttStartSignal()
 
-        // 3. Mainkan nada Start TX (otomatis diabaikan di SoundManager jika gateway_mode=true)
         SoundManager.playStartTx()
 
-        // 4. Jika gateway, pastikan AudioRecorder sudah running dan kirim data audio INSTAN
         if (isGateway) {
             executeStartRecording()
         }
 
-        // --- MUTING OUTPUT IN HALF DUPLEX ---
         if (duplex == "HALF DUPLEX") {
             AudioPlayer.setMute(true)
             SoundManager.setMute(true)
@@ -1011,9 +1350,13 @@ object WebSocketManager {
         updateTalkingStatusUI()
         reportLocation(force = false)
 
-        // Delay perekaman untuk mode selain gateway (Handheld/BT butuh waktu sinkronisasi hardware)
         if (!isGateway) {
-            val delay = if (AudioDeviceManager.isBluetoothConnected) 700L else 400L
+            val delay = if (AudioDeviceManager.isBluetoothConnected) {
+                700L
+            } else {
+                400L
+            }
+
             pttHandler.postDelayed({
                 executeStartRecording()
             }, delay)
@@ -1022,6 +1365,7 @@ object WebSocketManager {
 
     private fun executePttStartSignal() {
         val target = internalPtpTargetId
+
         if (!target.isNullOrEmpty()) {
             if (_isPtpEnabled.value == false) return
             emit("ptt_audio_start_private", JSONObject().put("target_id", target))
@@ -1033,7 +1377,9 @@ object WebSocketManager {
 
     private fun executeStartRecording() {
         if (!internalIsTalking) return
+
         val target = internalPtpTargetId
+
         if (!target.isNullOrEmpty()) {
             AudioRecorder.startRecording("private_$target")
         } else {
@@ -1044,26 +1390,26 @@ object WebSocketManager {
 
     fun stopTalking() {
         if (!internalIsTalking) return
-        
+
         val now = System.currentTimeMillis()
         lastPttEndTime = now
-        
-        // Minimal durasi PTT 500ms untuk mencegah paket audio kosong/terputus
+
         val elapsed = now - lastPttStartTime
         if (elapsed < 500) {
-            pttHandler.postDelayed({ stopTalking() }, 500 - elapsed)
+            pttHandler.postDelayed({
+                stopTalking()
+            }, 500 - elapsed)
             return
         }
 
         internalIsTalking = false
         _isTalking.postValue(false)
+
         updateTalkingStatusUI()
 
-        // --- UNMUTING OUTPUT ---
         AudioPlayer.setMute(false)
         SoundManager.setMute(false)
 
-        // Mainkan nada Stop TX
         SoundManager.playStopTx()
 
         myUserName?.let {
@@ -1072,21 +1418,30 @@ object WebSocketManager {
         }
 
         AudioRecorder.stopRecording()
+
         pttHandler.postDelayed({
             if (!internalIsTalking) {
                 val target = internalPtpTargetId
-                if (!target.isNullOrEmpty()) emit("ptt_audio_end_private", JSONObject().put("target_id", target))
-                else currentChannelSlug?.let { emit("ptt_audio_end", JSONObject().put("channel_slug", it)) }
+
+                if (!target.isNullOrEmpty()) {
+                    emit("ptt_audio_end_private", JSONObject().put("target_id", target))
+                } else {
+                    currentChannelSlug?.let {
+                        emit("ptt_audio_end", JSONObject().put("channel_slug", it))
+                    }
+                }
             }
         }, 100)
     }
 
     fun startVideoStreaming() {
         if (_isVideoEnabled.value == false) return
+
         val isRx = _isRxOnly.value ?: false
         if (isRx && internalPtpTargetId == null) return
 
         val target = internalPtpTargetId
+
         if (!target.isNullOrEmpty()) {
             if (_isPtpEnabled.value == false) return
             emit("ptt_video_start_private", JSONObject().put("target_id", target))
@@ -1098,6 +1453,7 @@ object WebSocketManager {
 
     fun stopVideoStreaming() {
         val target = internalPtpTargetId
+
         if (!target.isNullOrEmpty()) {
             emit("ptt_video_end_private", JSONObject().put("target_id", target))
         } else {
@@ -1108,20 +1464,32 @@ object WebSocketManager {
 
     fun sendVideoFrame(frameData: ByteArray) {
         if (!actualSocketConnected) return
+
         val userId = myUserId?.toTruncatedId() ?: 0
-        val header = ByteBuffer.allocate(5).order(ByteOrder.LITTLE_ENDIAN)
+
+        val header = ByteBuffer
+            .allocate(5)
+            .order(ByteOrder.LITTLE_ENDIAN)
+
         header.put(2.toByte())
         header.putInt(userId)
+
         val packet = header.array() + frameData
         sendBinary(packet)
     }
 
     fun sendAudioData(data: ByteArray) {
         if (!actualSocketConnected) return
+
         val userId = myUserId?.toTruncatedId() ?: 0
-        val header = ByteBuffer.allocate(5).order(ByteOrder.LITTLE_ENDIAN)
+
+        val header = ByteBuffer
+            .allocate(5)
+            .order(ByteOrder.LITTLE_ENDIAN)
+
         header.put(1.toByte())
         header.putInt(userId)
+
         val packet = header.array() + data
         sendBinary(packet)
     }
@@ -1135,8 +1503,11 @@ object WebSocketManager {
     fun reportLocation(force: Boolean = false) {
         val context = appContext ?: return
         if (!actualSocketConnected) return
+
         LocationHelper.getLastKnownLocation(context) { lat, lon, accuracy, _ ->
-            if (lat != 0.0) updateLocation(lat, lon, accuracy, force)
+            if (lat != 0.0) {
+                updateLocation(lat, lon, accuracy, force)
+            }
         }
     }
 
@@ -1144,34 +1515,100 @@ object WebSocketManager {
         reportLocation(force = true)
     }
 
-    fun updateLocation(lat: Double, lon: Double, accuracy: Float, force: Boolean = false) {
+    fun updateLocation(
+        lat: Double,
+        lon: Double,
+        accuracy: Float,
+        force: Boolean = false
+    ) {
         if (!actualSocketConnected) return
 
         if (!force && lastSentLat != 0.0 && lastSentLon != 0.0) {
             val results = FloatArray(1)
-            Location.distanceBetween(lastSentLat, lastSentLon, lat, lon, results)
+
+            Location.distanceBetween(
+                lastSentLat,
+                lastSentLon,
+                lat,
+                lon,
+                results
+            )
+
             if (results[0] < 100f) return
         }
 
         lastSentLat = lat
         lastSentLon = lon
-        emit("update_location", JSONObject().put("latitude", lat).put("longitude", lon).put("accuracy", accuracy))
+
+        emit(
+            "update_location",
+            JSONObject()
+                .put("latitude", lat)
+                .put("longitude", lon)
+                .put("accuracy", accuracy)
+        )
     }
 
-    fun emit(event: String, data: JSONObject) { webSocket?.send(JSONObject().put("type", event).put("data", data).toString()) }
-    fun sendBinary(data: ByteArray) { webSocket?.send(ByteString.of(*data)) }
+    fun emit(event: String, data: JSONObject) {
+        if (!actualSocketConnected) return
 
-    fun isConnected(): Boolean = _connectionStatus.value == true
+        val payload = JSONObject()
+            .put("type", event)
+            .put("data", data)
+            .toString()
 
-    fun isConnectedOnSocket(): Boolean = actualSocketConnected && isAuthenticatedOnCurrentSocket
+        val sent = webSocket?.send(payload) ?: false
 
+        if (!sent) {
+            Log.w(TAG, "Failed to send event=$event because WebSocket queue is closed/full")
+        }
+    }
+
+    fun sendBinary(data: ByteArray) {
+        if (!actualSocketConnected) return
+
+        val sent = webSocket?.send(ByteString.of(*data)) ?: false
+
+        if (!sent) {
+            Log.w(TAG, "Failed to send binary payload size=${data.size}")
+        }
+    }
+
+    fun isConnected(): Boolean {
+        return _connectionStatus.value == true
+    }
+
+    fun isConnectedOnSocket(): Boolean {
+        return actualSocketConnected && isAuthenticatedOnCurrentSocket
+    }
+
+    @Synchronized
     fun disconnect() {
         isAuthorizedSession = false
         isAuthenticatedOnCurrentSocket = false
-        webSocket?.close(1000, "Logout")
-        webSocket = null
         actualSocketConnected = false
+        isConnecting = false
+
+        /*
+         * Invalidate callbacks from current socket.
+         */
+        socketGeneration += 1
+
+        cancelReconnect()
+        cancelDisconnectDebounce()
+
+        try {
+            webSocket?.close(1000, "Logout")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to close WebSocket on logout", e)
+        }
+
+        webSocket = null
+
         _connectionStatus.postValue(false)
+        _talkingStatus.postValue("OFFLINE")
+        _communicationState.postValue(CommState.OFFLINE)
+
         clearSession()
     }
 
@@ -1179,7 +1616,20 @@ object WebSocketManager {
         myUserId = null
         myUserName = null
         mapListener = null
+
         cancelDisconnectDebounce()
-        pttHandler.removeCallbacksAndMessages("reconnect_tag")
+        cancelReconnect()
+
+        if (internalPtpTargetId != null) {
+            setPtpTarget(null, null)
+        }
+
+        if (internalIsTalking) {
+            pttHandler.post {
+                stopTalking()
+            }
+        }
+
+        resetTalkingState()
     }
 }
