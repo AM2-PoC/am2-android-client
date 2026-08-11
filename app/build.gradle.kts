@@ -94,3 +94,14 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
+
+val checkLogPolicy by tasks.registering(Exec::class) {
+    group = "verification"
+    description = "Fail when Android code bypasses sanitized logging"
+    workingDir(rootDir)
+    commandLine("python3", "scripts/check_log_policy.py")
+}
+
+tasks.named("preBuild") {
+    dependsOn(checkLogPolicy)
+}

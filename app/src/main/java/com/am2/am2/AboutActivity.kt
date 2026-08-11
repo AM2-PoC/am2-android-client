@@ -1,12 +1,13 @@
 package com.am2.am2
 
+import com.am2.am2.logging.SafeLog
+
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
@@ -97,7 +98,7 @@ class AboutActivity : BaseActivity() {
                     }
                 }
             } catch (e: Exception) {
-                Log.e("AboutActivity", "Error checking downloaded update", e)
+                SafeLog.e("AboutActivity", "Error checking downloaded update", e)
             }
         }
     }

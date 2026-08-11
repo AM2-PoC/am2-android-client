@@ -1,5 +1,7 @@
 package com.am2.am2
 
+import com.am2.am2.logging.SafeLog
+
 import android.content.Context
 import android.graphics.Color
 import android.net.ConnectivityManager
@@ -12,7 +14,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.telephony.TelephonyManager
-import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -54,7 +55,7 @@ object NetworkManager {
     private fun setupNetworkCallback() {
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                Log.i(TAG, "Jaringan Tersedia Kembali")
+                SafeLog.i(TAG, "Jaringan Tersedia Kembali")
                 cancelOfflineDebounce()
                 updateStatusFromManager(immediate = true)
                 
@@ -67,7 +68,7 @@ object NetworkManager {
             }
 
             override fun onLost(network: Network) {
-                Log.w(TAG, "Jaringan Terputus")
+                SafeLog.w(TAG, "Jaringan Terputus")
                 // Gunakan delay saat kehilangan jaringan agar UI tidak berkedip
                 updateStatusFromManager(immediate = false)
             }

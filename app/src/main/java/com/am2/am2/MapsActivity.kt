@@ -1,5 +1,7 @@
 package com.am2.am2
 
+import com.am2.am2.logging.SafeLog
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -13,7 +15,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
-import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -219,7 +220,7 @@ class MapsActivity : BaseActivity() {
             try {
                 if (mapWakeLock?.isHeld == false) mapWakeLock?.acquire(3000L)
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to acquire wakeLock")
+                SafeLog.e(TAG, "Failed to acquire wakeLock")
             }
         }
     }
