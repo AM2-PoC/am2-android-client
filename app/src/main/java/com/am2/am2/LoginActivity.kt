@@ -1,5 +1,7 @@
 package com.am2.am2
 
+import com.am2.am2.logging.SafeLog
+
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -317,7 +319,7 @@ class LoginActivity : BaseActivity() {
             val file = File(safeContext.filesDir, "cred.txt")
             file.writeText("$user|$pass")
         } catch (e: Exception) {
-            e.printStackTrace()
+            SafeLog.e("Exception", "Operation failed", e)
         }
     }
 
@@ -332,7 +334,7 @@ class LoginActivity : BaseActivity() {
             val file = File(safeContext.filesDir, "cred.txt")
             if (file.exists()) file.delete()
         } catch (e: Exception) {
-            e.printStackTrace()
+            SafeLog.e("Exception", "Operation failed", e)
         }
     }
 
@@ -358,7 +360,7 @@ class LoginActivity : BaseActivity() {
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                SafeLog.e("Exception", "Operation failed", e)
             }
         }
         

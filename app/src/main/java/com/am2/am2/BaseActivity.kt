@@ -1,5 +1,7 @@
 package com.am2.am2
 
+import com.am2.am2.logging.SafeLog
+
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
@@ -9,7 +11,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
-import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
@@ -96,7 +97,7 @@ open class BaseActivity : AppCompatActivity() {
                         decorView.systemUiVisibility = flags
                     }
                 } catch (e: Exception) {
-                    Log.e("BaseActivity", "Gagal ubah warna: ${e.message}")
+                    SafeLog.e("BaseActivity", "Gagal ubah warna: ${e.message}")
                 }
             }
         }
@@ -205,7 +206,7 @@ open class BaseActivity : AppCompatActivity() {
             try { 
                 if (wakeLock?.isHeld == false) wakeLock?.acquire(10000L) 
             } catch (e: Exception) {
-                Log.e("BaseActivity", "Gagal acquire wakeLock: ${e.message}")
+                SafeLog.e("BaseActivity", "Gagal acquire wakeLock: ${e.message}")
             }
         }
     }

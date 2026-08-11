@@ -1,5 +1,7 @@
 package com.am2.am2
 
+import com.am2.am2.logging.SafeLog
+
 import android.annotation.SuppressLint
 import android.app.*
 import android.bluetooth.*
@@ -14,7 +16,6 @@ import android.media.AudioManager
 import android.os.*
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
-import android.util.Log
 import android.view.KeyEvent
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
@@ -102,7 +103,7 @@ class PTTService : Service() {
         audioDeviceManager = AudioDeviceManager(this)
         audioDeviceManager.start(object : AudioDeviceManager.OnDeviceChangeListener {
             override fun onDeviceChanged(deviceType: String) {
-                Log.d(TAG, "Device changed to: $deviceType")
+                SafeLog.d(TAG, "Device changed to: $deviceType")
                 SoundManager.updateRouting(applicationContext)
             }
         })

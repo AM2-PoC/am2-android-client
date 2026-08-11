@@ -1,5 +1,7 @@
 package com.am2.am2
 
+import com.am2.am2.logging.SafeLog
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Geocoder
@@ -9,7 +11,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.util.LruCache
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
@@ -84,7 +85,7 @@ object LocationHelper {
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Cache load failed", e)
+                SafeLog.e(TAG, "Cache load failed", e)
             }
         }
     }
@@ -245,7 +246,7 @@ object LocationHelper {
                     Looper.getMainLooper()
                 )
             } catch (e: Exception) {
-                Log.e(TAG, "Native live failed", e)
+                SafeLog.e(TAG, "Native live failed", e)
             }
         }
 
@@ -390,7 +391,7 @@ object LocationHelper {
                     )
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Native failed", e)
+                SafeLog.e(TAG, "Native failed", e)
             }
 
             mainHandler.postDelayed({
@@ -413,7 +414,7 @@ object LocationHelper {
         context: Context,
         callback: (Double, Double, Float, String?) -> Unit
     ) {
-        Log.d(TAG, "Attempting IP Geolocation fallback...")
+        SafeLog.d(TAG, "Attempting IP Geolocation fallback...")
 
         geocoderExecutor.execute {
             try {
@@ -438,7 +439,7 @@ object LocationHelper {
                         val isp = json.optString("isp", "Unknown")
 
                         mainHandler.post {
-                            Log.d(TAG, "IP Location found: $lat, $lon ($city)")
+                            SafeLog.d(TAG, "IP Location found: $lat, $lon ($city)")
                             callback(lat, lon, 2000f, "Lokasi IP: $city ($isp)")
                         }
 
@@ -446,7 +447,7 @@ object LocationHelper {
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "IP Geolocation failed", e)
+                SafeLog.e(TAG, "IP Geolocation failed", e)
             }
 
             mainHandler.post {
@@ -530,7 +531,7 @@ object LocationHelper {
                     }
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Geocoder failed, trying OSM...", e)
+                SafeLog.w(TAG, "Geocoder failed, trying OSM...", e)
             }
 
             if (!found) {
@@ -586,7 +587,7 @@ object LocationHelper {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "OSM Geocode failed", e)
+            SafeLog.e(TAG, "OSM Geocode failed", e)
         }
     }
 

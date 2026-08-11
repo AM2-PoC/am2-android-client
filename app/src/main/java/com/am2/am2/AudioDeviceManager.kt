@@ -1,5 +1,7 @@
 package com.am2.am2
 
+import com.am2.am2.logging.SafeLog
+
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothHeadset
 import android.bluetooth.BluetoothProfile
@@ -12,7 +14,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.util.Log
 import androidx.annotation.RequiresApi
 import java.util.concurrent.Executors
 
@@ -33,11 +34,11 @@ class AudioDeviceManager(private val context: Context) {
         when (focusChange) {
             AudioManager.AUDIOFOCUS_LOSS,
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                Log.d("AudioDeviceManager", "AudioFocus Loss")
+                SafeLog.d("AudioDeviceManager", "AudioFocus Loss")
                 AudioPlayer.stop()
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
-                Log.d("AudioDeviceManager", "AudioFocus Gained")
+                SafeLog.d("AudioDeviceManager", "AudioFocus Gained")
             }
         }
     }
@@ -112,7 +113,7 @@ class AudioDeviceManager(private val context: Context) {
             context.registerReceiver(hardwareReceiver, filter)
             bluetoothAdapter?.getProfileProxy(context, profileListener, BluetoothProfile.HEADSET)
         } catch (e: Exception) {
-            Log.e("AudioDeviceManager", "Start Error: ${e.message}")
+            SafeLog.e("AudioDeviceManager", "Start Error: ${e.message}")
         }
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -179,7 +180,7 @@ class AudioDeviceManager(private val context: Context) {
                     SystemClock.sleep(500)
                 }
             } catch (e: Exception) {
-                Log.e("AudioDeviceManager", "KeepAlive Error: ${e.message}")
+                SafeLog.e("AudioDeviceManager", "KeepAlive Error: ${e.message}")
             } finally {
                 isKeepAliveRunning = false
                 try {
@@ -204,7 +205,7 @@ class AudioDeviceManager(private val context: Context) {
             resetAudioToNormal()
             listener = null
         } catch (e: Exception) {
-            Log.e("AudioDeviceManager", "Error stopping: ${e.message}")
+            SafeLog.e("AudioDeviceManager", "Error stopping: ${e.message}")
         }
     }
 
@@ -250,7 +251,7 @@ class AudioDeviceManager(private val context: Context) {
                 audioManager.isSpeakerphoneOn = true
             }
         } catch (e: Exception) {
-            Log.e("AudioDeviceManager", "Focus Request Error: ${e.message}")
+            SafeLog.e("AudioDeviceManager", "Focus Request Error: ${e.message}")
         }
     }
 
@@ -267,7 +268,7 @@ class AudioDeviceManager(private val context: Context) {
             audioManager.mode = AudioManager.MODE_NORMAL
             audioManager.isSpeakerphoneOn = false
         } catch (e: Exception) {
-            Log.e("AudioDeviceManager", "Focus Abandon Error: ${e.message}")
+            SafeLog.e("AudioDeviceManager", "Focus Abandon Error: ${e.message}")
         }
     }
 

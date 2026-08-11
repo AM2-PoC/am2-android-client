@@ -1,6 +1,7 @@
 package com.am2.am2
 
-import android.util.Log
+import com.am2.am2.logging.SafeLog
+
 import androidx.annotation.Keep
 
 class OpusCodec {
@@ -35,7 +36,7 @@ class OpusCodec {
                 System.loadLibrary("opus_jni")
                 isLibraryLoaded = true
             } catch (e: UnsatisfiedLinkError) {
-                Log.e(TAG, "Failed to load opus_jni", e)
+                SafeLog.e(TAG, "Failed to load opus_jni", e)
             }
         }
     }

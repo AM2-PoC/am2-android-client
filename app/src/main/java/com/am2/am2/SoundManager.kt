@@ -1,5 +1,7 @@
 package com.am2.am2
 
+import com.am2.am2.logging.SafeLog
+
 import android.content.Context
 import android.content.SharedPreferences
 import android.media.AudioAttributes
@@ -63,7 +65,7 @@ object SoundManager {
             }
             mediaPlayer.start()
         } catch (e: Exception) {
-            e.printStackTrace()
+            SafeLog.e("Exception", "Operation failed", e)
         }
     }
 
