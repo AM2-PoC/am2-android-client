@@ -6,12 +6,14 @@ internal object LogSanitizer {
     )
     private val bearer = Regex("(?i)(?<=authorization=\\[REDACTED])\\s+Bearer\\s+[^\\s,;]+|\\bBearer\\s+[^\\s,;]+")
     private val query = Regex("([?&][^=&#\\s]+)=([^&#\\s]+)")
+    private val coordinatePair = Regex("-?\\d{1,3}\\.\\d{4,}\\s*[,/]\\s*-?\\d{1,3}\\.\\d{4,}")
 
     fun sanitize(message: String): String {
         var result = message.replace('\r', ' ').replace('\n', ' ')
         result = bearer.replace(result, "Bearer [REDACTED]")
         result = sensitiveAssignments.replace(result) { "${it.groupValues[2]}=[REDACTED]" }
         result = query.replace(result) { "${it.groupValues[1]}=[REDACTED]" }
+        result = coordinatePair.replace(result, "[REDACTED]")
         return result.take(2048)
     }
 }
