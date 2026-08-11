@@ -27,6 +27,14 @@ class LogSanitizerTest {
     }
 
     @Test
+    fun redactsUnlabelledCoordinatePairs() {
+        val output = LogSanitizer.sanitize("IP Location found: -6.200000, 106.816666 (Jakarta)")
+
+        assertFalse(output.contains("-6.200000"))
+        assertFalse(output.contains("106.816666"))
+    }
+
+    @Test
     fun forcesSingleLineAndBoundsLength() {
         val output = LogSanitizer.sanitize("first\r\nsecond " + "x".repeat(3000))
 

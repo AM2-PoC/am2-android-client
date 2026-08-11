@@ -439,7 +439,7 @@ object LocationHelper {
                         val isp = json.optString("isp", "Unknown")
 
                         mainHandler.post {
-                            SafeLog.d(TAG, "IP Location found: $lat, $lon ($city)")
+                            SafeLog.d(TAG, "IP Location found: coordinates=[REDACTED] city=[REDACTED]")
                             callback(lat, lon, 2000f, "Lokasi IP: $city ($isp)")
                         }
 
