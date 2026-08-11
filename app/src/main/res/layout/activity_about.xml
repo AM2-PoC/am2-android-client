@@ -105,6 +105,22 @@
             android:focusable="true"
             android:clickable="true" />
 
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/btnCopyDiagnostics"
+            android:layout_width="@dimen/about_btn_update_width"
+            android:layout_height="@dimen/about_btn_update_height"
+            android:layout_marginTop="@dimen/margin_small"
+            android:background="@drawable/button_selector"
+            android:text="Salin Diagnostik"
+            android:textColor="@color/white"
+            android:textSize="@dimen/text_about_update"
+            android:textStyle="bold"
+            android:padding="0dp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:focusable="true"
+            android:clickable="true" />
+
     </LinearLayout>
 
     <TextView

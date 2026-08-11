@@ -2,6 +2,9 @@ package com.am2.am2
 
 import com.am2.am2.logging.SafeLog
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -57,6 +60,14 @@ class AboutActivity : BaseActivity() {
 
         binding.btnCheckUpdate.setOnClickListener {
             checkForUpdates()
+        }
+
+        binding.btnCopyDiagnostics.setOnClickListener {
+            val network = NetworkManager.networkInfo.value ?: "UNKNOWN"
+            val diagnostics = WebSocketManager.diagnostics(currentVersionName ?: "unknown", network)
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("AM2 diagnostics", diagnostics))
+            Toast.makeText(this, "Diagnostik disalin", Toast.LENGTH_SHORT).show()
         }
 
         checkDownloadedUpdate()

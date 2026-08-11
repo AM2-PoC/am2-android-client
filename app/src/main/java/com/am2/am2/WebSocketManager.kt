@@ -54,6 +54,8 @@ object WebSocketManager {
     @Volatile private var reconnectDelay = 2000L
     @Volatile private var actualSocketConnected = false
     @Volatile private var socketGeneration = 0
+    @Volatile private var reconnectAttempts = 0
+    @Volatile private var lastDisconnect = "none"
 
     private var disconnectDebounceRunnable: Runnable? = null
 
@@ -431,6 +433,7 @@ object WebSocketManager {
                     reconnectDelay = 2000L
                     actualSocketConnected = true
                     isAuthenticatedOnCurrentSocket = false
+                    reconnectAttempts = 0
 
                     _connectionStatus.postValue(true)
 
@@ -503,6 +506,7 @@ object WebSocketManager {
                     }
 
                     SafeLog.w(TAG, "WebSocket closed code=$code reason=$reason generation=$generation")
+                    lastDisconnect = "closed code=$code reason=${reason.ifBlank { "none" }}"
 
                     isConnecting = false
                     actualSocketConnected = false
@@ -514,7 +518,7 @@ object WebSocketManager {
 
                     handleDisconnectCleanup(immediate = (code == 1000))
 
-                    if (code != 1000 && isAuthorizedSession) {
+                    if (ReconnectPolicy.shouldReconnect(isAuthorizedSession, code)) {
                         attemptReconnect()
                     }
                 }
@@ -533,6 +537,7 @@ object WebSocketManager {
                         "WebSocket failure generation=$generation message=${t.message}",
                         t
                     )
+                    lastDisconnect = "failure ${t.javaClass.simpleName}: ${t.message ?: "unknown"}"
 
                     isConnecting = false
                     actualSocketConnected = false
@@ -619,6 +624,7 @@ object WebSocketManager {
                 (!actualSocketConnected || webSocket == null)
             ) {
                 SafeLog.d(TAG, "Attempting automatic reconnect. Delay was $delay ms")
+                reconnectAttempts += 1
                 connect()
                 reconnectDelay = (reconnectDelay * 2).coerceAtMost(MAX_RECONNECT_DELAY)
             }
@@ -648,7 +654,7 @@ object WebSocketManager {
                     myUserId = dataObj.optString("id")
                     myUserName = dataObj.optString("username")
 
-                    SafeLog.i(TAG, "LOGIN_SUCCESS user=$myUserName id=$myUserId")
+                    SafeLog.i(TAG, "LOGIN_SUCCESS user=[REDACTED] id=[REDACTED]")
 
                     cancelDisconnectDebounce()
                     cancelReconnect()
@@ -683,7 +689,14 @@ object WebSocketManager {
                 }
 
                 "login_error" -> {
+                    val hadAuthenticatedSession = isAuthenticatedOnCurrentSocket
+                    isAuthorizedSession = AuthRetryPolicy.keepAuthorizedSession(
+                        hadAuthenticatedSession
+                    )
                     isAuthenticatedOnCurrentSocket = false
+                    if (!isAuthorizedSession) {
+                        cancelReconnect()
+                    }
                     val msg = dataObj.optString("message", "Login Gagal")
                     _loginEvent.postValue(LoginEvent.Error(msg))
                     updateTalkingStatusUI()
@@ -1581,6 +1594,21 @@ object WebSocketManager {
 
     fun isConnectedOnSocket(): Boolean {
         return actualSocketConnected && isAuthenticatedOnCurrentSocket
+    }
+
+    fun diagnostics(appVersion: String, network: String): String {
+        return DeviceDiagnostics.format(
+            appVersion = appVersion,
+            sdkInt = Build.VERSION.SDK_INT,
+            manufacturer = Build.MANUFACTURER,
+            model = Build.MODEL,
+            network = network,
+            socketConnected = actualSocketConnected,
+            socketAuthenticated = isAuthenticatedOnCurrentSocket,
+            communicationState = _communicationState.value?.name ?: CommState.OFFLINE.name,
+            reconnectAttempts = reconnectAttempts,
+            lastDisconnect = lastDisconnect,
+        )
     }
 
     @Synchronized
