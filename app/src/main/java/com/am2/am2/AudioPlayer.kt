@@ -1,12 +1,13 @@
 package com.am2.am2
 
+import com.am2.am2.logging.SafeLog
+
 import android.annotation.SuppressLint
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
 import android.os.Build
-import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.LinkedBlockingQueue
 
@@ -185,7 +186,7 @@ object AudioPlayer {
                 applyVolume()
                 if (playbackThread == null) startMixerThread()
             } catch (e: Exception) {
-                Log.e(TAG, "AudioTrack Setup Error: ${e.message}")
+                SafeLog.e(TAG, "AudioTrack Setup Error: ${e.message}")
             }
         }
     }

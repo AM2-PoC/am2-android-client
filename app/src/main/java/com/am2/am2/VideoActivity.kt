@@ -1,5 +1,7 @@
 package com.am2.am2
 
+import com.am2.am2.logging.SafeLog
+
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
@@ -11,7 +13,6 @@ import android.hardware.Camera
 import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.view.*
 import android.view.animation.AnimationUtils
 import android.widget.Toast
@@ -181,7 +182,7 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
                         if (!isFinishing) binding.ivIncomingVideo.setImageBitmap(rawBitmap) 
                         else rawBitmap.recycle()
                     }
-                } catch (e: Exception) { Log.e("VideoActivity", "Decoding error", e) }
+                } catch (e: Exception) { SafeLog.e("VideoActivity", "Decoding error", e) }
             }
         }
 
@@ -248,7 +249,7 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
             camera?.setPreviewDisplay(binding.svLocalPreview.holder)
             camera?.setPreviewCallback(this)
             camera?.startPreview()
-        } catch (e: Exception) { Log.e("VideoActivity", "Camera error", e) }
+        } catch (e: Exception) { SafeLog.e("VideoActivity", "Camera error", e) }
     }
 
     private fun releaseCamera() {
@@ -335,7 +336,7 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) processedBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 70, finalOut)
                 else @Suppress("DEPRECATION") processedBitmap.compress(Bitmap.CompressFormat.WEBP, 70, finalOut)
                 WebSocketManager.sendVideoFrame(finalOut.toByteArray())
-            } catch (e: Exception) { Log.e("VideoActivity", "Frame error", e)
+            } catch (e: Exception) { SafeLog.e("VideoActivity", "Frame error", e)
             } finally { bitmap?.recycle(); processedBitmap?.recycle() }
         }
     }

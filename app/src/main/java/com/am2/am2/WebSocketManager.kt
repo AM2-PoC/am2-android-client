@@ -1,5 +1,7 @@
 package com.am2.am2
 
+import com.am2.am2.logging.SafeLog
+
 import android.content.Context
 import android.content.SharedPreferences
 import android.location.Location
@@ -8,7 +10,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
-import android.util.Log
 import android.widget.Toast
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -371,7 +372,7 @@ object WebSocketManager {
             isConnecting = false
             _talkingStatus.postValue("OFFLINE")
             _communicationState.postValue(CommState.OFFLINE)
-            Log.e(TAG, "WebSocketManager.init(context) must be called before connect()")
+            SafeLog.e(TAG, "WebSocketManager.init(context) must be called before connect()")
             return
         }
 
@@ -394,7 +395,7 @@ object WebSocketManager {
         try {
             oldSocket?.close(1000, "Reconnecting")
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to close old socket cleanly", e)
+            SafeLog.w(TAG, "Failed to close old socket cleanly", e)
         }
 
         isConnecting = true
@@ -405,14 +406,14 @@ object WebSocketManager {
             .url(SERVER_URL)
             .build()
 
-        Log.i(TAG, "Opening WebSocket generation=$generation url=$SERVER_URL")
+        SafeLog.i(TAG, "Opening WebSocket generation=$generation url=$SERVER_URL")
 
         val newSocket = client?.newWebSocket(
             request,
             object : WebSocketListener() {
                 override fun onOpen(socket: WebSocket, response: Response) {
                     if (!isCurrentSocket(generation)) {
-                        Log.d(
+                        SafeLog.d(
                             TAG,
                             "Ignoring stale onOpen generation=$generation current=$socketGeneration"
                         )
@@ -423,7 +424,7 @@ object WebSocketManager {
                         return
                     }
 
-                    Log.i(TAG, "WebSocket Connected ✅ generation=$generation")
+                    SafeLog.i(TAG, "WebSocket Connected ✅ generation=$generation")
 
                     webSocket = socket
                     isConnecting = false
@@ -449,7 +450,7 @@ object WebSocketManager {
 
                 override fun onMessage(socket: WebSocket, text: String) {
                     if (!isCurrentSocket(generation)) {
-                        Log.d(
+                        SafeLog.d(
                             TAG,
                             "Ignoring stale text message generation=$generation current=$socketGeneration"
                         )
@@ -461,7 +462,7 @@ object WebSocketManager {
 
                 override fun onMessage(socket: WebSocket, bytes: ByteString) {
                     if (!isCurrentSocket(generation)) {
-                        Log.d(
+                        SafeLog.d(
                             TAG,
                             "Ignoring stale binary message generation=$generation current=$socketGeneration"
                         )
@@ -482,26 +483,26 @@ object WebSocketManager {
 
                 override fun onClosing(socket: WebSocket, code: Int, reason: String) {
                     if (!isCurrentSocket(generation)) {
-                        Log.d(
+                        SafeLog.d(
                             TAG,
                             "Ignoring stale onClosing code=$code reason=$reason generation=$generation current=$socketGeneration"
                         )
                         return
                     }
 
-                    Log.w(TAG, "WebSocket closing code=$code reason=$reason generation=$generation")
+                    SafeLog.w(TAG, "WebSocket closing code=$code reason=$reason generation=$generation")
                 }
 
                 override fun onClosed(socket: WebSocket, code: Int, reason: String) {
                     if (!isCurrentSocket(generation)) {
-                        Log.d(
+                        SafeLog.d(
                             TAG,
                             "Ignoring stale onClosed code=$code reason=$reason generation=$generation current=$socketGeneration"
                         )
                         return
                     }
 
-                    Log.w(TAG, "WebSocket closed code=$code reason=$reason generation=$generation")
+                    SafeLog.w(TAG, "WebSocket closed code=$code reason=$reason generation=$generation")
 
                     isConnecting = false
                     actualSocketConnected = false
@@ -520,14 +521,14 @@ object WebSocketManager {
 
                 override fun onFailure(socket: WebSocket, t: Throwable, response: Response?) {
                     if (!isCurrentSocket(generation)) {
-                        Log.d(
+                        SafeLog.d(
                             TAG,
                             "Ignoring stale onFailure message=${t.message} generation=$generation current=$socketGeneration"
                         )
                         return
                     }
 
-                    Log.e(
+                    SafeLog.e(
                         TAG,
                         "WebSocket failure generation=$generation message=${t.message}",
                         t
@@ -617,7 +618,7 @@ object WebSocketManager {
                 isAuthorizedSession &&
                 (!actualSocketConnected || webSocket == null)
             ) {
-                Log.d(TAG, "Attempting automatic reconnect. Delay was $delay ms")
+                SafeLog.d(TAG, "Attempting automatic reconnect. Delay was $delay ms")
                 connect()
                 reconnectDelay = (reconnectDelay * 2).coerceAtMost(MAX_RECONNECT_DELAY)
             }
@@ -647,7 +648,7 @@ object WebSocketManager {
                     myUserId = dataObj.optString("id")
                     myUserName = dataObj.optString("username")
 
-                    Log.i(TAG, "LOGIN_SUCCESS user=$myUserName id=$myUserId")
+                    SafeLog.i(TAG, "LOGIN_SUCCESS user=$myUserName id=$myUserId")
 
                     cancelDisconnectDebounce()
                     cancelReconnect()
@@ -706,7 +707,7 @@ object WebSocketManager {
                     val channels = dataObj.optJSONArray("channels")
                     if (channels != null) {
                         _availableChannels.postValue(channels)
-                        Log.i(TAG, "Realtime sync: ${channels.length()} channels received")
+                        SafeLog.i(TAG, "Realtime sync: ${channels.length()} channels received")
 
                         var currentStillExists = false
 
@@ -733,7 +734,7 @@ object WebSocketManager {
                         }
 
                         if (!currentStillExists && currentChannelSlug != null) {
-                            Log.w(TAG, "Access to current channel revoked by Admin")
+                            SafeLog.w(TAG, "Access to current channel revoked by Admin")
 
                             if (channels.length() > 0) {
                                 joinChannel(channels.optJSONObject(0).optString("slug"))
@@ -747,7 +748,7 @@ object WebSocketManager {
                 }
 
                 "permission_update" -> {
-                    Log.i(TAG, "Permission update received: $dataObj")
+                    SafeLog.i(TAG, "Permission update received: $dataObj")
 
                     if (dataObj.has("channels")) {
                         _availableChannels.postValue(dataObj.optJSONArray("channels"))
@@ -1057,7 +1058,7 @@ object WebSocketManager {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "HandleMessage Error", e)
+            SafeLog.e(TAG, "HandleMessage Error", e)
         }
     }
 
@@ -1116,7 +1117,7 @@ object WebSocketManager {
                 _incomingVideoFrame.postValue(Pair(senderName, payload))
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Binary Error", e)
+            SafeLog.e(TAG, "Binary Error", e)
         }
     }
 
@@ -1560,7 +1561,7 @@ object WebSocketManager {
         val sent = webSocket?.send(payload) ?: false
 
         if (!sent) {
-            Log.w(TAG, "Failed to send event=$event because WebSocket queue is closed/full")
+            SafeLog.w(TAG, "Failed to send event=$event because WebSocket queue is closed/full")
         }
     }
 
@@ -1570,7 +1571,7 @@ object WebSocketManager {
         val sent = webSocket?.send(ByteString.of(*data)) ?: false
 
         if (!sent) {
-            Log.w(TAG, "Failed to send binary payload size=${data.size}")
+            SafeLog.w(TAG, "Failed to send binary payload size=${data.size}")
         }
     }
 
@@ -1600,7 +1601,7 @@ object WebSocketManager {
         try {
             webSocket?.close(1000, "Logout")
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to close WebSocket on logout", e)
+            SafeLog.w(TAG, "Failed to close WebSocket on logout", e)
         }
 
         webSocket = null

@@ -1,5 +1,7 @@
 package com.am2.am2
 
+import com.am2.am2.logging.SafeLog
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -8,7 +10,6 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
-import android.util.Log
 import androidx.core.content.ContextCompat
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -83,7 +84,7 @@ object AudioRecorder {
         
         val context = appContext ?: return
         if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            Log.e(TAG, "Missing RECORD_AUDIO permission")
+            SafeLog.e(TAG, "Missing RECORD_AUDIO permission")
             return
         }
 
@@ -111,7 +112,7 @@ object AudioRecorder {
                                 } else recorder.release()
                             } else recorder.release()
                         } catch (e: Exception) {
-                            Log.e(TAG, "Failed to init AudioRecord with source $source: ${e.message}")
+                            SafeLog.e(TAG, "Failed to init AudioRecord with source $source: ${e.message}")
                         }
                     }
 
@@ -160,14 +161,14 @@ object AudioRecorder {
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Recording loop error: ${e.message}")
+                    SafeLog.e(TAG, "Recording loop error: ${e.message}")
                 } finally {
                     isRecording = false
                     cleanup()
                 }
             }
         } catch (e: Exception) { 
-            Log.e(TAG, "Start recording error: ${e.message}")
+            SafeLog.e(TAG, "Start recording error: ${e.message}")
             isRecording = false 
         }
     }

@@ -1,5 +1,7 @@
 package com.am2.am2
 
+import com.am2.am2.logging.SafeLog
+
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.*
@@ -12,7 +14,6 @@ import android.database.ContentObserver
 import android.media.AudioManager
 import android.os.*
 import android.support.v4.media.session.MediaSessionCompat
-import android.util.Log
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.View
@@ -177,7 +178,7 @@ class SettingActivity : BaseActivity() {
                     startService(intent)
                 }
             } catch (e: Exception) {
-                Log.e("SettingActivity", "Failed to notify PTTService: ${e.message}")
+                SafeLog.e("SettingActivity", "Failed to notify PTTService: ${e.message}")
             }
         }
 
