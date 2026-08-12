@@ -17,9 +17,10 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
 import com.am2.am2.databinding.ActivityAboutBinding
+import com.am2.am2.update.UpdateMetadata
+import com.am2.am2.update.UpdateVerifier
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
@@ -130,12 +131,10 @@ class AboutActivity : BaseActivity() {
                     if (!response.isSuccessful) throw Exception("Gagal baca server: ${response.code()}")
 
                     val responseText = response.body()?.string() ?: throw Exception("Respon kosong")
-                    val json = JSONObject(responseText)
+                    val metadata = UpdateMetadata.parse(responseText)
 
-                    val serverVersionName = json.getString("version_name").trim()
-                    val serverVersionCode = json.optLong("version_code", 0L)
-                    val downloadUrl = json.getString("download_url")
-                    val changelog = json.optString("changelog", "Perbaikan bug dan stabilitas.")
+                    val serverVersionName = metadata.versionName
+                    val serverVersionCode = metadata.versionCode
 
                     val pInfo = packageManager.getPackageInfo(packageName, 0)
                     val currentVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -160,11 +159,11 @@ class AboutActivity : BaseActivity() {
                             binding.tvLatestVersion.visibility = View.VISIBLE
 
                             val destination = File(getExternalFilesDir(null), "update_$serverVersionName.apk")
-                            if (isValidApk(destination)) {
+                            if (UpdateVerifier.verify(destination, metadata, currentVersionCode, packageManager)) {
                                 binding.tvLatestVersion.text = "Update $serverVersionName siap pasang"
                                 showInstallDialog(destination, serverVersionName)
                             } else {
-                                showUpdateDialog(serverVersionName, changelog, downloadUrl)
+                                showUpdateDialog(metadata)
                             }
                         } else {
                             // JIKA VERSI SAMA ATAU LEBIH TINGGI (Aplikasi sudah terbaru)
@@ -218,12 +217,12 @@ class AboutActivity : BaseActivity() {
         }
     }
 
-    private fun showUpdateDialog(versionName: String, changelog: String, downloadUrl: String) {
+    private fun showUpdateDialog(metadata: UpdateMetadata) {
         val dialog = AlertDialog.Builder(this)
             .setTitle("Pembaruan Tersedia")
-            .setMessage("Versi Baru: $versionName\n\nCatatan:\n$changelog\n\nUnduh sekarang?")
+            .setMessage("Versi Baru: ${metadata.versionName}\n\nCatatan:\n${metadata.changelog}\n\nUnduh sekarang?")
             .setPositiveButton("UNDUH") { _, _ ->
-                startManualDownload(downloadUrl, versionName)
+                startManualDownload(metadata)
             }
             .setNegativeButton("NANTI", null)
             .create()
@@ -248,9 +247,10 @@ class AboutActivity : BaseActivity() {
         dialog.window?.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT)
     }
 
-    private fun startManualDownload(downloadUrl: String, version: String) {
-        val destination = File(getExternalFilesDir(null), "update_$version.apk")
-        if (isValidApk(destination)) {
+    private fun startManualDownload(metadata: UpdateMetadata) {
+        val destination = File(getExternalFilesDir(null), "update_${metadata.versionName}.apk")
+        val installedVersionCode = getInstalledVersionCode()
+        if (UpdateVerifier.verify(destination, metadata, installedVersionCode, packageManager)) {
             runOnUiThread { installApk(destination) }
             return
         }
@@ -261,7 +261,7 @@ class AboutActivity : BaseActivity() {
                 if (destination.exists()) destination.delete()
 
                 val request = Request.Builder()
-                    .url(downloadUrl)
+                    .url(metadata.updateUrl)
                     .header("User-Agent", "Mozilla/5.0")
                     .build()
 
@@ -273,11 +273,11 @@ class AboutActivity : BaseActivity() {
                         body.byteStream().copyTo(output)
                     }
 
-                    if (isValidApk(destination)) {
+                    if (UpdateVerifier.verify(destination, metadata, installedVersionCode, packageManager)) {
                         runOnUiThread { installApk(destination) }
                     } else {
                         destination.delete()
-                        throw Exception("File APK tidak valid.")
+                        throw Exception("Identitas atau signature APK tidak valid.")
                     }
                 }
             } catch (e: Exception) {
@@ -286,6 +286,12 @@ class AboutActivity : BaseActivity() {
                 }
             }
         }
+    }
+
+    private fun getInstalledVersionCode(): Long {
+        val info = packageManager.getPackageInfo(packageName, 0)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode
+        else @Suppress("DEPRECATION") info.versionCode.toLong()
     }
 
     private fun isValidApk(file: File): Boolean {

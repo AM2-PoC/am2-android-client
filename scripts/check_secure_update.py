@@ -15,6 +15,5 @@ for path,tokens in required.items():
  for token in tokens:
   if token not in text: errors.append(f'{path}: missing {token}')
 if errors:
- print('
-'.join(errors),file=sys.stderr); sys.exit(1)
+ print('\n'.join(errors),file=sys.stderr); sys.exit(1)
 print('secure updater contract: PASS')
