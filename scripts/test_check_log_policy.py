@@ -13,7 +13,27 @@ class LogPolicyTest(unittest.TestCase):
             safe.parent.mkdir(parents=True)
             safe.write_text(
                 safe_source
-                or "if (!BuildConfig.DEBUG) return\nerror.javaClass.simpleName\n",
+                or '''
+                    import android.util.Log
+                    object SafeLog {
+                        fun d(tag: String, message: String) {
+                            if (!BuildConfig.DEBUG) return
+                            Log.d(tag, message)
+                        }
+                        fun i(tag: String, message: String) {
+                            if (!BuildConfig.DEBUG) return
+                            Log.i(tag, message)
+                        }
+                        fun w(tag: String, message: String) {
+                            if (!BuildConfig.DEBUG) return
+                            Log.w(tag, message)
+                        }
+                        fun e(tag: String, message: String) {
+                            if (!BuildConfig.DEBUG) return
+                            Log.e(tag, message)
+                        }
+                    }
+                ''',
                 encoding="utf-8",
             )
             path = root / relative_path
@@ -48,8 +68,61 @@ class LogPolicyTest(unittest.TestCase):
             "fun good() = Unit\n",
             safe_source="error.javaClass.simpleName\nerror.message\n",
         )
-        self.assertTrue(any("missing release-safe facade guard" in item for item in findings))
-        self.assertTrue(any("unsafe throwable detail" in item for item in findings))
+        self.assertTrue(any("missing sanctioned facade method" in item for item in findings))
+        self.assertTrue(any("exposes throwable detail" in item for item in findings))
+
+    def test_rejects_facade_with_comment_guard_and_unguarded_log(self):
+        findings = self.scan(
+            "app/src/main/java/example/Good.kt",
+            "fun good() = Unit\n",
+            safe_source='''
+                import android.util.Log
+                // if (!BuildConfig.DEBUG) return
+                // error.javaClass.simpleName
+                object SafeLog {
+                    fun e(tag: String, error: Throwable) {
+                        Log.e(tag, "$error")
+                    }
+                }
+            ''',
+        )
+        self.assertTrue(findings)
+
+    def test_rejects_facade_when_only_one_method_is_guarded(self):
+        findings = self.scan(
+            "app/src/main/java/example/Good.kt",
+            "fun good() = Unit\n",
+            safe_source='''
+                import android.util.Log
+                object SafeLog {
+                    fun d(tag: String, message: String) {
+                        if (!BuildConfig.DEBUG) return
+                        Log.d(tag, message)
+                    }
+                    fun e(tag: String, error: Throwable) {
+                        Log.e(tag, error.javaClass.simpleName)
+                    }
+                }
+            ''',
+        )
+        self.assertTrue(findings)
+
+    def test_rejects_facade_logging_outside_sanctioned_methods(self):
+        findings = self.scan(
+            "app/src/main/java/example/Good.kt",
+            "fun good() = Unit\n",
+            safe_source='''
+                import android.util.Log
+                object SafeLog {
+                    init { Log.e("T", "secret") }
+                    fun d(tag: String, message: String) { if (!BuildConfig.DEBUG) return; Log.d(tag, message) }
+                    fun i(tag: String, message: String) { if (!BuildConfig.DEBUG) return; Log.i(tag, message) }
+                    fun w(tag: String, message: String) { if (!BuildConfig.DEBUG) return; Log.w(tag, message) }
+                    fun e(tag: String, message: String) { if (!BuildConfig.DEBUG) return; Log.e(tag, message) }
+                }
+            ''',
+        )
+        self.assertTrue(any("outside sanctioned methods" in item for item in findings))
 
 
 if __name__ == "__main__":

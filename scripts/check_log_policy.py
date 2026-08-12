@@ -11,15 +11,47 @@ FORBIDDEN = (
     (re.compile(r"\b(?:System\.(?:out|err)\.)?(?:print|println|printf)\s*\("), "direct console printing"),
     (re.compile(r"HttpLoggingInterceptor\.Level\.(?:BODY|HEADERS)"), "credential-bearing HTTP logging level"),
 )
-SAFE_LOG_REQUIRED = (
-    "if (!BuildConfig.DEBUG) return",
-    "error.javaClass.simpleName",
+SAFE_METHOD = re.compile(
+    r"fun\s+(d|i|w|e)\s*\([^)]*\)\s*\{(.*?)\n\s*\}",
+    re.DOTALL,
 )
-SAFE_LOG_FORBIDDEN = (
-    "error.message",
-    "localizedMessage",
-    "stackTraceToString",
+SAFE_METHODS = {"d", "i", "w", "e"}
+SAFE_LOG_CALL = re.compile(r"\bLog\s*\.([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+SAFE_GUARD = re.compile(r"^\s*if\s*\(\s*!BuildConfig\.DEBUG\s*\)\s*return\s*$", re.MULTILINE)
+SAFE_THROWABLE_DETAILS = re.compile(
+    r"(?:error|throwable|exception|cause)\s*(?:\?\.)?\.\s*"
+    r"(?:message|localizedMessage|stackTraceToString|toString)\b|"
+    r"\$(?:\{\s*(?:error|throwable|exception|cause)\s*\}|"
+    r"(?:error|throwable|exception|cause)\b(?!\s*[.?]))",
+    re.IGNORECASE,
 )
+
+
+def facade_violations(path: Path, root: Path) -> list[str]:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    rel = path.relative_to(root)
+    findings: list[str] = []
+    methods = {name: body for name, body in SAFE_METHOD.findall(text)}
+    missing = sorted(SAFE_METHODS - methods.keys())
+    for name in missing:
+        findings.append(f"{rel}: missing sanctioned facade method: {name}")
+    for name, body in methods.items():
+        guard = SAFE_GUARD.search(body)
+        calls = list(SAFE_LOG_CALL.finditer(body))
+        if guard is None:
+            findings.append(f"{rel}: SafeLog.{name} missing executable debug guard")
+        if len(calls) != 1 or calls[0].group(1) != name:
+            findings.append(f"{rel}: SafeLog.{name} must contain exactly one Log.{name} call")
+        elif guard is not None and guard.start() > calls[0].start():
+            findings.append(f"{rel}: SafeLog.{name} debug guard must precede logging")
+        if SAFE_THROWABLE_DETAILS.search(body):
+            findings.append(f"{rel}: SafeLog.{name} exposes throwable detail")
+    outside_methods = SAFE_METHOD.sub("", text)
+    if SAFE_THROWABLE_DETAILS.search(outside_methods):
+        findings.append(f"{rel}: exposes throwable detail outside sanctioned methods")
+    if SAFE_LOG_CALL.search(outside_methods):
+        findings.append(f"{rel}: logging call outside sanctioned methods")
+    return findings
 
 
 def violations(root: Path) -> list[str]:
@@ -31,14 +63,7 @@ def violations(root: Path) -> list[str]:
     if not safe_logger.is_file():
         return [f"missing sanctioned logging facade: {safe_logger}"]
 
-    safe_text = safe_logger.read_text(encoding="utf-8", errors="replace")
-    for required in SAFE_LOG_REQUIRED:
-        if required not in safe_text:
-            findings.append(f"{safe_logger.relative_to(root)}: missing release-safe facade guard: {required}")
-    for forbidden in SAFE_LOG_FORBIDDEN:
-        if forbidden in safe_text:
-            findings.append(f"{safe_logger.relative_to(root)}: unsafe throwable detail in facade: {forbidden}")
-
+    findings.extend(facade_violations(safe_logger, root))
     for path in sorted(source_root.rglob("*")):
         if path.suffix not in {".kt", ".java"} or path == safe_logger:
             continue
