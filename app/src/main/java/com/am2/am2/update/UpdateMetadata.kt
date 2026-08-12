@@ -21,7 +21,7 @@ data class UpdateMetadata(
             require(rawCode is Number && INTEGER.matches(rawCode.toString())) { "version_code invalid" }
             val code = rawCode.toString().toLong()
             val name = json.getString("version_name").trim()
-            val url = json.optString("update_url", json.optString("download_url", "")).trim()
+            val url = json.getString("update_url").trim()
             val sha = normalize(json.getString("sha256"))
             val signer = normalize(json.getString("signer_sha256"))
             require(code > 0) { "version_code invalid" }

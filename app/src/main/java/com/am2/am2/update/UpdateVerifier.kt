@@ -35,8 +35,7 @@ object UpdateVerifier {
             if (approved.length != 64 || approved != metadata.signerSha256) return false
             val certificates = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 val signingInfo = archive.signingInfo ?: return false
-                if (signingInfo.hasMultipleSigners()) signingInfo.apkContentsSigners.toList()
-                else signingInfo.signingCertificateHistory.toList()
+                signingInfo.apkContentsSigners.toList()
             } else {
                 @Suppress("DEPRECATION")
                 archive.signatures?.toList().orEmpty()

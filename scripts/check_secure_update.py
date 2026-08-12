@@ -2,10 +2,12 @@
 from pathlib import Path
 import sys
 root=Path(__file__).resolve().parents[1]
-workflow=root/'.github/workflows/release-candidate.yml'
 required={
-'app/src/main/java/com/am2/am2/update/UpdateVerifier.kt':['com.am2.tik','APPROVED_UPDATE_SIGNER_SHA256','sha256','signingCertificateHistory','delete'],
-'.github/workflows/release-candidate.yml':['workflow_dispatch','environment: android-release','apksigner verify','AM2_CLIENT_KEYSTORE_BASE64','if: ${{ always() }}','sha256','signer_sha256','source_commit'],
+'app/src/main/java/com/am2/am2/update/UpdateVerifier.kt':['com.am2.tik','APPROVED_UPDATE_SIGNER_SHA256','sha256','apkContentsSigners','delete'],
+'app/src/main/java/com/am2/am2/AboutActivity.kt':['UpdateVerifier.verify','showVerifiedInstallDialog','FileProvider.getUriForFile','canonicalPath','followRedirects(false)'],
+'app/src/main/AndroidManifest.xml':['android.permission.REQUEST_INSTALL_PACKAGES','android:usesCleartextTraffic="false"'],
+'app/src/main/res/xml/file_paths.xml':['files-path name="verified_updates" path="updates/"'],
+'.github/workflows/release-candidate.yml':['workflow_dispatch','environment: android-release','AM2_CLIENT_KEYSTORE_BASE64','apksigner" verify','"$ANDROID_HOME/build-tools/35.0.0/zipalign"','signer_sha256','source_commit','if: ${{ always() }}'],
 }
 errors=[]
 for path,tokens in required.items():

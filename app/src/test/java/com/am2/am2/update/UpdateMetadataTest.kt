@@ -18,6 +18,12 @@ class UpdateMetadataTest {
         }
     }
 
+    @Test fun rejectsLegacyDownloadUrlOnly() {
+        assertThrows(Exception::class.java) {
+            UpdateMetadata.parse("""{"version_code":3,"version_name":"1.1.0","download_url":"https://apiapi.am2-poc.com/update/update.apk","sha256":"$digest","signer_sha256":"$digest"}""")
+        }
+    }
+
     @Test fun rejectsMissingDigest() {
         assertThrows(Exception::class.java) {
             UpdateMetadata.parse("""{"version_code":3,"version_name":"1.1.0","update_url":"https://apiapi.am2-poc.com/update/update.apk","signer_sha256":"$digest"}""")
