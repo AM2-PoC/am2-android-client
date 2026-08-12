@@ -31,11 +31,15 @@ def facade_violations(path: Path, root: Path) -> list[str]:
     text = path.read_text(encoding="utf-8", errors="replace")
     rel = path.relative_to(root)
     findings: list[str] = []
-    methods = {name: body for name, body in SAFE_METHOD.findall(text)}
-    missing = sorted(SAFE_METHODS - methods.keys())
+    methods = SAFE_METHOD.findall(text)
+    method_names = [name for name, _ in methods]
+    missing = sorted(SAFE_METHODS - set(method_names))
     for name in missing:
         findings.append(f"{rel}: missing sanctioned facade method: {name}")
-    for name, body in methods.items():
+    for name in sorted(SAFE_METHODS):
+        if method_names.count(name) > 1:
+            findings.append(f"{rel}: duplicate sanctioned facade method: {name}")
+    for name, body in methods:
         guard = SAFE_GUARD.search(body)
         calls = list(SAFE_LOG_CALL.finditer(body))
         if guard is None:
