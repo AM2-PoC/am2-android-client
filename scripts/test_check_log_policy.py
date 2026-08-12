@@ -24,13 +24,13 @@ class LogPolicyTest(unittest.TestCase):
                             if (!BuildConfig.DEBUG) return
                             Log.i(tag, message)
                         }
-                        fun w(tag: String, message: String) {
+                        fun w(tag: String, message: String, error: Throwable? = null) {
                             if (!BuildConfig.DEBUG) return
-                            Log.w(tag, message)
+                            Log.w(tag, if (error == null) message else error.javaClass.simpleName)
                         }
-                        fun e(tag: String, message: String) {
+                        fun e(tag: String, message: String, error: Throwable? = null) {
                             if (!BuildConfig.DEBUG) return
-                            Log.e(tag, message)
+                            Log.e(tag, if (error == null) message else error.javaClass.simpleName)
                         }
                     }
                 ''',
@@ -138,6 +138,34 @@ class LogPolicyTest(unittest.TestCase):
         )
         self.assertTrue(any("duplicate sanctioned facade method: e" in item for item in findings))
         self.assertTrue(any("SafeLog.e missing executable debug guard" in item for item in findings))
+        self.assertTrue(any("SafeLog.e exposes throwable detail" in item for item in findings))
+
+    def test_rejects_throwable_interpolation_with_arbitrary_parameter_name(self):
+        findings = self.scan(
+            "app/src/main/java/example/Good.kt",
+            "fun good() = Unit\n",
+            safe_source='''
+                import android.util.Log
+                object SafeLog {
+                    fun d(tag: String, message: String) {
+                        if (!BuildConfig.DEBUG) return
+                        Log.d(tag, message)
+                    }
+                    fun i(tag: String, message: String) {
+                        if (!BuildConfig.DEBUG) return
+                        Log.i(tag, message)
+                    }
+                    fun w(tag: String, message: String) {
+                        if (!BuildConfig.DEBUG) return
+                        Log.w(tag, message)
+                    }
+                    fun e(tag: String, incident: Throwable) {
+                        if (!BuildConfig.DEBUG) return
+                        Log.e(tag, "$incident")
+                    }
+                }
+            ''',
+        )
         self.assertTrue(any("SafeLog.e exposes throwable detail" in item for item in findings))
 
     def test_rejects_facade_logging_outside_sanctioned_methods(self):

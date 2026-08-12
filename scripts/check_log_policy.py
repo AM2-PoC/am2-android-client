@@ -12,10 +12,16 @@ FORBIDDEN = (
     (re.compile(r"HttpLoggingInterceptor\.Level\.(?:BODY|HEADERS)"), "credential-bearing HTTP logging level"),
 )
 SAFE_METHOD = re.compile(
-    r"fun\s+(d|i|w|e)\s*\([^)]*\)\s*\{(.*?)\n\s*\}",
+    r"fun\s+(d|i|w|e)\s*\(([^)]*)\)\s*\{(.*?)\n\s*\}",
     re.DOTALL,
 )
 SAFE_METHODS = {"d", "i", "w", "e"}
+SAFE_SIGNATURES = {
+    "d": "tag:String,message:String",
+    "i": "tag:String,message:String",
+    "w": "tag:String,message:String,error:Throwable?=null",
+    "e": "tag:String,message:String,error:Throwable?=null",
+}
 SAFE_LOG_CALL = re.compile(r"\bLog\s*\.([A-Za-z_][A-Za-z0-9_]*)\s*\(")
 SAFE_GUARD = re.compile(r"^\s*if\s*\(\s*!BuildConfig\.DEBUG\s*\)\s*return\s*$", re.MULTILINE)
 SAFE_THROWABLE_DETAILS = re.compile(
@@ -25,6 +31,27 @@ SAFE_THROWABLE_DETAILS = re.compile(
     r"(?:error|throwable|exception|cause)\b(?!\s*[.?]))",
     re.IGNORECASE,
 )
+THROWABLE_PARAMETER = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*:\s*Throwable\??\b")
+
+
+def exposes_throwable(parameters: str, body: str) -> bool:
+    if SAFE_THROWABLE_DETAILS.search(body):
+        return True
+    for parameter in THROWABLE_PARAMETER.findall(parameters):
+        remaining = re.sub(
+            rf"\b{re.escape(parameter)}\s*\.\s*javaClass\s*\.\s*simpleName\b",
+            "",
+            body,
+        )
+        remaining = re.sub(
+            rf"(?:\b{re.escape(parameter)}\b\s*(?:===|!==|==|!=)\s*null|"
+            rf"null\s*(?:===|!==|==|!=)\s*\b{re.escape(parameter)}\b)",
+            "",
+            remaining,
+        )
+        if re.search(rf"\b{re.escape(parameter)}\b", remaining):
+            return True
+    return False
 
 
 def facade_violations(path: Path, root: Path) -> list[str]:
@@ -32,14 +59,17 @@ def facade_violations(path: Path, root: Path) -> list[str]:
     rel = path.relative_to(root)
     findings: list[str] = []
     methods = SAFE_METHOD.findall(text)
-    method_names = [name for name, _ in methods]
+    method_names = [name for name, _, _ in methods]
     missing = sorted(SAFE_METHODS - set(method_names))
     for name in missing:
         findings.append(f"{rel}: missing sanctioned facade method: {name}")
     for name in sorted(SAFE_METHODS):
         if method_names.count(name) > 1:
             findings.append(f"{rel}: duplicate sanctioned facade method: {name}")
-    for name, body in methods:
+    for name, parameters, body in methods:
+        signature = re.sub(r"\s+", "", parameters)
+        if signature != SAFE_SIGNATURES[name]:
+            findings.append(f"{rel}: SafeLog.{name} signature must be {SAFE_SIGNATURES[name]}")
         guard = SAFE_GUARD.search(body)
         calls = list(SAFE_LOG_CALL.finditer(body))
         if guard is None:
@@ -48,7 +78,7 @@ def facade_violations(path: Path, root: Path) -> list[str]:
             findings.append(f"{rel}: SafeLog.{name} must contain exactly one Log.{name} call")
         elif guard is not None and guard.start() > calls[0].start():
             findings.append(f"{rel}: SafeLog.{name} debug guard must precede logging")
-        if SAFE_THROWABLE_DETAILS.search(body):
+        if exposes_throwable(parameters, body):
             findings.append(f"{rel}: SafeLog.{name} exposes throwable detail")
     outside_methods = SAFE_METHOD.sub("", text)
     if SAFE_THROWABLE_DETAILS.search(outside_methods):
