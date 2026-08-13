@@ -59,7 +59,7 @@ class EnvironmentConfigTest(unittest.TestCase):
     def test_ci_is_billing_aware_and_uploads_only_release_artifacts(self):
         text = WORKFLOW.read_text()
         self.assertIn("github.event_name == 'pull_request'", text)
-        for api in (16, 19, 25, 26, 35):
+        for api in (16, 19, 25, 26, 34):
             self.assertIn(f'"api":{api}', text)
         self.assertIn("github.event.inputs.lane == 'release'", text)
         self.assertIn("startsWith(github.ref, 'refs/tags/v')", text)
