@@ -33,7 +33,7 @@ import java.util.concurrent.TimeUnit
 
 object WebSocketManager {
     private const val TAG = "WebSocketManager"
-    private const val SERVER_URL = "wss://apiapi.am2-poc.com"
+    private val SERVER_URL = BuildConfig.WEBSOCKET_URL
     private const val PREFS_NAME = "AM2_PREFS"
 
     private const val DEBOUNCE_DISCONNECT_MS = 5000L

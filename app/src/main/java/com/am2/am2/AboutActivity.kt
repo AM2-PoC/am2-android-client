@@ -28,7 +28,7 @@ class AboutActivity : BaseActivity() {
 
     private lateinit var binding: ActivityAboutBinding
 
-    private val VERSION_JSON_URL = "https://apiapi.am2-poc.com/update/version.json"
+    private val VERSION_JSON_URL = BuildConfig.UPDATE_MANIFEST_URL
 
     private val okClient: OkHttpClient by lazy {
         val builder = OkHttpClient.Builder()
@@ -57,8 +57,13 @@ class AboutActivity : BaseActivity() {
         }
 
         binding.btnCheckUpdate.setOnClickListener {
-            checkForUpdates()
+            if (BuildConfig.SELF_UPDATE_ENABLED) {
+                checkForUpdates()
+            } else {
+                Toast.makeText(this, "Pembaruan mandiri dinonaktifkan untuk build ini", Toast.LENGTH_SHORT).show()
+            }
         }
+        binding.btnCheckUpdate.isEnabled = BuildConfig.SELF_UPDATE_ENABLED
 
         binding.btnCopyDiagnostics.setOnClickListener {
             val network = NetworkManager.networkInfo.value ?: "UNKNOWN"
@@ -81,6 +86,7 @@ class AboutActivity : BaseActivity() {
     }
 
     private fun checkForUpdates() {
+        if (!BuildConfig.SELF_UPDATE_ENABLED) return
         binding.btnCheckUpdate.isEnabled = false
         binding.tvLatestVersion.text = "Memeriksa pembaruan..."
         binding.tvLatestVersion.visibility = View.VISIBLE

@@ -1,6 +1,22 @@
+import java.net.URI
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+}
+
+val approvedSigner = providers.gradleProperty("AM2_APPROVED_SIGNER_SHA256").orElse("")
+
+fun quotedBuildConfig(value: String): String = "\"$value\""
+
+fun validateEndpoint(environment: String, value: String, scheme: String, host: String): String {
+    val uri = URI(value)
+    require(uri.scheme == scheme) { "$environment endpoint must use $scheme" }
+    require(uri.host == host) { "$environment endpoint must use $host" }
+    require(uri.userInfo == null && uri.query == null && uri.fragment == null) {
+        "$environment endpoint must not contain userinfo, query, or fragment"
+    }
+    return value
 }
 
 android {
@@ -18,8 +34,9 @@ android {
 
         multiDexEnabled = true
 
-        val approvedSigner = providers.gradleProperty("AM2_APPROVED_SIGNER_SHA256").orElse("")
         buildConfigField("String", "APPROVED_UPDATE_SIGNER_SHA256", "\"${approvedSigner.get()}\"")
+        buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "false")
+        buildConfigField("Boolean", "BUNDLED_CA_ENABLED", "false")
 
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
@@ -29,6 +46,69 @@ android {
             cmake {
                 cppFlags("")
             }
+        }
+    }
+
+    flavorDimensions += listOf("environment", "trust")
+    productFlavors {
+        create("dev") {
+            dimension = "environment"
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            resValue("string", "app_name", "am² DEV")
+            buildConfigField(
+                "String",
+                "WEBSOCKET_URL",
+                quotedBuildConfig(validateEndpoint("dev", "wss://dev-api.am2-poc.com", "wss", "dev-api.am2-poc.com")),
+            )
+            buildConfigField(
+                "String",
+                "UPDATE_MANIFEST_URL",
+                quotedBuildConfig(validateEndpoint("dev", "https://dev-api.am2-poc.com/update/version.json", "https", "dev-api.am2-poc.com")),
+            )
+        }
+        create("staging") {
+            dimension = "environment"
+            applicationIdSuffix = ".staging"
+            versionNameSuffix = "-staging"
+            resValue("string", "app_name", "am² STAGING")
+            buildConfigField(
+                "String",
+                "WEBSOCKET_URL",
+                quotedBuildConfig(validateEndpoint("staging", "wss://staging-api.am2-poc.com", "wss", "staging-api.am2-poc.com")),
+            )
+            buildConfigField(
+                "String",
+                "UPDATE_MANIFEST_URL",
+                quotedBuildConfig(validateEndpoint("staging", "https://staging-api.am2-poc.com/update/version.json", "https", "staging-api.am2-poc.com")),
+            )
+        }
+        create("production") {
+            dimension = "environment"
+            buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "true")
+            buildConfigField(
+                "String",
+                "WEBSOCKET_URL",
+                quotedBuildConfig(validateEndpoint("production", "wss://apiapi.am2-poc.com", "wss", "apiapi.am2-poc.com")),
+            )
+            buildConfigField(
+                "String",
+                "UPDATE_MANIFEST_URL",
+                quotedBuildConfig(validateEndpoint("production", "https://apiapi.am2-poc.com/update/version.json", "https", "apiapi.am2-poc.com")),
+            )
+            val signer = approvedSigner.get().replace(":", "").lowercase()
+            if (gradle.startParameter.taskNames.any { it.contains("Production", ignoreCase = true) && it.contains("Release", ignoreCase = true) }) {
+                require(Regex("^[0-9a-f]{64}$").matches(signer)) {
+                    "Production release requires AM2_APPROVED_SIGNER_SHA256"
+                }
+            }
+        }
+        create("legacyCompat") {
+            dimension = "trust"
+            buildConfigField("Boolean", "BUNDLED_CA_ENABLED", "true")
+        }
+        create("systemTrust") {
+            dimension = "trust"
         }
     }
 

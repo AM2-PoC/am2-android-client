@@ -8,8 +8,6 @@ import java.io.FileInputStream
 import java.security.MessageDigest
 
 object UpdateVerifier {
-    private const val EXPECTED_PACKAGE = "com.am2.tik"
-
     fun verify(
         file: File,
         metadata: UpdateMetadata,
@@ -18,6 +16,7 @@ object UpdateVerifier {
     ): Boolean {
         var valid = false
         try {
+            if (!BuildConfig.SELF_UPDATE_ENABLED) return false
             if (!file.isFile || file.length() < 100 * 1024L) return false
             if (metadata.versionCode <= installedVersionCode) return false
             if (sha256(file) != metadata.sha256) return false
@@ -26,7 +25,7 @@ object UpdateVerifier {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES else 0
             @Suppress("DEPRECATION")
             val archive = packageManager.getPackageArchiveInfo(file.absolutePath, flags) ?: return false
-            if (archive.packageName != EXPECTED_PACKAGE) return false
+            if (archive.packageName != BuildConfig.APPLICATION_ID) return false
             @Suppress("DEPRECATION")
             val archiveVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) archive.longVersionCode else archive.versionCode.toLong()
             if (archiveVersion != metadata.versionCode) return false
