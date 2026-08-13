@@ -18,7 +18,7 @@ object TlsCompat {
         context: Context,
         builder: OkHttpClient.Builder
     ): OkHttpClient.Builder {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        if (!BuildConfig.BUNDLED_CA_ENABLED || Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             return builder
         }
 
