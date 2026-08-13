@@ -10,12 +10,16 @@ test -n "$TEST_APK"
 
 wait_for_device() {
     attempts=0
-    while [ "$attempts" -lt 20 ]; do
-        if adb shell true >/dev/null 2>&1 && adb shell cmd package list packages >/dev/null 2>&1; then
+    while [ "$attempts" -lt 60 ]; do
+        if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && \
+            adb shell true >/dev/null 2>&1 && \
+            adb shell cmd package list packages >/dev/null 2>&1 && \
+            adb shell settings get global device_provisioned >/dev/null 2>&1; then
+            sleep 10
             return 0
         fi
         attempts=$((attempts + 1))
-        sleep 3
+        sleep 5
     done
     return 1
 }
@@ -25,7 +29,7 @@ install_with_retry() {
     attempts=0
     while [ "$attempts" -lt 3 ]; do
         wait_for_device
-        if adb install -r "$apk"; then
+        if adb install --no-streaming -r "$apk"; then
             return 0
         fi
         attempts=$((attempts + 1))

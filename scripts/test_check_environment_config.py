@@ -72,6 +72,8 @@ class EnvironmentConfigTest(unittest.TestCase):
         self.assertIn('install_with_retry "$APP_APK"', emulator_script)
         self.assertIn('install_with_retry "$TEST_APK"', emulator_script)
         self.assertIn("cmd package list packages", emulator_script)
+        self.assertIn("settings get global device_provisioned", emulator_script)
+        self.assertIn("adb install --no-streaming", emulator_script)
         self.assertLess(emulator_script.index('install_with_retry "$APP_APK"'), emulator_script.index("adb shell monkey"))
         self.assertLess(emulator_script.index("adb shell monkey"), emulator_script.index('install_with_retry "$TEST_APK"'))
         self.assertIn("adb shell am instrument", emulator_script)
