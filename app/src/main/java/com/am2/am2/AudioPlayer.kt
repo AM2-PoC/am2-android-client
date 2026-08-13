@@ -100,30 +100,69 @@ object AudioPlayer {
         }
     }
 
-    class RemoteUserAudioHandler(val sender: String) {
+    private data class ReceivedFrame(val data: ByteArray, val sequence: Long)
+    private data class DecodedFrame(val pcm: ShortArray, val traceId: Long, val sequence: Long)
+
+    private class RemoteUserAudioHandler(val sender: String, val traceId: Long) {
         val opusCodec = OpusCodec()
-        val queue = LinkedBlockingQueue<ByteArray>(200)
+        val queue = LinkedBlockingQueue<ReceivedFrame>(200)
         var lastSeen = System.currentTimeMillis()
+        private var nextSequence = 0L
         private var isBuffering = true
         
         private val JITTER_THRESHOLD = 8 
 
         init { opusCodec.createDecoder(SAMPLE_RATE) }
 
-        fun decodeNext(): ShortArray? {
+        fun enqueue(data: ByteArray) {
+            val sequence = ++nextSequence
+            if (queue.size > 150) queue.poll()
+            queue.offer(ReceivedFrame(data, sequence))
+            if (PttTrace.shouldSampleFrame(sequence)) {
+                PttTrace.emit(
+                    event = "frame_received",
+                    traceId = traceId,
+                    frameSequence = sequence,
+                    frameBytes = data.size,
+                    queueFrames = queue.size,
+                )
+            }
+        }
+
+        @Synchronized
+        fun decodeNext(): DecodedFrame? {
             if (isBuffering) {
                 if (queue.size >= JITTER_THRESHOLD) isBuffering = false
                 else return null
             }
-            val data = queue.poll()
-            if (data == null) {
+            val frame = queue.poll()
+            if (frame == null) {
                 isBuffering = true
                 return null
             }
-            return try { opusCodec.decode(data) } catch (e: Exception) { null }
+            return try {
+                opusCodec.decode(frame.data)?.let { pcm ->
+                    if (PttTrace.shouldSampleFrame(frame.sequence)) {
+                        PttTrace.emit(
+                            event = "frame_decoded",
+                            traceId = traceId,
+                            frameSequence = frame.sequence,
+                            frameBytes = frame.data.size,
+                            queueFrames = queue.size,
+                        )
+                    }
+                    DecodedFrame(pcm, traceId, frame.sequence)
+                }
+            } catch (e: Exception) {
+                null
+            }
         }
 
-        fun release() { try { opusCodec.destroyDecoder() } catch (e: Exception) {} }
+        @Synchronized
+        fun release() {
+            queue.clear()
+            try { opusCodec.destroyDecoder() } catch (e: Exception) {}
+        }
     }
 
     fun updateConfig(usage: Int, keepAlive: Boolean) {
@@ -201,7 +240,7 @@ object AudioPlayer {
             val audioFilter = AudioFilter(SAMPLE_RATE)
             while (isPlaying) {
                 try {
-                    val activeFrames = mutableListOf<ShortArray>()
+                    val activeFrames = ArrayList<DecodedFrame>()
                     val now = System.currentTimeMillis()
 
                     val iterator = remoteDecoders.entries.iterator()
@@ -219,11 +258,11 @@ object AudioPlayer {
 
                     if (activeFrames.isNotEmpty()) {
                         lastDataTime = now
-                        val frameSize = activeFrames[0].size
+                        val frameSize = activeFrames[0].pcm.size
                         val mixedFrame = ShortArray(frameSize)
                         for (i in 0 until frameSize) {
                             var sum = 0
-                            for (frame in activeFrames) if (i < frame.size) sum += frame[i]
+                            for (frame in activeFrames) if (i < frame.pcm.size) sum += frame.pcm[i]
                             mixedFrame[i] = sum.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
                         }
 
@@ -237,6 +276,16 @@ object AudioPlayer {
                                 if (written > 0) {
                                     totalFramesWritten += written
                                     lastDataWriteTime = System.currentTimeMillis()
+                                    activeFrames.forEach { frame ->
+                                        if (PttTrace.shouldSampleFrame(frame.sequence)) {
+                                            PttTrace.emit(
+                                                event = "playback_written",
+                                                traceId = frame.traceId,
+                                                frameSequence = frame.sequence,
+                                                frameBytes = written * 2,
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -269,11 +318,15 @@ object AudioPlayer {
         }
     }
 
-    fun playAudio(sender: String, data: ByteArray) {
-        val handler = remoteDecoders.getOrPut(sender) { RemoteUserAudioHandler(sender) }
+    fun playAudio(sender: String, data: ByteArray, traceId: Long) {
+        val handler = remoteDecoders.compute(sender) { _, current ->
+            if (current == null || current.traceId != traceId) {
+                current?.release()
+                RemoteUserAudioHandler(sender, traceId)
+            } else current
+        } ?: return
         handler.lastSeen = System.currentTimeMillis()
-        if (handler.queue.size > 150) handler.queue.poll()
-        handler.queue.offer(data)
+        handler.enqueue(data)
         
         synchronized(this) {
             if (audioTrack == null || audioTrack?.state != AudioTrack.STATE_INITIALIZED) {
