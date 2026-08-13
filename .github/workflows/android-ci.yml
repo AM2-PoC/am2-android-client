@@ -57,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"api":25,"variant":"DevSystemTrust","package":"com.am2.tik.dev"},{"api":35,"variant":"DevSystemTrust","package":"com.am2.tik.dev"}]' || (github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/') || github.event.inputs.lane == 'nightly' || github.event.inputs.lane == 'release') && '[{"api":16,"variant":"StagingLegacyCompat","package":"com.am2.tik.staging"},{"api":19,"variant":"StagingLegacyCompat","package":"com.am2.tik.staging"},{"api":25,"variant":"StagingSystemTrust","package":"com.am2.tik.staging"},{"api":26,"variant":"StagingSystemTrust","package":"com.am2.tik.staging"},{"api":35,"variant":"StagingSystemTrust","package":"com.am2.tik.staging"}]' || '[{"api":16,"variant":"DevLegacyCompat","package":"com.am2.tik.dev"},{"api":19,"variant":"DevLegacyCompat","package":"com.am2.tik.dev"},{"api":25,"variant":"DevSystemTrust","package":"com.am2.tik.dev"},{"api":26,"variant":"DevSystemTrust","package":"com.am2.tik.dev"},{"api":35,"variant":"DevSystemTrust","package":"com.am2.tik.dev"}]') }}
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"api":25,"variant":"DevSystemTrust","package":"com.am2.tik.dev"},{"api":35,"variant":"DevSystemTrust","package":"com.am2.tik.dev"}]' || (github.event_name == 'schedule' || github.event.inputs.lane == 'nightly') && '[{"api":16,"variant":"StagingLegacyCompat","package":"com.am2.tik.staging"},{"api":19,"variant":"StagingLegacyCompat","package":"com.am2.tik.staging"},{"api":25,"variant":"StagingSystemTrust","package":"com.am2.tik.staging"},{"api":26,"variant":"StagingSystemTrust","package":"com.am2.tik.staging"},{"api":35,"variant":"StagingSystemTrust","package":"com.am2.tik.staging"}]' || (startsWith(github.ref, 'refs/tags/') || github.event.inputs.lane == 'release') && '[{"api":16,"variant":"ProductionLegacyCompat","package":"com.am2.tik"},{"api":19,"variant":"ProductionLegacyCompat","package":"com.am2.tik"},{"api":25,"variant":"ProductionSystemTrust","package":"com.am2.tik"},{"api":26,"variant":"ProductionSystemTrust","package":"com.am2.tik"},{"api":35,"variant":"ProductionSystemTrust","package":"com.am2.tik"}]' || '[{"api":16,"variant":"DevLegacyCompat","package":"com.am2.tik.dev"},{"api":19,"variant":"DevLegacyCompat","package":"com.am2.tik.dev"},{"api":25,"variant":"DevSystemTrust","package":"com.am2.tik.dev"},{"api":26,"variant":"DevSystemTrust","package":"com.am2.tik.dev"},{"api":35,"variant":"DevSystemTrust","package":"com.am2.tik.dev"}]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -79,15 +79,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 900
           script: |
-            set -euo pipefail
-            if [ "${{ matrix.api }}" -lt 25 ]; then
-              APK="$(find app/build/outputs/apk -path "*${{ matrix.variant }}*" -name '*.apk' -not -path '*androidTest*' -print -quit)"
-              test -n "$APK"
-              adb install -r "$APK"
-              adb shell monkey -p "${{ matrix.package }}" -c android.intent.category.LAUNCHER 1
-            else
-              ./gradlew --no-daemon ":app:connected${{ matrix.variant }}DebugAndroidTest"
-            fi
+            ./gradlew --no-daemon ":app:connected${{ matrix.variant }}DebugAndroidTest" && adb shell monkey -p "${{ matrix.package }}" -c android.intent.category.LAUNCHER 1
 
   release-artifact:
     name: release-artifact
@@ -107,7 +99,11 @@ jobs:
       - name: Install Android toolchain
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
       - name: Full unit tests and unsigned production APK
-        run: ./gradlew --no-daemon :app:test :app:assembleProductionSystemTrustRelease
+        env:
+          AM2_APPROVED_SIGNER_SHA256: ${{ vars.AM2_APPROVED_SIGNER_SHA256 }}
+        run: |
+          test "$(printf '%s' "$AM2_APPROVED_SIGNER_SHA256" | tr -d ':' | tr '[:upper:]' '[:lower:]' | grep -Ec '^[0-9a-f]{64}$')" -eq 1
+          ./gradlew --no-daemon :app:test :app:assembleProductionSystemTrustRelease -PAM2_APPROVED_SIGNER_SHA256="$AM2_APPROVED_SIGNER_SHA256"
       - name: Record artifact identity
         shell: bash
         run: |
@@ -117,12 +113,14 @@ jobs:
           mkdir -p release-artifact
           cp "$APK" release-artifact/am2-client-production-unsigned.apk
           sha256sum release-artifact/am2-client-production-unsigned.apk > release-artifact/am2-client-production-unsigned.apk.sha256
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release-artifact/am2-client-production-unsigned.apk > release-artifact/apk-badging.txt
+          stat --printf='byte_size=%s\n' release-artifact/am2-client-production-unsigned.apk > release-artifact/build-metadata.txt
           if "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs release-artifact/am2-client-production-unsigned.apk > release-artifact/signer-metadata.txt 2>&1; then
             printf 'signed=true\n' >> release-artifact/signer-metadata.txt
           else
             printf 'signed=false\nsigner_sha256=none\n' > release-artifact/signer-metadata.txt
           fi
-          printf 'source_commit=%s\nenvironment=production\n' "$GITHUB_SHA" > release-artifact/build-metadata.txt
+          printf 'source_commit=%s\nenvironment=production\n' "$GITHUB_SHA" >> release-artifact/build-metadata.txt
       - name: Upload release candidate only
         uses: actions/upload-artifact@v4
         with:

@@ -41,6 +41,8 @@ class EnvironmentConfigTest(unittest.TestCase):
         self.assertIn("if (!BuildConfig.SELF_UPDATE_ENABLED) return false", verifier)
         self.assertIn("BuildConfig.APPLICATION_ID", verifier)
         self.assertNotIn('EXPECTED_PACKAGE = "com.am2.tik"', verifier)
+        self.assertIn("if (!BuildConfig.SELF_UPDATE_ENABLED) return", about)
+        self.assertIn("binding.btnCheckUpdate.isEnabled = BuildConfig.SELF_UPDATE_ENABLED", about)
 
         tls = (ROOT / "app/src/main/java/com/am2/am2/TlsCompat.kt").read_text()
         self.assertIn("!BuildConfig.BUNDLED_CA_ENABLED", tls)
@@ -63,6 +65,13 @@ class EnvironmentConfigTest(unittest.TestCase):
         self.assertIn("startsWith(github.ref, 'refs/tags/v')", text)
         self.assertEqual(1, text.count("actions/upload-artifact@v4"))
         self.assertIn("retention-days: 3", text)
+        emulator_script = text.split("script: |", 1)[1].split("release-artifact:", 1)[0]
+        self.assertNotIn("set -euo pipefail", emulator_script)
+        self.assertIn("connected${{ matrix.variant }}DebugAndroidTest", text)
+        self.assertIn("ProductionSystemTrust", text)
+        self.assertIn("AM2_APPROVED_SIGNER_SHA256", text)
+        self.assertIn('aapt" dump badging', text)
+        self.assertIn("Production release requires AM2_APPROVED_SIGNER_SHA256", GRADLE.read_text())
 
 
 if __name__ == "__main__":

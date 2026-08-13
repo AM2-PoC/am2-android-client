@@ -57,8 +57,13 @@ class AboutActivity : BaseActivity() {
         }
 
         binding.btnCheckUpdate.setOnClickListener {
-            checkForUpdates()
+            if (BuildConfig.SELF_UPDATE_ENABLED) {
+                checkForUpdates()
+            } else {
+                Toast.makeText(this, "Pembaruan mandiri dinonaktifkan untuk build ini", Toast.LENGTH_SHORT).show()
+            }
         }
+        binding.btnCheckUpdate.isEnabled = BuildConfig.SELF_UPDATE_ENABLED
 
         binding.btnCopyDiagnostics.setOnClickListener {
             val network = NetworkManager.networkInfo.value ?: "UNKNOWN"
@@ -81,6 +86,7 @@ class AboutActivity : BaseActivity() {
     }
 
     private fun checkForUpdates() {
+        if (!BuildConfig.SELF_UPDATE_ENABLED) return
         binding.btnCheckUpdate.isEnabled = false
         binding.tvLatestVersion.text = "Memeriksa pembaruan..."
         binding.tvLatestVersion.visibility = View.VISIBLE

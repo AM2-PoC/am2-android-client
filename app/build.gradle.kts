@@ -5,6 +5,8 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
+val approvedSigner = providers.gradleProperty("AM2_APPROVED_SIGNER_SHA256").orElse("")
+
 fun quotedBuildConfig(value: String): String = "\"$value\""
 
 fun validateEndpoint(environment: String, value: String, scheme: String, host: String): String {
@@ -32,7 +34,6 @@ android {
 
         multiDexEnabled = true
 
-        val approvedSigner = providers.gradleProperty("AM2_APPROVED_SIGNER_SHA256").orElse("")
         buildConfigField("String", "APPROVED_UPDATE_SIGNER_SHA256", "\"${approvedSigner.get()}\"")
         buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "false")
         buildConfigField("Boolean", "BUNDLED_CA_ENABLED", "false")
@@ -95,6 +96,12 @@ android {
                 "UPDATE_MANIFEST_URL",
                 quotedBuildConfig(validateEndpoint("production", "https://apiapi.am2-poc.com/update/version.json", "https", "apiapi.am2-poc.com")),
             )
+            val signer = approvedSigner.get().replace(":", "").lowercase()
+            if (gradle.startParameter.taskNames.any { it.contains("Production", ignoreCase = true) && it.contains("Release", ignoreCase = true) }) {
+                require(Regex("^[0-9a-f]{64}$").matches(signer)) {
+                    "Production release requires AM2_APPROVED_SIGNER_SHA256"
+                }
+            }
         }
         create("legacyCompat") {
             dimension = "trust"
