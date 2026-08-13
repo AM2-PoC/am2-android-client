@@ -72,6 +72,11 @@ class EnvironmentConfigTest(unittest.TestCase):
         self.assertIn("AM2_APPROVED_SIGNER_SHA256", text)
         self.assertIn('aapt" dump badging', text)
         self.assertIn("Production release requires AM2_APPROVED_SIGNER_SHA256", GRADLE.read_text())
+        instrumented = (ROOT / "app/src/androidTest/java/com/am2/am2/TrustModeInstrumentedTest.kt").read_text()
+        self.assertIn("valid-isrgrootx1.letsencrypt.org", instrumented)
+        nightly_matrix = text.split("github.event.inputs.lane == 'nightly'", 1)[1].split("startsWith(github.ref", 1)[0]
+        self.assertIn("DevLegacyCompat", nightly_matrix)
+        self.assertNotIn("StagingLegacyCompat", nightly_matrix)
 
 
 if __name__ == "__main__":
