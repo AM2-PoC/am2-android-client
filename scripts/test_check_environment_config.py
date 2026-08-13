@@ -63,6 +63,7 @@ class EnvironmentConfigTest(unittest.TestCase):
             self.assertIn(f'"api":{api}', text)
         self.assertIn("github.event.inputs.lane == 'release'", text)
         self.assertIn("startsWith(github.ref, 'refs/tags/v')", text)
+        self.assertIn('KERNEL=="kvm", GROUP="kvm", MODE="0666"', text)
         self.assertEqual(1, text.count("actions/upload-artifact@v4"))
         self.assertIn("retention-days: 3", text)
         emulator_script = (ROOT / "scripts/run_emulator_compatibility.sh").read_text()
