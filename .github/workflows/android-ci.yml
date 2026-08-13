@@ -94,6 +94,7 @@ jobs:
     needs: compatibility
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.lane == 'release')
     runs-on: ubuntu-latest
+    environment: android-release
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
