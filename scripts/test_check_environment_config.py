@@ -68,6 +68,8 @@ class EnvironmentConfigTest(unittest.TestCase):
         emulator_script = text.split("script: |", 1)[1].split("release-artifact:", 1)[0]
         self.assertNotIn("set -euo pipefail", emulator_script)
         self.assertIn("connected${{ matrix.variant }}DebugAndroidTest", text)
+        self.assertLess(emulator_script.index("adb install -r"), emulator_script.index("adb shell monkey"))
+        self.assertLess(emulator_script.index("adb shell monkey"), emulator_script.index("connected${{ matrix.variant }}DebugAndroidTest"))
         self.assertIn("ProductionSystemTrust", text)
         self.assertIn("AM2_APPROVED_SIGNER_SHA256", text)
         self.assertIn('aapt" dump badging', text)
