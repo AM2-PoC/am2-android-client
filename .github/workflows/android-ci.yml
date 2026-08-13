@@ -78,6 +78,7 @@ jobs:
           target: default
           disable-animations: false
           emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu off -no-snapshot -noaudio -no-boot-anim
           script: sh scripts/run_emulator_compatibility.sh "${{ matrix.package }}"
 
   release-artifact:
