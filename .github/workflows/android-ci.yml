@@ -76,7 +76,7 @@ jobs:
           api-level: ${{ matrix.api }}
           arch: ${{ matrix.api < 21 && 'x86' || 'x86_64' }}
           target: default
-          disable-animations: true
+          disable-animations: false
           emulator-boot-timeout: 900
           script: sh scripts/run_emulator_compatibility.sh "${{ matrix.package }}"
 

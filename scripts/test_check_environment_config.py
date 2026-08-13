@@ -67,6 +67,7 @@ class EnvironmentConfigTest(unittest.TestCase):
         self.assertIn("retention-days: 3", text)
         emulator_script = (ROOT / "scripts/run_emulator_compatibility.sh").read_text()
         self.assertIn('script: sh scripts/run_emulator_compatibility.sh "${{ matrix.package }}"', text)
+        self.assertIn("disable-animations: false", text)
         self.assertNotIn("set -euo pipefail", emulator_script)
         self.assertLess(emulator_script.index('adb install -r "$APP_APK"'), emulator_script.index("adb shell monkey"))
         self.assertLess(emulator_script.index("adb shell monkey"), emulator_script.index('adb install -r "$TEST_APK"'))
