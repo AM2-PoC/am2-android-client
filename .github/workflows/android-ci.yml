@@ -78,8 +78,7 @@ jobs:
           target: default
           disable-animations: true
           emulator-boot-timeout: 900
-          script: |
-            adb install -r "$(find app/build/outputs/apk -path "*/debug/*.apk" -type f -not -path "*androidTest*" -print -quit)" && adb shell monkey -p "${{ matrix.package }}" -c android.intent.category.LAUNCHER 1 && ./gradlew --no-daemon ":app:connected${{ matrix.variant }}DebugAndroidTest"
+          script: sh scripts/run_emulator_compatibility.sh "${{ matrix.package }}"
 
   release-artifact:
     name: release-artifact
