@@ -81,6 +81,7 @@ object AudioRecorder {
     @SuppressLint("MissingPermission")
     fun startRecording(channelSlug: String) {
         if (isRecording) return
+        val traceId = WebSocketManager.currentTransmitTraceId()
         
         val context = appContext ?: return
         if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -109,10 +110,11 @@ object AudioRecorder {
                                 if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                                     audioRecord = recorder
                                     success = true
+                                    traceId?.let { PttTrace.emit(event = "capture_started", traceId = it) }
                                 } else recorder.release()
                             } else recorder.release()
                         } catch (e: Exception) {
-                            SafeLog.e(TAG, "Failed to init AudioRecord with source $source: ${e.message}")
+                            SafeLog.e(TAG, "Failed to initialize AudioRecord", e)
                         }
                     }
 
@@ -139,6 +141,13 @@ object AudioRecorder {
                                     audioFilter.apply(pcmBuffer, read)
                                     val encodedData = opusCodec.encode(pcmBuffer, FRAME_SIZE)
                                     if (encodedData != null && isRecording) {
+                                        traceId?.let {
+                                            PttTrace.emit(
+                                                event = "frame_encoded",
+                                                traceId = it,
+                                                frameBytes = encodedData.size,
+                                            )
+                                        }
                                         val packet = ByteBuffer.allocate(5 + encodedData.size)
                                             .order(ByteOrder.LITTLE_ENDIAN)
                                             .put(1.toByte())
@@ -161,14 +170,15 @@ object AudioRecorder {
                         }
                     }
                 } catch (e: Exception) {
-                    SafeLog.e(TAG, "Recording loop error: ${e.message}")
+                    SafeLog.e(TAG, "Recording loop failed", e)
                 } finally {
                     isRecording = false
                     cleanup()
                 }
             }
-        } catch (e: Exception) { 
-            SafeLog.e(TAG, "Start recording error: ${e.message}")
+        } catch (e: Exception) {
+            traceId?.let { PttTrace.emit(event = "recorder_start_failed", traceId = it) }
+            SafeLog.e(TAG, "Failed to start recording", e)
             isRecording = false 
         }
     }

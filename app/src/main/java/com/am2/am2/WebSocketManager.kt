@@ -88,8 +88,11 @@ object WebSocketManager {
 
     private val activeSpeakers = Collections.synchronizedSet(LinkedHashSet<String>())
     private val speakerLastSeen = mutableMapOf<String, Long>()
+    private val receivePttTraces = PttReceiveTraceRegistry()
     private var lastSpeakersBeforeEmpty = emptySet<String>()
     private var wasSomeoneElseTalking = false
+    @Volatile private var activeTransmitTraceId: Long? = null
+    @Volatile private var transmitFrameSequence = 0L
 
     private val _activeVideoStreamers = MutableLiveData<Set<String>>(emptySet())
     val activeVideoStreamers: LiveData<Set<String>> = _activeVideoStreamers
@@ -280,6 +283,7 @@ object WebSocketManager {
     }
 
     private fun resetTalkingState() {
+        emitReceiveTraceTransitions(receivePttTraces.clear())
         synchronized(activeSpeakers) {
             activeSpeakers.clear()
             speakerLastSeen.clear()
@@ -287,6 +291,18 @@ object WebSocketManager {
             wasSomeoneElseTalking = false
         }
         AudioPlayer.stop()
+    }
+
+    private fun emitReceiveTraceTransitions(transitions: List<PttReceiveTraceTransition>) {
+        transitions.forEach { transition ->
+            PttTrace.emit(
+                event = when (transition) {
+                    is PttReceiveTraceTransition.Started -> "receive_started"
+                    is PttReceiveTraceTransition.Ended -> "receive_ended"
+                },
+                traceId = transition.traceId,
+            )
+        }
     }
 
     fun setPtpTarget(userId: String?, userName: String?) {
@@ -907,6 +923,17 @@ object WebSocketManager {
                             }
                         }
 
+                        val relayedTraceId = dataObj.optLong("trace_id", 0L).takeIf { it > 0L }
+                        val relayedSender = if (speakersArray?.length() == 1) {
+                            speakersArray.optString(0).takeIf { it.isNotEmpty() }
+                        } else null
+                        emitReceiveTraceTransitions(
+                            receivePttTraces.syncActive(
+                                activeSpeakers.toSet(),
+                                relayedSender,
+                                relayedTraceId,
+                            ),
+                        )
                         updateTalkingStatusUI()
                     }
                 }
@@ -1121,7 +1148,8 @@ object WebSocketManager {
                     }
                 }
 
-                AudioPlayer.playAudio(senderName, payload)
+                val receiveTraceId = receivePttTraces.traceIdForFrame(senderName)
+                AudioPlayer.playAudio(senderName, payload, receiveTraceId)
             } else if (type == 2) {
                 if (targetId != null && !ptpRequestPending) {
                     if (userIdTruncated != targetIdInt) return
@@ -1304,6 +1332,8 @@ object WebSocketManager {
         return internalIsTalking
     }
 
+    fun currentTransmitTraceId(): Long? = activeTransmitTraceId
+
     fun startTalking() {
         if (!isConnectedOnSocket() || myUserId == null) return
 
@@ -1337,6 +1367,10 @@ object WebSocketManager {
         val isGateway = prefs?.getBoolean("gateway_mode", false) ?: false
 
         internalIsTalking = true
+        activeTransmitTraceId = PttTrace.newTraceId().also {
+            transmitFrameSequence = 0L
+            PttTrace.emit(event = "button_down", traceId = it)
+        }
 
         if (Looper.myLooper() == Looper.getMainLooper()) {
             _isTalking.value = true
@@ -1379,14 +1413,22 @@ object WebSocketManager {
 
     private fun executePttStartSignal() {
         val target = internalPtpTargetId
+        val traceId = activeTransmitTraceId ?: return
 
         if (!target.isNullOrEmpty()) {
             if (_isPtpEnabled.value == false) return
-            emit("ptt_audio_start_private", JSONObject().put("target_id", target))
+            emit(
+                "ptt_audio_start_private",
+                JSONObject().put("target_id", target).put("trace_id", traceId),
+            )
         } else {
             val slug = currentChannelSlug ?: return
-            emit("ptt_audio_start", JSONObject().put("channel_slug", slug))
+            emit(
+                "ptt_audio_start",
+                JSONObject().put("channel_slug", slug).put("trace_id", traceId),
+            )
         }
+        PttTrace.emit(event = "start_sent", traceId = traceId)
     }
 
     private fun executeStartRecording() {
@@ -1417,6 +1459,7 @@ object WebSocketManager {
         }
 
         internalIsTalking = false
+        activeTransmitTraceId?.let { PttTrace.emit(event = "button_up", traceId = it) }
         _isTalking.postValue(false)
 
         updateTalkingStatusUI()
@@ -1438,12 +1481,23 @@ object WebSocketManager {
                 val target = internalPtpTargetId
 
                 if (!target.isNullOrEmpty()) {
-                    emit("ptt_audio_end_private", JSONObject().put("target_id", target))
+                    emit(
+                        "ptt_audio_end_private",
+                        JSONObject().put("target_id", target).put("trace_id", activeTransmitTraceId),
+                    )
                 } else {
                     currentChannelSlug?.let {
-                        emit("ptt_audio_end", JSONObject().put("channel_slug", it))
+                        emit(
+                            "ptt_audio_end",
+                            JSONObject().put("channel_slug", it).put("trace_id", activeTransmitTraceId),
+                        )
                     }
                 }
+                activeTransmitTraceId?.let { traceId ->
+                    PttTrace.emit(event = "end_sent", traceId = traceId)
+                }
+                activeTransmitTraceId = null
+                transmitFrameSequence = 0L
             }
         }, 100)
     }
@@ -1585,6 +1639,18 @@ object WebSocketManager {
 
         if (!sent) {
             SafeLog.w(TAG, "Failed to send binary payload size=${data.size}")
+        } else if (data.firstOrNull()?.toInt() == 1) {
+            activeTransmitTraceId?.let { traceId ->
+                val frameSequence = ++transmitFrameSequence
+                if (PttTrace.shouldSampleFrame(frameSequence)) {
+                    PttTrace.emit(
+                        event = "frame_sent",
+                        traceId = traceId,
+                        frameSequence = frameSequence,
+                        frameBytes = data.size,
+                    )
+                }
+            }
         }
     }
 
