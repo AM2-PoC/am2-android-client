@@ -28,7 +28,7 @@ class AboutActivity : BaseActivity() {
 
     private lateinit var binding: ActivityAboutBinding
 
-    private val VERSION_JSON_URL = "https://apiapi.am2-poc.com/update/version.json"
+    private val VERSION_JSON_URL = BuildConfig.UPDATE_MANIFEST_URL
 
     private val okClient: OkHttpClient by lazy {
         val builder = OkHttpClient.Builder()
