@@ -2,6 +2,43 @@
 set -eu
 
 PACKAGE_ID="${1:?package ID is required}"
+FIXTURE_DIR="${TMPDIR:-/tmp}/am2-tls-fixture.$$"
+FIXTURE_PID=""
+
+stop_tls_fixture() {
+    if [ -n "$FIXTURE_PID" ]; then
+        kill "$FIXTURE_PID" 2>/dev/null || true
+        wait "$FIXTURE_PID" 2>/dev/null || true
+    fi
+    rm -rf "$FIXTURE_DIR"
+}
+
+start_tls_fixture() {
+    sh scripts/create_tls_fixture.sh "$FIXTURE_DIR"
+    python3 scripts/tls_fixture_server.py \
+        --cert "$FIXTURE_DIR/server.crt" \
+        --key "$FIXTURE_DIR/server.key" \
+        --port 8443 >"$FIXTURE_DIR/server.log" 2>&1 &
+    FIXTURE_PID=$!
+    attempts=0
+    while [ "$attempts" -lt 30 ]; do
+        if curl --silent --show-error --fail \
+            --cacert "$FIXTURE_DIR/ca.crt" \
+            --connect-timeout 2 https://127.0.0.1:8443/health >/dev/null 2>&1; then
+            return 0
+        fi
+        if ! kill -0 "$FIXTURE_PID" 2>/dev/null; then
+            cat "$FIXTURE_DIR/server.log" >&2
+            return 1
+        fi
+        attempts=$((attempts + 1))
+        sleep 1
+    done
+    cat "$FIXTURE_DIR/server.log" >&2
+    return 1
+}
+
+trap stop_tls_fixture EXIT HUP INT TERM
 
 APP_APK="$(find app/build/outputs/apk -path '*/debug/*.apk' -type f -not -name '*androidTest*' -print -quit)"
 TEST_APK="$(find app/build/outputs/apk/androidTest -path '*/debug/*.apk' -type f -print -quit)"
@@ -44,10 +81,12 @@ run_instrumentation_with_timeout() {
     rm -f "$output_file"
 
     SDK_INT="$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')"
+    CI_CA_BASE64="$(base64 "$FIXTURE_DIR/ca.crt" | tr -d '\r\n')"
+    set -- \
+        -e am2CiCaBase64 "$CI_CA_BASE64" \
+        -e am2CiHttpsUrl "https://10.0.2.2:8443/"
     if [ "$SDK_INT" -lt 21 ]; then
-        set -- -e notClass androidx.test.internal.runner.TestRequestBuilder
-    else
-        set --
+        set -- "$@" -e notClass androidx.test.internal.runner.TestRequestBuilder
     fi
 
     adb shell am instrument -w -r "$@" \
@@ -84,6 +123,7 @@ run_instrumentation_with_timeout() {
     rm -f "$output_file"
 }
 
+start_tls_fixture
 install_with_retry "$APP_APK"
 adb shell monkey -p "$PACKAGE_ID" -c android.intent.category.LAUNCHER 1
 install_with_retry "$TEST_APK"

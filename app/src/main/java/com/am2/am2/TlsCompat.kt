@@ -8,7 +8,11 @@ import java.security.KeyStore
 import java.security.cert.CertificateException
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
+import java.net.InetAddress
+import java.net.Socket
 import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocket
+import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManager
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
@@ -26,12 +30,25 @@ object TlsCompat {
         val systemTrustManager = createSystemTrustManager()
         val bundledTrustManager = createBundledTrustManager(context)
 
-        val compositeTrustManager = CompositeX509TrustManager(
-            listOf(systemTrustManager, bundledTrustManager)
+        return applyTrustManagers(
+            builder,
+            listOf(systemTrustManager, bundledTrustManager),
         )
+    }
+
+    internal fun applyTrustManagers(
+        builder: OkHttpClient.Builder,
+        trustManagers: List<X509TrustManager>,
+    ): OkHttpClient.Builder {
+        val compositeTrustManager = CompositeX509TrustManager(trustManagers)
 
         val sslContext = SSLContext.getInstance("TLS")
         sslContext.init(null, arrayOf<TrustManager>(compositeTrustManager), null)
+        val socketFactory = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            LegacyTls12SocketFactory(sslContext.socketFactory)
+        } else {
+            sslContext.socketFactory
+        }
 
         return builder
             // OkHttp 3.12's default COMPATIBLE_TLS fallback is TLS 1.0-only.
@@ -39,10 +56,55 @@ object TlsCompat {
             // the platform supports it; never re-enable TLS 1.0/1.1.
             .connectionSpecs(listOf(ConnectionSpec.MODERN_TLS))
             .sslSocketFactory(
-                sslContext.socketFactory,
+                socketFactory,
                 compositeTrustManager
             )
+    }
 
+    private class LegacyTls12SocketFactory(
+        private val delegate: SSLSocketFactory,
+    ) : SSLSocketFactory() {
+        override fun getDefaultCipherSuites(): Array<String> = delegate.defaultCipherSuites
+
+        override fun getSupportedCipherSuites(): Array<String> = delegate.supportedCipherSuites
+
+        override fun createSocket(): Socket = applyTlsConfiguration(delegate.createSocket())
+
+        override fun createSocket(
+            socket: Socket,
+            host: String,
+            port: Int,
+            autoClose: Boolean,
+        ): Socket = applyTlsConfiguration(delegate.createSocket(socket, host, port, autoClose))
+
+        override fun createSocket(host: String, port: Int): Socket =
+            applyTlsConfiguration(delegate.createSocket(host, port))
+
+        override fun createSocket(
+            host: String,
+            port: Int,
+            localHost: InetAddress,
+            localPort: Int,
+        ): Socket = applyTlsConfiguration(delegate.createSocket(host, port, localHost, localPort))
+
+        override fun createSocket(host: InetAddress, port: Int): Socket =
+            applyTlsConfiguration(delegate.createSocket(host, port))
+
+        override fun createSocket(
+            address: InetAddress,
+            port: Int,
+            localAddress: InetAddress,
+            localPort: Int,
+        ): Socket = applyTlsConfiguration(
+            delegate.createSocket(address, port, localAddress, localPort),
+        )
+
+        private fun applyTlsConfiguration(socket: Socket): Socket {
+            if (socket is SSLSocket && "TLSv1.2" in socket.supportedProtocols) {
+                socket.enabledProtocols = arrayOf("TLSv1.2")
+            }
+            return socket
+        }
     }
 
     private fun createSystemTrustManager(): X509TrustManager {

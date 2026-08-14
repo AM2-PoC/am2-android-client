@@ -2,6 +2,7 @@ package com.am2.am2
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import android.util.Base64
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -12,8 +13,13 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.ByteArrayInputStream
+import java.security.KeyStore
+import java.security.cert.CertificateFactory
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.TrustManagerFactory
+import javax.net.ssl.X509TrustManager
 
 @RunWith(AndroidJUnit4::class)
 class TrustModeInstrumentedTest {
@@ -35,8 +41,8 @@ class TrustModeInstrumentedTest {
 
     @Test
     fun httpsHandshakeUsesVariantTrustConfiguration() {
-        val client = variantClient()
-        client.newCall(Request.Builder().url("https://valid-isrgrootx1.letsencrypt.org/").build()).execute().use { response ->
+        val client = fixtureClient()
+        client.newCall(Request.Builder().url(fixtureHttpsUrl()).build()).execute().use { response ->
             assertTrue("TLS handshake succeeded but server returned ${response.code()}", response.code() in 200..499)
         }
     }
@@ -45,8 +51,8 @@ class TrustModeInstrumentedTest {
     fun wssHandshakeUsesVariantTrustConfiguration() {
         val completed = CountDownLatch(1)
         var failure: Throwable? = null
-        val socket = variantClient().newWebSocket(
-            Request.Builder().url("wss://echo.websocket.org/").build(),
+        val socket = fixtureClient().newWebSocket(
+            Request.Builder().url(fixtureHttpsUrl().replaceFirst("https://", "wss://")).build(),
             object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     webSocket.close(1000, "compatibility-check")
@@ -64,13 +70,31 @@ class TrustModeInstrumentedTest {
         failure?.let { throw AssertionError("WSS handshake failed", it) }
     }
 
-    private fun variantClient(): OkHttpClient {
-        val app = InstrumentationRegistry.getInstrumentation().targetContext
-        return TlsCompat.applyBundledCaForOldAndroid(
-            app,
+    private fun fixtureClient(): OkHttpClient {
+        return TlsCompat.applyTrustManagers(
             OkHttpClient.Builder()
                 .connectTimeout(20, TimeUnit.SECONDS)
                 .readTimeout(20, TimeUnit.SECONDS),
+            listOf(fixtureTrustManager()),
         ).build()
+    }
+
+    private fun fixtureHttpsUrl(): String {
+        return InstrumentationRegistry.getArguments().getString("am2CiHttpsUrl")
+            ?: throw AssertionError("am2CiHttpsUrl instrumentation argument is required")
+    }
+
+    private fun fixtureTrustManager(): X509TrustManager {
+        val encoded = InstrumentationRegistry.getArguments().getString("am2CiCaBase64")
+            ?: throw AssertionError("am2CiCaBase64 instrumentation argument is required")
+        val certificate = CertificateFactory.getInstance("X.509").generateCertificate(
+            ByteArrayInputStream(Base64.decode(encoded, Base64.DEFAULT)),
+        )
+        val keyStore = KeyStore.getInstance(KeyStore.getDefaultType())
+        keyStore.load(null, null)
+        keyStore.setCertificateEntry("am2-ci", certificate)
+        val factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+        factory.init(keyStore)
+        return factory.trustManagers.filterIsInstance<X509TrustManager>().first()
     }
 }
