@@ -103,21 +103,27 @@ jobs:
       - uses: android-actions/setup-android@v3
       - name: Install Android toolchain
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
-      - name: Build staging debug candidate
-        run: ./gradlew --no-daemon :app:testStagingSystemTrustDebugUnitTest :app:assembleStagingSystemTrustDebug
-      - name: Record staging artifact identity
+      - name: Build legacy and modern staging debug candidates
+        run: ./gradlew --no-daemon :app:testStagingLegacyCompatDebugUnitTest :app:testStagingSystemTrustDebugUnitTest :app:assembleStagingLegacyCompatDebug :app:assembleStagingSystemTrustDebug
+      - name: Record staging artifact identities
         shell: bash
         run: |
           set -euo pipefail
-          APK="$(find app/build/outputs/apk/stagingSystemTrust/debug -name '*.apk' -type f -print -quit)"
-          test -n "$APK"
+          LEGACY_APK="$(find app/build/outputs/apk/stagingLegacyCompat/debug -name '*.apk' -type f -print -quit)"
+          MODERN_APK="$(find app/build/outputs/apk/stagingSystemTrust/debug -name '*.apk' -type f -print -quit)"
+          test -n "$LEGACY_APK"
+          test -n "$MODERN_APK"
           mkdir -p staging-artifact
-          cp "$APK" staging-artifact/am2-client-staging-debug.apk
-          sha256sum staging-artifact/am2-client-staging-debug.apk > staging-artifact/am2-client-staging-debug.apk.sha256
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging staging-artifact/am2-client-staging-debug.apk > staging-artifact/apk-badging.txt
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs staging-artifact/am2-client-staging-debug.apk > staging-artifact/signer-metadata.txt
-          stat --printf='byte_size=%s\n' staging-artifact/am2-client-staging-debug.apk > staging-artifact/build-metadata.txt
-          printf 'source_commit=%s\nenvironment=staging\nvariant=StagingSystemTrustDebug\n' "$GITHUB_SHA" >> staging-artifact/build-metadata.txt
+          cp "$LEGACY_APK" staging-artifact/am2-client-staging-legacy-debug.apk
+          cp "$MODERN_APK" staging-artifact/am2-client-staging-modern-debug.apk
+          sha256sum staging-artifact/am2-client-staging-legacy-debug.apk staging-artifact/am2-client-staging-modern-debug.apk > staging-artifact/SHA256SUMS
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging staging-artifact/am2-client-staging-legacy-debug.apk > staging-artifact/legacy-apk-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging staging-artifact/am2-client-staging-modern-debug.apk > staging-artifact/modern-apk-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs staging-artifact/am2-client-staging-legacy-debug.apk > staging-artifact/legacy-signer-metadata.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs staging-artifact/am2-client-staging-modern-debug.apk > staging-artifact/modern-signer-metadata.txt
+          stat --printf='legacy_byte_size=%s\n' staging-artifact/am2-client-staging-legacy-debug.apk > staging-artifact/build-metadata.txt
+          stat --printf='modern_byte_size=%s\n' staging-artifact/am2-client-staging-modern-debug.apk >> staging-artifact/build-metadata.txt
+          printf 'source_commit=%s\nenvironment=staging\nvariant_legacy=StagingLegacyCompatDebug\nvariant_modern=StagingSystemTrustDebug\nlegacy_target=API 16-24\nmodern_target=API 25+\n' "$GITHUB_SHA" >> staging-artifact/build-metadata.txt
       - name: Upload private staging candidate
         uses: actions/upload-artifact@v4
         with:
