@@ -94,10 +94,10 @@ class EnvironmentConfigTest(unittest.TestCase):
         instrumented = (ROOT / "app/src/androidTest/java/com/am2/am2/TrustModeInstrumentedTest.kt").read_text()
         self.assertIn("valid-isrgrootx1.letsencrypt.org", instrumented)
         self.assertIn("wss://echo.websocket.org/", instrumented)
-        self.assertIn(
-            'androidTestImplementation("androidx.tracing:tracing:1.0.0")',
-            GRADLE.read_text(),
-        )
+        versions = (ROOT / "gradle/libs.versions.toml").read_text()
+        self.assertIn('junitVersion = "1.1.3"', versions)
+        self.assertIn('espressoCore = "3.4.0"', versions)
+        self.assertNotIn("androidx.tracing:tracing", GRADLE.read_text())
         nightly_matrix = text.split("github.event.inputs.lane == 'nightly'", 1)[1].split("startsWith(github.ref", 1)[0]
         self.assertIn("DevLegacyCompat", nightly_matrix)
         self.assertNotIn("StagingLegacyCompat", nightly_matrix)
