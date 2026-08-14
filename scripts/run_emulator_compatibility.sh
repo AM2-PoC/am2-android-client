@@ -58,12 +58,17 @@ run_instrumentation_with_timeout() {
     elapsed=0
     while kill -0 "$instrument_pid" 2>/dev/null; do
         if [ "$elapsed" -ge 120 ]; then
+            printf '%s\n' "Instrumentation timed out after ${elapsed}s" >&2
+            cat "$output_file" >&2
+            printf '%s\n' "--- instrumentation process ---" >&2
+            adb shell ps 2>/dev/null | grep -E "(${PACKAGE_ID}|androidx.test)" >&2 || true
+            printf '%s\n' "--- logcat crash/runtime diagnostics ---" >&2
+            adb logcat -d -v time 2>/dev/null | grep -E -i -A30 -B10 \
+                "FATAL EXCEPTION|AndroidRuntime|ClassNotFoundException|NoClassDefFoundError|VerifyError|Process ${PACKAGE_ID}|INSTRUMENTATION" >&2 || true
             adb shell am force-stop "${PACKAGE_ID}.test" >/dev/null 2>&1 || true
             adb shell am force-stop "$PACKAGE_ID" >/dev/null 2>&1 || true
             kill "$instrument_pid" 2>/dev/null || true
             wait "$instrument_pid" 2>/dev/null || true
-            printf '%s\n' "Instrumentation timed out after ${elapsed}s" >&2
-            cat "$output_file" >&2
             rm -f "$output_file"
             return 124
         fi
