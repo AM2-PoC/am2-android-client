@@ -37,7 +37,7 @@ class AboutActivity : BaseActivity() {
             .followRedirects(false)
             .followSslRedirects(false)
 
-        TlsCompat.applyBundledCaForOldAndroid(this, builder).build()
+        TlsCompat.applyPlatformTlsCompatibility(this, builder).build()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -13,6 +13,11 @@ SPEC.loader.exec_module(SERVER)
 
 
 class TlsFixtureResponseTest(unittest.TestCase):
+    def test_generated_ca_is_explicitly_a_ca(self):
+        text = Path(__file__).with_name("create_tls_fixture.sh").read_text()
+        self.assertIn("basicConstraints=critical,CA:TRUE,pathlen:0", text)
+        self.assertIn("keyUsage=critical,keyCertSign,cRLSign", text)
+
     def test_https_health_response_is_bounded_and_successful(self):
         response = SERVER.response_for(
             b"GET /health HTTP/1.1\r\nHost: 10.0.2.2\r\nConnection: close\r\n\r\n"

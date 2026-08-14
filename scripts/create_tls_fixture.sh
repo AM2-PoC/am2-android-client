@@ -4,8 +4,20 @@ set -eu
 OUTPUT_DIR="${1:?output directory is required}"
 mkdir -p "$OUTPUT_DIR"
 
+printf '%s\n' \
+    '[req]' \
+    'distinguished_name=dn' \
+    'x509_extensions=v3_ca' \
+    'prompt=no' \
+    '[dn]' \
+    'CN=AM2 CI Test CA' \
+    '[v3_ca]' \
+    'basicConstraints=critical,CA:TRUE,pathlen:0' \
+    'keyUsage=critical,keyCertSign,cRLSign' \
+    'subjectKeyIdentifier=hash' > "$OUTPUT_DIR/ca.cnf"
+
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -sha256 \
-    -subj "/CN=AM2 CI Test CA" \
+    -config "$OUTPUT_DIR/ca.cnf" \
     -keyout "$OUTPUT_DIR/ca.key" \
     -out "$OUTPUT_DIR/ca.crt" >/dev/null 2>&1
 

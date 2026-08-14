@@ -2,6 +2,9 @@
 set -eu
 
 PACKAGE_ID="${1:?package ID is required}"
+APP_APK="${2:-}"
+TEST_APK="${3:-}"
+FIXTURE_PORT="${AM2_CI_FIXTURE_PORT:-8443}"
 FIXTURE_DIR="${TMPDIR:-/tmp}/am2-tls-fixture.$$"
 FIXTURE_PID=""
 
@@ -18,13 +21,13 @@ start_tls_fixture() {
     python3 scripts/tls_fixture_server.py \
         --cert "$FIXTURE_DIR/server.crt" \
         --key "$FIXTURE_DIR/server.key" \
-        --port 8443 >"$FIXTURE_DIR/server.log" 2>&1 &
+        --port "$FIXTURE_PORT" >"$FIXTURE_DIR/server.log" 2>&1 &
     FIXTURE_PID=$!
     attempts=0
     while [ "$attempts" -lt 30 ]; do
         if curl --silent --show-error --fail \
             --cacert "$FIXTURE_DIR/ca.crt" \
-            --connect-timeout 2 https://127.0.0.1:8443/health >/dev/null 2>&1; then
+            --connect-timeout 2 "https://127.0.0.1:$FIXTURE_PORT/health" >/dev/null 2>&1; then
             return 0
         fi
         if ! kill -0 "$FIXTURE_PID" 2>/dev/null; then
@@ -40,10 +43,16 @@ start_tls_fixture() {
 
 trap stop_tls_fixture EXIT HUP INT TERM
 
-APP_APK="$(find app/build/outputs/apk -path '*/debug/*.apk' -type f -not -name '*androidTest*' -print -quit)"
-TEST_APK="$(find app/build/outputs/apk/androidTest -path '*/debug/*.apk' -type f -print -quit)"
+if [ -z "$APP_APK" ]; then
+    APP_APK="$(find app/build/outputs/apk -path '*/debug/*.apk' -type f -not -name '*androidTest*' -print -quit)"
+fi
+if [ -z "$TEST_APK" ]; then
+    TEST_APK="$(find app/build/outputs/apk/androidTest -path '*/debug/*.apk' -type f -print -quit)"
+fi
 test -n "$APP_APK"
 test -n "$TEST_APK"
+test -f "$APP_APK"
+test -f "$TEST_APK"
 
 wait_for_device() {
     attempts=0
@@ -84,7 +93,7 @@ run_instrumentation_with_timeout() {
     CI_CA_BASE64="$(base64 "$FIXTURE_DIR/ca.crt" | tr -d '\r\n')"
     set -- \
         -e am2CiCaBase64 "$CI_CA_BASE64" \
-        -e am2CiHttpsUrl "https://10.0.2.2:8443/"
+        -e am2CiHttpsUrl "https://10.0.2.2:$FIXTURE_PORT/"
     if [ "$SDK_INT" -lt 21 ]; then
         set -- "$@" -e notClass androidx.test.internal.runner.TestRequestBuilder
     fi

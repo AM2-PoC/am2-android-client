@@ -222,7 +222,7 @@ object WebSocketManager {
             .pingInterval(25, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
 
-        return TlsCompat.applyBundledCaForOldAndroid(
+        return TlsCompat.applyPlatformTlsCompatibility(
             context.applicationContext,
             builder
         ).build()

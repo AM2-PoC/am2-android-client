@@ -2,7 +2,9 @@ package com.am2.am2
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import android.os.Build
 import android.util.Base64
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -10,14 +12,18 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.ByteArrayInputStream
+import java.net.InetAddress
 import java.security.KeyStore
 import java.security.cert.CertificateFactory
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.SSLPeerUnverifiedException
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 
@@ -27,7 +33,7 @@ class TrustModeInstrumentedTest {
     fun variantUsesExpectedTrustModeAndEndpoint() {
         val expectedEndpoint = when {
             BuildConfig.APPLICATION_ID.endsWith(".dev") -> "wss://dev-api.am2-poc.com"
-            BuildConfig.APPLICATION_ID.endsWith(".staging") -> "wss://staging-api.am2-poc.com"
+            BuildConfig.APPLICATION_ID.endsWith(".staging") -> "wss://staging-apiapi.am2-poc.com"
             else -> "wss://apiapi.am2-poc.com"
         }
         assertEquals(expectedEndpoint, BuildConfig.WEBSOCKET_URL)
@@ -36,7 +42,35 @@ class TrustModeInstrumentedTest {
         }
 
         val expectedBundledCa = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.N
-        assertEquals(expectedBundledCa, BuildConfig.BUNDLED_CA_ENABLED)
+        assertEquals(
+            expectedBundledCa,
+            TlsCompat.usesBundledCaForSdk(android.os.Build.VERSION.SDK_INT),
+        )
+    }
+
+    @Test
+    fun platformTlsCompatibilitySelectsExpectedRuntimePath() {
+        val original = OkHttpClient.Builder()
+        var systemTrustRequested = false
+        var bundledTrustRequested = false
+
+        val configured = TlsCompat.applyPlatformTlsCompatibility(
+            builder = original,
+            sdkInt = android.os.Build.VERSION.SDK_INT,
+            systemTrustManager = {
+                systemTrustRequested = true
+                fixtureTrustManager()
+            },
+            bundledTrustManager = {
+                bundledTrustRequested = true
+                fixtureTrustManager()
+            },
+        )
+
+        assertSame(original, configured)
+        val expectedFallback = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.N
+        assertEquals(expectedFallback, systemTrustRequested)
+        assertEquals(expectedFallback, bundledTrustRequested)
     }
 
     @Test
@@ -70,12 +104,51 @@ class TrustModeInstrumentedTest {
         failure?.let { throw AssertionError("WSS handshake failed", it) }
     }
 
-    private fun fixtureClient(): OkHttpClient {
-        return TlsCompat.applyTrustManagers(
+    @Test
+    fun hostnameMismatchIsRejected() {
+        try {
+            fixtureClient(hostnameOverride = true).newCall(
+                Request.Builder().url(
+                    fixtureHttpsUrl().replace("10.0.2.2", "mismatch.am2.invalid"),
+                ).build(),
+            ).execute().close()
+            throw AssertionError("TLS hostname mismatch was accepted")
+        } catch (expected: SSLPeerUnverifiedException) {
+            assertTrue(expected.message.orEmpty().isNotEmpty())
+        }
+    }
+
+    @Test
+    fun untrustedCertificateIsRejected() {
+        try {
             OkHttpClient.Builder()
                 .connectTimeout(20, TimeUnit.SECONDS)
-                .readTimeout(20, TimeUnit.SECONDS),
+                .readTimeout(20, TimeUnit.SECONDS)
+                .build()
+                .newCall(Request.Builder().url(fixtureHttpsUrl()).build())
+                .execute()
+                .close()
+            throw AssertionError("Untrusted fixture certificate was accepted")
+        } catch (expected: SSLHandshakeException) {
+            assertTrue(expected.message.orEmpty().isNotEmpty())
+        }
+    }
+
+    private fun fixtureClient(hostnameOverride: Boolean = false): OkHttpClient {
+        val builder = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .dns(Dns { hostname ->
+                if (hostnameOverride && hostname == "mismatch.am2.invalid") {
+                    listOf(InetAddress.getByName("10.0.2.2"))
+                } else {
+                    Dns.SYSTEM.lookup(hostname)
+                }
+            })
+        return TlsCompat.applyTrustManagers(
+            builder,
             listOf(fixtureTrustManager()),
+            Build.VERSION.SDK_INT,
         ).build()
     }
 

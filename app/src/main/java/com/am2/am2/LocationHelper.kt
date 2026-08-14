@@ -62,7 +62,7 @@ object LocationHelper {
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
 
-        return TlsCompat.applyBundledCaForOldAndroid(
+        return TlsCompat.applyPlatformTlsCompatibility(
             context.applicationContext,
             builder
         ).build()
