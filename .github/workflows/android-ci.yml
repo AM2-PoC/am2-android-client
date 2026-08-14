@@ -49,17 +49,18 @@ jobs:
           python3 scripts/test_check_environment_config.py
           python3 scripts/test_tls_fixture.py
       - name: Unit tests and DEV debug build
-        run: ./gradlew --no-daemon :app:testDevSystemTrustDebugUnitTest :app:assembleDevSystemTrustDebug
+        run: ./gradlew --no-daemon :app:testDevDebugUnitTest :app:assembleDevDebug
 
   compatibility:
     name: compatibility-api-${{ matrix.api }}-${{ matrix.variant }}
     needs: policy-and-unit
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.lane != 'staging'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"api":25,"variant":"DevSystemTrust","package":"com.am2.tik.dev"},{"api":34,"variant":"DevSystemTrust","package":"com.am2.tik.dev"}]' || (github.event_name == 'schedule' || github.event.inputs.lane == 'nightly') && '[{"api":16,"variant":"DevLegacyCompat","package":"com.am2.tik.dev"},{"api":19,"variant":"DevLegacyCompat","package":"com.am2.tik.dev"},{"api":25,"variant":"DevSystemTrust","package":"com.am2.tik.dev"},{"api":26,"variant":"DevSystemTrust","package":"com.am2.tik.dev"},{"api":34,"variant":"DevSystemTrust","package":"com.am2.tik.dev"}]' || (startsWith(github.ref, 'refs/tags/') || github.event.inputs.lane == 'release') && '[{"api":16,"variant":"ProductionLegacyCompat","package":"com.am2.tik"},{"api":19,"variant":"ProductionLegacyCompat","package":"com.am2.tik"},{"api":25,"variant":"ProductionSystemTrust","package":"com.am2.tik"},{"api":26,"variant":"ProductionSystemTrust","package":"com.am2.tik"},{"api":34,"variant":"ProductionSystemTrust","package":"com.am2.tik"}]' || '[{"api":16,"variant":"DevLegacyCompat","package":"com.am2.tik.dev"},{"api":19,"variant":"DevLegacyCompat","package":"com.am2.tik.dev"},{"api":25,"variant":"DevSystemTrust","package":"com.am2.tik.dev"},{"api":26,"variant":"DevSystemTrust","package":"com.am2.tik.dev"},{"api":34,"variant":"DevSystemTrust","package":"com.am2.tik.dev"}]') }}
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"api":25,"variant":"Dev","package":"com.am2.tik.dev"},{"api":34,"variant":"Dev","package":"com.am2.tik.dev"}]' || (github.event_name == 'schedule' || github.event.inputs.lane == 'nightly') && '[{"api":16,"variant":"Dev","package":"com.am2.tik.dev"},{"api":19,"variant":"Dev","package":"com.am2.tik.dev"},{"api":25,"variant":"Dev","package":"com.am2.tik.dev"},{"api":26,"variant":"Dev","package":"com.am2.tik.dev"},{"api":34,"variant":"Dev","package":"com.am2.tik.dev"}]' || (startsWith(github.ref, 'refs/tags/') || github.event.inputs.lane == 'release') && '[{"api":16,"variant":"Production","package":"com.am2.tik"},{"api":19,"variant":"Production","package":"com.am2.tik"},{"api":25,"variant":"Production","package":"com.am2.tik"},{"api":26,"variant":"Production","package":"com.am2.tik"},{"api":34,"variant":"Production","package":"com.am2.tik"}]' || '[{"api":16,"variant":"Dev","package":"com.am2.tik.dev"},{"api":19,"variant":"Dev","package":"com.am2.tik.dev"},{"api":25,"variant":"Dev","package":"com.am2.tik.dev"},{"api":26,"variant":"Dev","package":"com.am2.tik.dev"},{"api":34,"variant":"Dev","package":"com.am2.tik.dev"}]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -87,10 +88,10 @@ jobs:
           emulator-boot-timeout: 900
           script: sh scripts/run_emulator_compatibility.sh "${{ matrix.package }}"
 
-  staging-artifact:
-    name: staging-artifact
+  build-staging-candidate:
+    name: build-staging-candidate
     needs: policy-and-unit
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.lane == 'staging'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.lane == 'staging' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -103,28 +104,116 @@ jobs:
       - uses: android-actions/setup-android@v3
       - name: Install Android toolchain
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
-      - name: Build legacy and modern staging debug candidates
-        run: ./gradlew --no-daemon :app:testStagingLegacyCompatDebugUnitTest :app:testStagingSystemTrustDebugUnitTest :app:assembleStagingLegacyCompatDebug :app:assembleStagingSystemTrustDebug
-      - name: Record staging artifact identities
+      - name: Build one staging application and test APK
+        run: ./gradlew --no-daemon :app:testStagingDebugUnitTest :app:assembleStagingDebug :app:assembleStagingDebugAndroidTest
+      - name: Record immutable staging candidate identity
         shell: bash
         run: |
           set -euo pipefail
-          LEGACY_APK="$(find app/build/outputs/apk/stagingLegacyCompat/debug -name '*.apk' -type f -print -quit)"
-          MODERN_APK="$(find app/build/outputs/apk/stagingSystemTrust/debug -name '*.apk' -type f -print -quit)"
-          test -n "$LEGACY_APK"
-          test -n "$MODERN_APK"
+          mapfile -t APP_APKS < <(find app/build/outputs/apk/staging/debug -maxdepth 1 -name '*.apk' -type f -print)
+          mapfile -t TEST_APKS < <(find app/build/outputs/apk/androidTest/staging/debug -maxdepth 1 -name '*.apk' -type f -print)
+          test "${#APP_APKS[@]}" -eq 1
+          test "${#TEST_APKS[@]}" -eq 1
+          APP_APK="${APP_APKS[0]}"
+          TEST_APK="${TEST_APKS[0]}"
+          mkdir -p staging-candidate
+          cp "$APP_APK" staging-candidate/am2-client-staging-debug.apk
+          cp "$TEST_APK" staging-candidate/am2-client-staging-debug-androidTest.apk
+          (
+            cd staging-candidate
+            sha256sum am2-client-staging-debug.apk am2-client-staging-debug-androidTest.apk > SHA256SUMS
+          )
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging staging-candidate/am2-client-staging-debug.apk > staging-candidate/apk-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs staging-candidate/am2-client-staging-debug.apk > staging-candidate/signer-metadata.txt
+          stat --printf='byte_size=%s\n' staging-candidate/am2-client-staging-debug.apk > staging-candidate/build-metadata.txt
+          printf 'source_commit=%s\nenvironment=staging\nvariant=StagingDebug\nsupported_api=16+\n' "$GITHUB_SHA" >> staging-candidate/build-metadata.txt
+      - name: Upload immutable staging handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: am2-client-staging-handoff-${{ github.sha }}-${{ github.run_attempt }}
+          path: staging-candidate/
+          if-no-files-found: error
+          retention-days: 1
+
+  staging-compatibility:
+    name: staging-api-${{ matrix.api }}-same-apk
+    needs: build-staging-candidate
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.lane == 'staging' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [16, 19, 25, 26, 34]
+        package: [com.am2.tik.staging]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: am2-client-staging-handoff-${{ github.sha }}-${{ github.run_attempt }}
+          path: staging-candidate
+      - name: Require exact staging handoff contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t HANDOFF_FILES < <(find staging-candidate -maxdepth 1 -type f -printf '%f\n' | sort)
+          EXPECTED_FILES=(
+            SHA256SUMS
+            am2-client-staging-debug-androidTest.apk
+            am2-client-staging-debug.apk
+            apk-badging.txt
+            build-metadata.txt
+            signer-metadata.txt
+          )
+          test "${#HANDOFF_FILES[@]}" -eq "${#EXPECTED_FILES[@]}"
+          diff -u <(printf '%s\n' "${EXPECTED_FILES[@]}") <(printf '%s\n' "${HANDOFF_FILES[@]}")
+      - name: Verify candidate digest before installation
+        run: (cd staging-candidate && sha256sum -c SHA256SUMS)
+      - uses: android-actions/setup-android@v3
+      - name: Install Android platform tools
+        run: sdkmanager "platform-tools"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Boot API ${{ matrix.api }} and test the exact staging APK
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: ${{ matrix.api < 21 && 'x86' || 'x86_64' }}
+          target: default
+          disable-animations: false
+          emulator-boot-timeout: 900
+          script: sh scripts/run_emulator_compatibility.sh "${{ matrix.package }}" staging-candidate/am2-client-staging-debug.apk staging-candidate/am2-client-staging-debug-androidTest.apk
+
+  staging-artifact:
+    name: staging-artifact
+    needs: staging-compatibility
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.lane == 'staging' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: am2-client-staging-handoff-${{ github.sha }}-${{ github.run_attempt }}
+          path: staging-candidate
+      - name: Verify and package the proven APK without rebuilding
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd staging-candidate && sha256sum -c SHA256SUMS)
           mkdir -p staging-artifact
-          cp "$LEGACY_APK" staging-artifact/am2-client-staging-legacy-debug.apk
-          cp "$MODERN_APK" staging-artifact/am2-client-staging-modern-debug.apk
-          sha256sum staging-artifact/am2-client-staging-legacy-debug.apk staging-artifact/am2-client-staging-modern-debug.apk > staging-artifact/SHA256SUMS
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging staging-artifact/am2-client-staging-legacy-debug.apk > staging-artifact/legacy-apk-badging.txt
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging staging-artifact/am2-client-staging-modern-debug.apk > staging-artifact/modern-apk-badging.txt
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs staging-artifact/am2-client-staging-legacy-debug.apk > staging-artifact/legacy-signer-metadata.txt
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs staging-artifact/am2-client-staging-modern-debug.apk > staging-artifact/modern-signer-metadata.txt
-          stat --printf='legacy_byte_size=%s\n' staging-artifact/am2-client-staging-legacy-debug.apk > staging-artifact/build-metadata.txt
-          stat --printf='modern_byte_size=%s\n' staging-artifact/am2-client-staging-modern-debug.apk >> staging-artifact/build-metadata.txt
-          printf 'source_commit=%s\nenvironment=staging\nvariant_legacy=StagingLegacyCompatDebug\nvariant_modern=StagingSystemTrustDebug\nlegacy_target=API 16-24\nmodern_target=API 25+\n' "$GITHUB_SHA" >> staging-artifact/build-metadata.txt
-      - name: Upload private staging candidate
+          cp staging-candidate/am2-client-staging-debug.apk staging-artifact/
+          cp staging-candidate/apk-badging.txt staging-artifact/
+          cp staging-candidate/signer-metadata.txt staging-artifact/
+          cp staging-candidate/build-metadata.txt staging-artifact/
+          (
+            cd staging-artifact
+            sha256sum am2-client-staging-debug.apk > SHA256SUMS
+          )
+          printf 'validated_api=16,19,25,26,34\n' >> staging-artifact/build-metadata.txt
+      - name: Upload proven staging candidate
         uses: actions/upload-artifact@v4
         with:
           name: am2-client-staging-debug-${{ github.sha }}
@@ -154,12 +243,12 @@ jobs:
           AM2_APPROVED_SIGNER_SHA256: ${{ vars.AM2_APPROVED_SIGNER_SHA256 }}
         run: |
           test "$(printf '%s' "$AM2_APPROVED_SIGNER_SHA256" | tr -d ':' | tr '[:upper:]' '[:lower:]' | grep -Ec '^[0-9a-f]{64}$')" -eq 1
-          ./gradlew --no-daemon :app:test :app:assembleProductionSystemTrustRelease -PAM2_APPROVED_SIGNER_SHA256="$AM2_APPROVED_SIGNER_SHA256"
+          ./gradlew --no-daemon :app:test :app:assembleProductionRelease -PAM2_APPROVED_SIGNER_SHA256="$AM2_APPROVED_SIGNER_SHA256"
       - name: Record artifact identity
         shell: bash
         run: |
           set -euo pipefail
-          APK="$(find app/build/outputs/apk/productionSystemTrust/release -name '*.apk' -type f -print -quit)"
+          APK="$(find app/build/outputs/apk/production/release -name '*.apk' -type f -print -quit)"
           test -n "$APK"
           mkdir -p release-artifact
           cp "$APK" release-artifact/am2-client-production-unsigned.apk

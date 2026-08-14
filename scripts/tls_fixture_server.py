@@ -63,7 +63,10 @@ def main() -> None:
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.maximum_version = ssl.TLSVersion.TLSv1_2
-    context.set_ciphers("ECDHE-RSA-AES128-SHA:AES128-SHA:@SECLEVEL=1")
+    # Android 4.1's OpenSSL stack does not advertise ECDHE suites that modern
+    # OpenSSL enables by default. Keep this fixture at TLS 1.2 while offering
+    # an RSA key-exchange suite so it exercises the real Jelly Bean path.
+    context.set_ciphers("AES128-SHA:@SECLEVEL=1")
     context.load_cert_chain(args.cert, args.key)
 
     with socket.create_server(("127.0.0.1", args.port), reuse_port=False) as listener:

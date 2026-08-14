@@ -19,32 +19,48 @@ import javax.net.ssl.X509TrustManager
 
 object TlsCompat {
 
-    fun applyBundledCaForOldAndroid(
+    fun applyPlatformTlsCompatibility(
         context: Context,
         builder: OkHttpClient.Builder
     ): OkHttpClient.Builder {
-        if (!BuildConfig.BUNDLED_CA_ENABLED || Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        return applyPlatformTlsCompatibility(
+            builder = builder,
+            sdkInt = Build.VERSION.SDK_INT,
+            systemTrustManager = { createSystemTrustManager() },
+            bundledTrustManager = { createBundledTrustManager(context) },
+        )
+    }
+
+    internal fun applyPlatformTlsCompatibility(
+        builder: OkHttpClient.Builder,
+        sdkInt: Int,
+        systemTrustManager: () -> X509TrustManager,
+        bundledTrustManager: () -> X509TrustManager,
+    ): OkHttpClient.Builder {
+        if (sdkInt >= Build.VERSION_CODES.N) {
             return builder
         }
 
-        val systemTrustManager = createSystemTrustManager()
-        val bundledTrustManager = createBundledTrustManager(context)
-
         return applyTrustManagers(
             builder,
-            listOf(systemTrustManager, bundledTrustManager),
+            listOf(systemTrustManager(), bundledTrustManager()),
+            sdkInt,
         )
     }
+
+    internal fun usesBundledCaForSdk(sdkInt: Int): Boolean =
+        sdkInt < Build.VERSION_CODES.N
 
     internal fun applyTrustManagers(
         builder: OkHttpClient.Builder,
         trustManagers: List<X509TrustManager>,
+        sdkInt: Int = Build.VERSION.SDK_INT,
     ): OkHttpClient.Builder {
         val compositeTrustManager = CompositeX509TrustManager(trustManagers)
 
         val sslContext = SSLContext.getInstance("TLS")
         sslContext.init(null, arrayOf<TrustManager>(compositeTrustManager), null)
-        val socketFactory = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+        val socketFactory = if (sdkInt < Build.VERSION_CODES.LOLLIPOP) {
             LegacyTls12SocketFactory(sslContext.socketFactory)
         } else {
             sslContext.socketFactory
