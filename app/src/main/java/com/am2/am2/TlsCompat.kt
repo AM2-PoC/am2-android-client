@@ -2,6 +2,7 @@ package com.am2.am2
 
 import android.content.Context
 import android.os.Build
+import okhttp3.ConnectionSpec
 import okhttp3.OkHttpClient
 import java.security.KeyStore
 import java.security.cert.CertificateException
@@ -32,10 +33,15 @@ object TlsCompat {
         val sslContext = SSLContext.getInstance("TLS")
         sslContext.init(null, arrayOf<TrustManager>(compositeTrustManager), null)
 
-        return builder.sslSocketFactory(
-            sslContext.socketFactory,
-            compositeTrustManager
-        )
+        return builder
+            // OkHttp 3.12's default COMPATIBLE_TLS fallback is TLS 1.0-only.
+            // Keep the modern spec so API 16/19 can negotiate TLS 1.2 where
+            // the platform supports it; never re-enable TLS 1.0/1.1.
+            .connectionSpecs(listOf(ConnectionSpec.MODERN_TLS))
+            .sslSocketFactory(
+                sslContext.socketFactory,
+                compositeTrustManager
+            )
 
     }
 

@@ -98,6 +98,10 @@ class EnvironmentConfigTest(unittest.TestCase):
         self.assertIn('junitVersion = "1.1.3"', versions)
         self.assertIn('espressoCore = "3.4.0"', versions)
         self.assertNotIn("androidx.tracing:tracing", GRADLE.read_text())
+        tls_compat = (ROOT / "app/src/main/java/com/am2/am2/TlsCompat.kt").read_text()
+        self.assertIn("ConnectionSpec.MODERN_TLS", tls_compat)
+        self.assertIn("connectionSpecs", tls_compat)
+        self.assertNotIn("ConnectionSpec.COMPATIBLE_TLS", tls_compat)
         nightly_matrix = text.split("github.event.inputs.lane == 'nightly'", 1)[1].split("startsWith(github.ref", 1)[0]
         self.assertIn("DevLegacyCompat", nightly_matrix)
         self.assertNotIn("StagingLegacyCompat", nightly_matrix)
