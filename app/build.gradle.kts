@@ -36,8 +36,6 @@ android {
 
         buildConfigField("String", "APPROVED_UPDATE_SIGNER_SHA256", "\"${approvedSigner.get()}\"")
         buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "false")
-        buildConfigField("Boolean", "BUNDLED_CA_ENABLED", "false")
-
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
         }
@@ -49,7 +47,7 @@ android {
         }
     }
 
-    flavorDimensions += listOf("environment", "trust")
+    flavorDimensions += "environment"
     productFlavors {
         create("dev") {
             dimension = "environment"
@@ -75,12 +73,12 @@ android {
             buildConfigField(
                 "String",
                 "WEBSOCKET_URL",
-                quotedBuildConfig(validateEndpoint("staging", "wss://staging-api.am2-poc.com", "wss", "staging-api.am2-poc.com")),
+                quotedBuildConfig(validateEndpoint("staging", "wss://staging-apiapi.am2-poc.com", "wss", "staging-apiapi.am2-poc.com")),
             )
             buildConfigField(
                 "String",
                 "UPDATE_MANIFEST_URL",
-                quotedBuildConfig(validateEndpoint("staging", "https://staging-api.am2-poc.com/update/version.json", "https", "staging-api.am2-poc.com")),
+                quotedBuildConfig(validateEndpoint("staging", "https://staging-apiapi.am2-poc.com/update/version.json", "https", "staging-apiapi.am2-poc.com")),
             )
         }
         create("production") {
@@ -102,13 +100,6 @@ android {
                     "Production release requires AM2_APPROVED_SIGNER_SHA256"
                 }
             }
-        }
-        create("legacyCompat") {
-            dimension = "trust"
-            buildConfigField("Boolean", "BUNDLED_CA_ENABLED", "true")
-        }
-        create("systemTrust") {
-            dimension = "trust"
         }
     }
 
