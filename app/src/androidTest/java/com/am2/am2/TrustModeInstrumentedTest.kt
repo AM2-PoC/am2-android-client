@@ -27,7 +27,7 @@ class TrustModeInstrumentedTest {
     fun variantUsesExpectedTrustModeAndEndpoint() {
         val expectedEndpoint = when {
             BuildConfig.APPLICATION_ID.endsWith(".dev") -> "wss://dev-api.am2-poc.com"
-            BuildConfig.APPLICATION_ID.endsWith(".staging") -> "wss://staging-api.am2-poc.com"
+            BuildConfig.APPLICATION_ID.endsWith(".staging") -> "wss://staging-apiapi.am2-poc.com"
             else -> "wss://apiapi.am2-poc.com"
         }
         assertEquals(expectedEndpoint, BuildConfig.WEBSOCKET_URL)

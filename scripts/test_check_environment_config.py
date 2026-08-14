@@ -52,9 +52,18 @@ class EnvironmentConfigTest(unittest.TestCase):
 
     def test_nonproduction_urls_are_not_production_hosts(self):
         text = GRADLE.read_text()
-        for environment in ("dev", "staging"):
-            self.assertIn(f'wss://{environment}-api.am2-poc.com', text)
-            self.assertIn(f'https://{environment}-api.am2-poc.com/update/version.json', text)
+        endpoints = {
+            "dev": "dev-api.am2-poc.com",
+            "staging": "staging-apiapi.am2-poc.com",
+        }
+        for environment, host in endpoints.items():
+            self.assertIn(f'wss://{host}', text)
+            self.assertIn(f'https://{host}/update/version.json', text)
+        self.assertNotIn("staging-api.am2-poc.com", text)
+
+        instrumented = (ROOT / "app/src/androidTest/java/com/am2/am2/TrustModeInstrumentedTest.kt").read_text()
+        self.assertIn('BuildConfig.APPLICATION_ID.endsWith(".staging") -> "wss://staging-apiapi.am2-poc.com"', instrumented)
+        self.assertNotIn("staging-api.am2-poc.com", instrumented)
 
     def test_ci_is_billing_aware_and_publishes_bounded_candidates(self):
         text = WORKFLOW.read_text()

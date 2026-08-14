@@ -75,12 +75,12 @@ android {
             buildConfigField(
                 "String",
                 "WEBSOCKET_URL",
-                quotedBuildConfig(validateEndpoint("staging", "wss://staging-api.am2-poc.com", "wss", "staging-api.am2-poc.com")),
+                quotedBuildConfig(validateEndpoint("staging", "wss://staging-apiapi.am2-poc.com", "wss", "staging-apiapi.am2-poc.com")),
             )
             buildConfigField(
                 "String",
                 "UPDATE_MANIFEST_URL",
-                quotedBuildConfig(validateEndpoint("staging", "https://staging-api.am2-poc.com/update/version.json", "https", "staging-api.am2-poc.com")),
+                quotedBuildConfig(validateEndpoint("staging", "https://staging-apiapi.am2-poc.com/update/version.json", "https", "staging-apiapi.am2-poc.com")),
             )
         }
         create("production") {
