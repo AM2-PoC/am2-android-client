@@ -91,5 +91,15 @@ class EnvironmentConfigTest(unittest.TestCase):
         self.assertNotIn("StagingLegacyCompat", nightly_matrix)
 
 
+    def test_ci_concurrency_isolates_event_and_requested_lane(self):
+        text = WORKFLOW.read_text()
+        self.assertIn(
+            "group: android-ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.lane || github.ref }}",
+            text,
+        )
+        self.assertNotIn("github.ref }}-${{ github.event_name }}", text)
+        self.assertIn("cancel-in-progress: true", text)
+
+
 if __name__ == "__main__":
     unittest.main()
