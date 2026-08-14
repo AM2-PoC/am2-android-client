@@ -87,6 +87,8 @@ class EnvironmentConfigTest(unittest.TestCase):
         self.assertIn("adb logcat -d -v time", emulator_script)
         self.assertIn('adb shell ps', emulator_script)
         self.assertIn('return 124', emulator_script)
+        self.assertIn("tr -d '\\r'", emulator_script)
+        self.assertLess(emulator_script.index("tr -d '\\r'"), emulator_script.index("grep -Eq"))
         self.assertIn("ProductionSystemTrust", text)
         self.assertIn("AM2_APPROVED_SIGNER_SHA256", text)
         self.assertIn('aapt" dump badging', text)

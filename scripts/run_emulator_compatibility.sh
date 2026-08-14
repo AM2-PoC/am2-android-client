@@ -117,6 +117,10 @@ run_instrumentation_with_timeout() {
 
     instrument_status=0
     wait "$instrument_pid" || instrument_status=$?
+    # Old Android instrumentation writes CRLF even on a Linux runner. Normalize
+    # before matching the terminal JUnit summary without changing diagnostics.
+    tr -d '\r' < "$output_file" > "${output_file}.normalized"
+    mv "${output_file}.normalized" "$output_file"
     cat "$output_file"
     test "$instrument_status" -eq 0
     grep -Eq '^OK \([0-9]+ tests?\)$' "$output_file"
