@@ -23,7 +23,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-ci-${{ github.workflow }}-${{ github.ref }}
+  group: android-ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}-${{ github.event.inputs.lane || 'default' }}
   cancel-in-progress: true
 
 jobs:
