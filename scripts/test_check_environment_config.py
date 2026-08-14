@@ -94,9 +94,10 @@ class EnvironmentConfigTest(unittest.TestCase):
     def test_ci_concurrency_isolates_event_and_requested_lane(self):
         text = WORKFLOW.read_text()
         self.assertIn(
-            "group: android-ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}-${{ github.event.inputs.lane || 'default' }}",
+            "group: android-ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.lane || github.ref }}",
             text,
         )
+        self.assertNotIn("github.ref }}-${{ github.event_name }}", text)
         self.assertIn("cancel-in-progress: true", text)
 
 
