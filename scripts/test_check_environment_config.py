@@ -56,16 +56,29 @@ class EnvironmentConfigTest(unittest.TestCase):
             self.assertIn(f'wss://{environment}-api.am2-poc.com', text)
             self.assertIn(f'https://{environment}-api.am2-poc.com/update/version.json', text)
 
-    def test_ci_is_billing_aware_and_uploads_only_release_artifacts(self):
+    def test_ci_is_billing_aware_and_publishes_bounded_candidates(self):
         text = WORKFLOW.read_text()
         self.assertIn("github.event_name == 'pull_request'", text)
         for api in (16, 19, 25, 26, 34):
             self.assertIn(f'"api":{api}', text)
+        self.assertIn("github.event.inputs.lane == 'staging'", text)
         self.assertIn("github.event.inputs.lane == 'release'", text)
         self.assertIn("startsWith(github.ref, 'refs/tags/v')", text)
         self.assertIn('KERNEL=="kvm", GROUP="kvm", MODE="0666"', text)
-        self.assertEqual(1, text.count("actions/upload-artifact@v4"))
+        self.assertEqual(2, text.count("actions/upload-artifact@v4"))
+        self.assertIn("staging-artifact:", text)
+        self.assertIn("needs: policy-and-unit", text)
+        self.assertIn("assembleStagingSystemTrustDebug", text)
+        self.assertIn("am2-client-staging-debug.apk", text)
+        self.assertIn("environment=staging", text)
+        self.assertIn("source_commit=%s", text)
         self.assertIn("retention-days: 3", text)
+        self.assertNotIn("environment: android-staging", text)
+        staging_job = text.split("  staging-artifact:", 1)[1].split("  release-artifact:", 1)[0]
+        self.assertNotIn("compatibility", staging_job.splitlines()[2])
+        self.assertNotIn("AM2_CLIENT_KEYSTORE", staging_job)
+        self.assertNotIn("Production", staging_job)
+        self.assertNotIn("assembleStagingSystemTrustRelease", staging_job)
         emulator_script = (ROOT / "scripts/run_emulator_compatibility.sh").read_text()
         self.assertIn('script: sh scripts/run_emulator_compatibility.sh "${{ matrix.package }}"', text)
         self.assertIn("disable-animations: false", text)
