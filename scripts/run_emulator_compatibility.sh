@@ -39,10 +39,40 @@ install_with_retry() {
     return 1
 }
 
+run_instrumentation_with_timeout() {
+    output_file="${TMPDIR:-/tmp}/am2-instrumentation.$$.log"
+    rm -f "$output_file"
+
+    adb shell am instrument -w -r \
+        "${PACKAGE_ID}.test/androidx.test.runner.AndroidJUnitRunner" \
+        >"$output_file" 2>&1 &
+    instrument_pid=$!
+
+    elapsed=0
+    while kill -0 "$instrument_pid" 2>/dev/null; do
+        if [ "$elapsed" -ge 120 ]; then
+            adb shell am force-stop "${PACKAGE_ID}.test" >/dev/null 2>&1 || true
+            adb shell am force-stop "$PACKAGE_ID" >/dev/null 2>&1 || true
+            kill "$instrument_pid" 2>/dev/null || true
+            wait "$instrument_pid" 2>/dev/null || true
+            printf '%s\n' "Instrumentation timed out after ${elapsed}s" >&2
+            cat "$output_file" >&2
+            rm -f "$output_file"
+            return 124
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+
+    instrument_status=0
+    wait "$instrument_pid" || instrument_status=$?
+    cat "$output_file"
+    test "$instrument_status" -eq 0
+    grep -Eq '^OK \([0-9]+ tests?\)$' "$output_file"
+    rm -f "$output_file"
+}
+
 install_with_retry "$APP_APK"
 adb shell monkey -p "$PACKAGE_ID" -c android.intent.category.LAUNCHER 1
 install_with_retry "$TEST_APK"
-
-OUTPUT="$(adb shell am instrument -w -r "${PACKAGE_ID}.test/androidx.test.runner.AndroidJUnitRunner")"
-printf '%s\n' "$OUTPUT"
-printf '%s\n' "$OUTPUT" | grep -Eq '^OK \([0-9]+ tests?\)$'
+run_instrumentation_with_timeout
