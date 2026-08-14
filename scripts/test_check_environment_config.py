@@ -80,6 +80,8 @@ class EnvironmentConfigTest(unittest.TestCase):
         self.assertIn("adb shell am instrument", emulator_script)
         self.assertIn("grep -Eq", emulator_script)
         self.assertIn("run_instrumentation_with_timeout()", emulator_script)
+        self.assertIn('SDK_INT="$(adb shell getprop ro.build.version.sdk', emulator_script)
+        self.assertIn("notClass androidx.test.internal.runner.TestRequestBuilder", emulator_script)
         self.assertIn('adb shell am force-stop "${PACKAGE_ID}.test"', emulator_script)
         self.assertIn('adb shell am force-stop "$PACKAGE_ID"', emulator_script)
         self.assertIn('return 124', emulator_script)

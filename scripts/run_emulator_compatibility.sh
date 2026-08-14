@@ -43,7 +43,14 @@ run_instrumentation_with_timeout() {
     output_file="${TMPDIR:-/tmp}/am2-instrumentation.$$.log"
     rm -f "$output_file"
 
-    adb shell am instrument -w -r \
+    SDK_INT="$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')"
+    if [ "$SDK_INT" -lt 21 ]; then
+        set -- -e notClass androidx.test.internal.runner.TestRequestBuilder
+    else
+        set --
+    fi
+
+    adb shell am instrument -w -r "$@" \
         "${PACKAGE_ID}.test/androidx.test.runner.AndroidJUnitRunner" \
         >"$output_file" 2>&1 &
     instrument_pid=$!
