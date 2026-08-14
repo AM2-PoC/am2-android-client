@@ -84,6 +84,8 @@ class EnvironmentConfigTest(unittest.TestCase):
         self.assertIn("notClass androidx.test.internal.runner.TestRequestBuilder", emulator_script)
         self.assertIn('adb shell am force-stop "${PACKAGE_ID}.test"', emulator_script)
         self.assertIn('adb shell am force-stop "$PACKAGE_ID"', emulator_script)
+        self.assertIn("adb logcat -d -v time", emulator_script)
+        self.assertIn('adb shell ps', emulator_script)
         self.assertIn('return 124', emulator_script)
         self.assertIn("ProductionSystemTrust", text)
         self.assertIn("AM2_APPROVED_SIGNER_SHA256", text)
