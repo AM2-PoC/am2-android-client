@@ -178,6 +178,8 @@ dependencies {
     testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    // AndroidJUnitRunner 1.5.2 references this at startup on API 16/19.
+    androidTestImplementation("androidx.tracing:tracing:1.0.0")
 }
 
 val checkLogPolicy by tasks.registering(Exec::class) {
