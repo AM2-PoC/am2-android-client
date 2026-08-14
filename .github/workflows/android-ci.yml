@@ -17,6 +17,7 @@ on:
         options:
           - main
           - nightly
+          - staging
           - release
 
 permissions:
@@ -85,6 +86,45 @@ jobs:
           disable-animations: false
           emulator-boot-timeout: 900
           script: sh scripts/run_emulator_compatibility.sh "${{ matrix.package }}"
+
+  staging-artifact:
+    name: staging-artifact
+    needs: policy-and-unit
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.lane == 'staging'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Install Android toolchain
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+      - name: Build staging debug candidate
+        run: ./gradlew --no-daemon :app:testStagingSystemTrustDebugUnitTest :app:assembleStagingSystemTrustDebug
+      - name: Record staging artifact identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find app/build/outputs/apk/stagingSystemTrust/debug -name '*.apk' -type f -print -quit)"
+          test -n "$APK"
+          mkdir -p staging-artifact
+          cp "$APK" staging-artifact/am2-client-staging-debug.apk
+          sha256sum staging-artifact/am2-client-staging-debug.apk > staging-artifact/am2-client-staging-debug.apk.sha256
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging staging-artifact/am2-client-staging-debug.apk > staging-artifact/apk-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs staging-artifact/am2-client-staging-debug.apk > staging-artifact/signer-metadata.txt
+          stat --printf='byte_size=%s\n' staging-artifact/am2-client-staging-debug.apk > staging-artifact/build-metadata.txt
+          printf 'source_commit=%s\nenvironment=staging\nvariant=StagingSystemTrustDebug\n' "$GITHUB_SHA" >> staging-artifact/build-metadata.txt
+      - name: Upload private staging candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: am2-client-staging-debug-${{ github.sha }}
+          path: staging-artifact/
+          if-no-files-found: error
+          retention-days: 3
 
   release-artifact:
     name: release-artifact
