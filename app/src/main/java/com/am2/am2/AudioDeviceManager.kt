@@ -48,6 +48,19 @@ class AudioDeviceManager(private val context: Context) {
         var isBluetoothConnected = false
             private set
 
+        @Volatile
+        var isScoConnected = false
+            private set
+
+        /*
+         * Whether capture may open now.
+         *
+         * Only Bluetooth has an asynchronous route handshake: startBluetoothSco()
+         * requests the link and the system reports CONNECTED later. Wired, USB and
+         * the built-in microphone are usable as soon as they are selected.
+         */
+        fun isCaptureRouteReady(): Boolean = !isBluetoothConnected || isScoConnected
+
         fun getCurrentStreamType(audioManager: AudioManager): Int {
             val hasAccessory = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
@@ -97,7 +110,20 @@ class AudioDeviceManager(private val context: Context) {
             when (intent?.action) {
                 Intent.ACTION_HEADSET_PLUG -> updateDeviceStatus()
                 BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED -> updateDeviceStatus()
-                AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED -> updateDeviceStatus()
+                AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED -> {
+                    // startBluetoothSco() only requests the link; this broadcast
+                    // reports when it is actually carrying audio. Capture must
+                    // wait for CONNECTED, because AudioRecord binds its input
+                    // route on construction and will not move onto a link that
+                    // connects afterwards.
+                    val state = intent.getIntExtra(
+                        AudioManager.EXTRA_SCO_AUDIO_STATE,
+                        AudioManager.SCO_AUDIO_STATE_ERROR,
+                    )
+                    isScoConnected = state == AudioManager.SCO_AUDIO_STATE_CONNECTED
+                    updateDeviceStatus()
+                    if (isScoConnected) WebSocketManager.onCaptureRouteReady()
+                }
             }
         }
     }
@@ -293,6 +319,9 @@ class AudioDeviceManager(private val context: Context) {
     fun updateDeviceStatus() {
         val deviceStatus = getHardwareDeviceStatus()
         isBluetoothConnected = deviceStatus.hasBluetooth
+        // A link that is gone cannot still be carrying audio; leaving this set
+        // would report a ready route for a headset that has been switched off.
+        if (!deviceStatus.hasBluetooth) isScoConnected = false
 
         val currentDevice = when {
             deviceStatus.hasBluetooth -> "Bluetooth Headset"

@@ -22,6 +22,8 @@ import androidx.core.content.ContextCompat
 import com.am2.am2.databinding.ActivityVideoBinding
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.max
 import kotlin.math.sqrt
 
 @Suppress("DEPRECATION")
@@ -33,8 +35,21 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
     private lateinit var prefs: SharedPreferences
     private var pttHardwareKey: Int = -1
     private var pttToggleEnabled = false
-    private var lastFrameTime = 0L
-    private val FRAME_INTERVAL = 200L
+    /*
+     * Backpressure, not a schedule. The capture callback used to submit work
+     * every 200 ms of wall clock regardless of whether the previous frame had
+     * finished, and the executor queue was unbounded, so any device that took
+     * longer than that to encode fell behind live and never caught up.
+     *
+     * With this gate a frame is captured only while the encoder is free, so at
+     * most one frame is ever in flight and the newest frame always wins.
+     */
+    private val encoding = AtomicBoolean(false)
+
+    private var previewWidth = 0
+    private var previewHeight = 0
+    private var frameRotation = 0
+    private var mirrorFrame = false
 
     private var currentCameraId = Camera.CameraInfo.CAMERA_FACING_BACK
     private var hasFrontCamera = false
@@ -42,6 +57,15 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
     
     private val videoProcessingExecutor = Executors.newSingleThreadExecutor()
     private val decodingExecutor = Executors.newSingleThreadExecutor()
+
+    private companion object {
+        /* Long edge requested from the camera, so the frame never needs scaling. */
+        const val TARGET_FRAME_EDGE = 480
+        /* JPEG is the only format YuvImage encodes, and at this quality a frame
+         * is about the size the previous WEBP pass produced for a fraction of
+         * the work. The receiver decodes by content, not by declared format. */
+        const val FRAME_QUALITY = 55
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -150,12 +174,20 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
             if (streamers.isNotEmpty()) {
                 binding.ivIncomingVideo.visibility = View.VISIBLE
                 binding.cvLocalPreview.visibility = View.GONE
-                binding.tvStreamerName.text = "LIVE: " + streamers.last()
+                binding.layoutVideoInfo.visibility = View.VISIBLE
+                val ptpName = WebSocketManager.ptpTargetName.value
+                binding.tvStreamerName.text = if (ptpName != null) {
+                    getString(R.string.video_private_with, ptpName)
+                } else {
+                    getString(R.string.video_live_from, streamers.last())
+                }
             } else {
                 binding.ivIncomingVideo.visibility = View.GONE
                 binding.cvLocalPreview.visibility = View.VISIBLE
-                val ptpName = WebSocketManager.ptpTargetName.value
-                binding.tvStreamerName.text = if (ptpName != null) "PRIVATE $ptpName" else "PREVIEW"
+                // Nothing to caption: the screen is the operator's own camera,
+                // so the banner is hidden rather than labelled.
+                binding.layoutVideoInfo.visibility = View.GONE
+                binding.tvStreamerName.text = ""
                 binding.ivIncomingVideo.setImageBitmap(null)
             }
             updatePttUi()
@@ -244,11 +276,38 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
     private fun openCamera() {
         if (!checkCameraPermission()) return
         try {
-            camera = Camera.open(currentCameraId)
+            val opened = Camera.open(currentCameraId)
+            camera = opened
+
+            // Ask the camera for a frame close to what is actually sent, so no
+            // downscale is needed later. Some devices ignore an unsupported
+            // size, so choose from the list they report.
+            val parameters = opened.parameters
+            if (parameters.supportedPreviewFormats?.contains(ImageFormat.NV21) != false) {
+                parameters.previewFormat = ImageFormat.NV21
+            }
+            parameters.supportedPreviewSizes
+                ?.filter { max(it.width, it.height) >= TARGET_FRAME_EDGE }
+                ?.minByOrNull { max(it.width, it.height) }
+                ?.let { parameters.setPreviewSize(it.width, it.height) }
+            try { opened.parameters = parameters } catch (e: Exception) {}
+
+            val applied = opened.parameters.previewSize
+            previewWidth = applied.width
+            previewHeight = applied.height
+
+            val info = Camera.CameraInfo()
+            Camera.getCameraInfo(currentCameraId, info)
+            // Preview callbacks always arrive in sensor orientation:
+            // setDisplayOrientation only affects the local SurfaceView and
+            // setRotation only applies to takePicture.
+            frameRotation = info.orientation
+            mirrorFrame = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
+
             setCameraDisplayOrientation()
-            camera?.setPreviewDisplay(binding.svLocalPreview.holder)
-            camera?.setPreviewCallback(this)
-            camera?.startPreview()
+            opened.setPreviewDisplay(binding.svLocalPreview.holder)
+            opened.setPreviewCallback(this)
+            opened.startPreview()
         } catch (e: Exception) { SafeLog.e("VideoActivity", "Camera error", e) }
     }
 
@@ -308,36 +367,27 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
 
     override fun onPreviewFrame(data: ByteArray?, camera: Camera?) {
         if (!isStreaming || data == null || isFinishing) return
-        val now = System.currentTimeMillis()
-        if (now - lastFrameTime < FRAME_INTERVAL) return
-        lastFrameTime = now
+        if (previewWidth == 0 || previewHeight == 0) return
+        // Drop this frame rather than queue it: the next one is more current
+        // than anything a backlog could deliver.
+        if (!encoding.compareAndSet(false, true)) return
+
+        val width = previewWidth
+        val height = previewHeight
+        val rotation = frameRotation
+        val mirror = mirrorFrame
 
         videoProcessingExecutor.execute {
-            var bitmap: Bitmap? = null
-            var processedBitmap: Bitmap? = null
             try {
-                val parameters = camera?.parameters ?: return@execute
-                val width = parameters.previewSize.width
-                val height = parameters.previewSize.height
-                val yuvImage = YuvImage(data, ImageFormat.NV21, width, height, null)
+                val rotated = Nv21Transform.rotate(data, width, height, rotation, mirror)
+                val outWidth = Nv21Transform.rotatedWidth(width, height, rotation)
+                val outHeight = Nv21Transform.rotatedHeight(width, height, rotation)
                 val out = ByteArrayOutputStream()
-                yuvImage.compressToJpeg(Rect(0, 0, width, height), 80, out)
-                val options = BitmapFactory.Options().apply { if (width > 1280) inSampleSize = 2 }
-                bitmap = BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size(), options) ?: return@execute
-                val matrix = Matrix()
-                val info = Camera.CameraInfo()
-                Camera.getCameraInfo(currentCameraId, info)
-                matrix.postRotate(info.orientation.toFloat())
-                if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) matrix.postScale(-1f, 1f)
-                val scale = 480f / Math.max(bitmap.width, bitmap.height).toFloat()
-                if (scale < 1.0f) matrix.postScale(scale, scale)
-                processedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-                val finalOut = ByteArrayOutputStream()
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) processedBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 70, finalOut)
-                else @Suppress("DEPRECATION") processedBitmap.compress(Bitmap.CompressFormat.WEBP, 70, finalOut)
-                WebSocketManager.sendVideoFrame(finalOut.toByteArray())
+                YuvImage(rotated, ImageFormat.NV21, outWidth, outHeight, null)
+                    .compressToJpeg(Rect(0, 0, outWidth, outHeight), FRAME_QUALITY, out)
+                WebSocketManager.sendVideoFrame(out.toByteArray())
             } catch (e: Exception) { SafeLog.e("VideoActivity", "Frame error", e)
-            } finally { bitmap?.recycle(); processedBitmap?.recycle() }
+            } finally { encoding.set(false) }
         }
     }
 

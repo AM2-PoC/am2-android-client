@@ -38,6 +38,14 @@ class PttTraceFormatTest {
     }
 
     @Test
+    fun authorizationTraceEventUsesTheExistingPrivacySafeFormat() {
+        assertEquals(
+            "event=start_authorized trace_id=7 mono_ns=123",
+            PttTraceFormat.format("start_authorized", 7, 123),
+        )
+    }
+
+    @Test
     fun receiveRegistryKeepsTheRelayedTraceAcrossStatusAndFrames() {
         var nextId = 40L
         val registry = PttReceiveTraceRegistry { ++nextId }
