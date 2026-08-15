@@ -41,6 +41,17 @@ object WebSocketManager {
     private const val AUTHORIZATION_FALLBACK_MS = 500L
     private const val BLUETOOTH_ROUTE_FALLBACK_MS = 700L
 
+    /*
+     * The shortest transmission that is worth sending.
+     *
+     * A tap shorter than this arrives as a clipped syllable and a roger beep,
+     * so the key is held open to the floor. This is the only rule that spaces
+     * transmissions: there used to be a second one, a lockout measured from an
+     * end time the first rule kept moving, and together they turned a 50 ms tap
+     * into an 800 ms dead button.
+     */
+    private const val MIN_TRANSMISSION_MS = 500L
+
     private val RECONNECT_TOKEN = Any()
 
     private var client: OkHttpClient? = null
@@ -100,6 +111,8 @@ object WebSocketManager {
     @Volatile private var captureStarted = false
     @Volatile private var transmitAuthorized = false
     private var pendingAuthTimeout: Runnable? = null
+    /* The one deferred stop, held so it can be cancelled and never queued twice. */
+    @Volatile private var pendingStop: Runnable? = null
 
     private val _activeVideoStreamers = MutableLiveData<Set<String>>(emptySet())
     val activeVideoStreamers: LiveData<Set<String>> = _activeVideoStreamers
@@ -1386,9 +1399,14 @@ object WebSocketManager {
         if (isRx && ptpId == null) return
         if (internalIsTalking || ptpRequestPending) return
 
-        val now = System.currentTimeMillis()
-        if (now - lastPttEndTime < 300) return
+        // Refused only while the previous transmission is still on the air.
+        // Once it has ended there is nothing left to protect.
+        if (pendingStop != null) {
+            onPressRefused()
+            return
+        }
 
+        val now = System.currentTimeMillis()
         lastPttStartTime = now
 
         val duplex = _duplexMode.value ?: "HALF DUPLEX"
@@ -1423,12 +1441,21 @@ object WebSocketManager {
             _isTalking.postValue(true)
         }
 
+        /*
+         * Press work first, in the order it matters.
+         *
+         * Ask the relay, then arm the microphone. Everything below this point is
+         * worth doing but is not what the button was pressed for, and each of
+         * these used to run before the microphone: the confirmation tone does a
+         * synchronous MediaPlayer prepare costing 10-100 ms, and the location
+         * report makes Play Services binder calls.
+         */
         executePttStartSignal()
-
-        SoundManager.playStartTx()
 
         if (isGateway) {
             executeStartRecording()
+        } else {
+            armAuthorizationFallback()
         }
 
         if (duplex == "HALF DUPLEX") {
@@ -1441,11 +1468,9 @@ object WebSocketManager {
         }
 
         updateTalkingStatusUI()
-        reportLocation(force = false)
 
-        if (!isGateway) {
-            armAuthorizationFallback()
-        }
+        SoundManager.playStartTx()
+        reportLocation(force = false)
     }
 
     /*
@@ -1478,6 +1503,17 @@ object WebSocketManager {
      * the fixed delay used to spend, so the worst case is no worse than before
      * while the common case pays nothing.
      */
+    /**
+     * Tell the operator the press was heard and refused.
+     *
+     * Every refusal used to be a bare `return`. Nothing sounded, nothing moved,
+     * and under rapid pressing most presses were refused — so the button did not
+     * feel busy, it felt broken.
+     */
+    private fun onPressRefused() {
+        SoundManager.playRefused()
+    }
+
     private fun armAuthorizationFallback() {
         cancelAuthorizationFallback()
         val traceId = activeTransmitTraceId ?: return
@@ -1537,16 +1573,33 @@ object WebSocketManager {
         if (!internalIsTalking) return
 
         val now = System.currentTimeMillis()
-        lastPttEndTime = now
-
         val elapsed = now - lastPttStartTime
-        if (elapsed < 500) {
-            pttHandler.postDelayed({
-                stopTalking()
-            }, 500 - elapsed)
+
+        if (elapsed < MIN_TRANSMISSION_MS) {
+            /*
+             * Hold the key open to the floor, once.
+             *
+             * The end time is deliberately not stamped here: it used to be
+             * stamped on every re-entry, so each deferral pushed the next
+             * permitted press further away. And the deferral is held rather
+             * than posted anonymously, because several sources can ask to stop
+             * — the button, VOX, a disconnect, a relay error — and each one
+             * used to queue another.
+             */
+            if (pendingStop == null) {
+                val deferred = Runnable {
+                    pendingStop = null
+                    stopTalking()
+                }
+                pendingStop = deferred
+                pttHandler.postDelayed(deferred, MIN_TRANSMISSION_MS - elapsed)
+            }
             return
         }
 
+        pendingStop?.let { pttHandler.removeCallbacks(it) }
+        pendingStop = null
+        lastPttEndTime = now
         internalIsTalking = false
         captureStarted = false
         transmitAuthorized = false

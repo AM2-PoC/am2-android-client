@@ -21,6 +21,7 @@ object SoundManager {
     private const val VOL_RX_START = 0.5f
     private const val VOL_RX_STOP = 0.8f
     private const val VOL_DTMF = 0.2f
+    private const val VOL_REFUSED = 0.15f
 
     fun init(context: Context) {
         appContext = context.applicationContext
@@ -41,9 +42,9 @@ object SoundManager {
         }
     }
 
-    private fun play(resId: Int, volume: Float) {
+    private fun play(resId: Int, volume: Float, ignoreMute: Boolean = false) {
         val context = appContext ?: return
-        if (isMuted) return
+        if (isMuted && !ignoreMute) return
 
         try {
             val mediaPlayer = MediaPlayer.create(context, resId) ?: return
@@ -115,6 +116,25 @@ object SoundManager {
                 play(R.raw.end, VOL_RX_STOP)
             }
         }
+    }
+
+    /**
+     * A press that was heard and refused.
+     *
+     * Quieter than the transmit tone and reusing the existing end sound, so it
+     * reads as "not now" rather than as a second confirmation. It ignores the
+     * transmit mute, because the whole point is to answer a press made while
+     * something else is still finishing.
+     */
+    fun playRefused() {
+        if (prefs?.getBoolean("sound_push", true) == false) return
+        /*
+         * Deliberately ignores the transmit mute. Half duplex mutes this
+         * manager for the length of a transmission, which is exactly the window
+         * in which a press gets refused — so respecting the mute here would
+         * silence the one tone whose entire job is to answer that press.
+         */
+        play(R.raw.end, VOL_REFUSED, ignoreMute = true)
     }
 
     fun setMute(mute: Boolean) {
