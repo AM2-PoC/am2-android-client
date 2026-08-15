@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">am\u00B2</string>
+    <string name="video_live_from">LIVE: %1$s</string>
+    <string name="video_private_with">PRIVATE %1$s</string>
 </resources>

@@ -38,6 +38,8 @@ object WebSocketManager {
 
     private const val DEBOUNCE_DISCONNECT_MS = 5000L
     private const val MAX_RECONNECT_DELAY = 10000L
+    private const val AUTHORIZATION_FALLBACK_MS = 500L
+    private const val BLUETOOTH_ROUTE_FALLBACK_MS = 700L
 
     private val RECONNECT_TOKEN = Any()
 
@@ -93,6 +95,9 @@ object WebSocketManager {
     private var wasSomeoneElseTalking = false
     @Volatile private var activeTransmitTraceId: Long? = null
     @Volatile private var transmitFrameSequence = 0L
+    @Volatile private var captureStarted = false
+    @Volatile private var transmitAuthorized = false
+    private var pendingAuthTimeout: Runnable? = null
 
     private val _activeVideoStreamers = MutableLiveData<Set<String>>(emptySet())
     val activeVideoStreamers: LiveData<Set<String>> = _activeVideoStreamers
@@ -699,8 +704,17 @@ object WebSocketManager {
                     }
 
                     if (internalIsTalking) {
+                        // A reconnect must re-request relay authorization; the
+                        // acknowledgement from before the drop no longer stands.
+                        // Non-gateway capture waits for the new one under the same
+                        // fallback bound as the initial press.
+                        transmitAuthorized = false
                         executePttStartSignal()
-                        executeStartRecording()
+                        if (prefs?.getBoolean("gateway_mode", false) == true) {
+                            executeStartRecording()
+                        } else if (!captureStarted) {
+                            armAuthorizationFallback()
+                        }
                     }
                 }
 
@@ -859,6 +873,15 @@ object WebSocketManager {
                     }
 
                     updateTalkingStatusUI()
+                }
+
+                "ptt_audio_start_authorized" -> {
+                    val traceId = dataObj.optLong("trace_id", 0L)
+                    if (traceId > 0L && traceId == activeTransmitTraceId && internalIsTalking) {
+                        PttTrace.emit(event = "start_authorized", traceId = traceId)
+                        transmitAuthorized = true
+                        startCaptureWhenReady()
+                    }
                 }
 
                 "ptt_active_status" -> {
@@ -1367,6 +1390,8 @@ object WebSocketManager {
         val isGateway = prefs?.getBoolean("gateway_mode", false) ?: false
 
         internalIsTalking = true
+        captureStarted = false
+        transmitAuthorized = false
         activeTransmitTraceId = PttTrace.newTraceId().also {
             transmitFrameSequence = 0L
             PttTrace.emit(event = "button_down", traceId = it)
@@ -1399,16 +1424,61 @@ object WebSocketManager {
         reportLocation(force = false)
 
         if (!isGateway) {
-            val delay = if (AudioDeviceManager.isBluetoothConnected) {
-                700L
-            } else {
-                400L
-            }
-
-            pttHandler.postDelayed({
-                executeStartRecording()
-            }, delay)
+            armAuthorizationFallback()
         }
+    }
+
+    /*
+     * Non-gateway capture needs two things, and the former fixed 400/700 ms
+     * delay was a single guess covering both: the relay must have authorized
+     * the transmission, and the microphone route must be carrying audio.
+     *
+     * The route matters because AudioRecord binds its input on construction and
+     * will not move onto a Bluetooth SCO link that connects afterwards. Opening
+     * capture early does not clip the start of a transmission — it pins the
+     * whole transmission to the built-in microphone.
+     */
+    private fun startCaptureWhenReady() {
+        if (!internalIsTalking || captureStarted) return
+        if (!transmitAuthorized) return
+        if (!AudioDeviceManager.isCaptureRouteReady()) return
+        executeStartRecording()
+    }
+
+    /* Called when a Bluetooth route finishes connecting, which is usually after
+     * the press. A transmission already waiting on it starts here. */
+    fun onCaptureRouteReady() {
+        pttHandler.post { startCaptureWhenReady() }
+    }
+
+    /*
+     * Neither signal is guaranteed to arrive, so capture still opens on a bound.
+     * Without Bluetooth the only wait is the acknowledgement round trip. With a
+     * Bluetooth route that has not reported ready, the bound stays at the 700 ms
+     * the fixed delay used to spend, so the worst case is no worse than before
+     * while the common case pays nothing.
+     */
+    private fun armAuthorizationFallback() {
+        cancelAuthorizationFallback()
+        val traceId = activeTransmitTraceId ?: return
+        val bound = if (AudioDeviceManager.isBluetoothConnected && !AudioDeviceManager.isScoConnected) {
+            BLUETOOTH_ROUTE_FALLBACK_MS
+        } else {
+            AUTHORIZATION_FALLBACK_MS
+        }
+        val fallback = Runnable {
+            if (internalIsTalking && !captureStarted && traceId == activeTransmitTraceId) {
+                PttTrace.emit(event = "start_authorization_timeout", traceId = traceId)
+                executeStartRecording()
+            }
+        }
+        pendingAuthTimeout = fallback
+        pttHandler.postDelayed(fallback, bound)
+    }
+
+    private fun cancelAuthorizationFallback() {
+        pendingAuthTimeout?.let { pttHandler.removeCallbacks(it) }
+        pendingAuthTimeout = null
     }
 
     private fun executePttStartSignal() {
@@ -1432,16 +1502,15 @@ object WebSocketManager {
     }
 
     private fun executeStartRecording() {
-        if (!internalIsTalking) return
-
+        if (!internalIsTalking || captureStarted) return
         val target = internalPtpTargetId
+        // Claim the capture only once the source is known, so a transmission
+        // with no channel yet can still start when one arrives.
+        val source = if (!target.isNullOrEmpty()) "private_$target" else currentChannelSlug ?: return
 
-        if (!target.isNullOrEmpty()) {
-            AudioRecorder.startRecording("private_$target")
-        } else {
-            val slug = currentChannelSlug ?: return
-            AudioRecorder.startRecording(slug)
-        }
+        cancelAuthorizationFallback()
+        captureStarted = true
+        AudioRecorder.startRecording(source)
     }
 
     fun stopTalking() {
@@ -1459,6 +1528,9 @@ object WebSocketManager {
         }
 
         internalIsTalking = false
+        captureStarted = false
+        transmitAuthorized = false
+        cancelAuthorizationFallback()
         activeTransmitTraceId?.let { PttTrace.emit(event = "button_up", traceId = it) }
         _isTalking.postValue(false)
 

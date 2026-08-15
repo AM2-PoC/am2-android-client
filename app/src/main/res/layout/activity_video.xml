@@ -27,10 +27,12 @@
         android:scaleType="centerCrop"
         android:visibility="gone" />
 
-    <!-- Overlay Info -->
+    <!-- Overlay Info: shown only while a remote stream is on screen -->
     <LinearLayout
+        android:id="@+id/layoutVideoInfo"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:visibility="gone"
         android:layout_alignParentTop="true"
         android:background="#80000000"
         android:orientation="vertical"
