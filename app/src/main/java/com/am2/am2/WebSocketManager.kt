@@ -91,6 +91,8 @@ object WebSocketManager {
     private val activeSpeakers = Collections.synchronizedSet(LinkedHashSet<String>())
     private val speakerLastSeen = mutableMapOf<String, Long>()
     private val receivePttTraces = PttReceiveTraceRegistry()
+    /* Video refused so audio would not wait. Reported, never silently absorbed. */
+    private val videoFramesDropped = java.util.concurrent.atomic.AtomicLong(0)
     private var lastSpeakersBeforeEmpty = emptySet<String>()
     private var wasSomeoneElseTalking = false
     @Volatile private var activeTransmitTraceId: Long? = null
@@ -1602,6 +1604,18 @@ object WebSocketManager {
         }
     }
 
+    /**
+     * How hard the uplink is pushing back right now.
+     *
+     * Exposed so the capture side can spend less before it is refused outright:
+     * a weak link should soften the picture rather than switch it on and off.
+     */
+    fun videoPressure(): WireAdmission.Pressure =
+        WireAdmission.videoPressure(webSocket?.queueSize() ?: 0L)
+
+    /** Video frames refused so far to keep audio ahead of them. */
+    fun droppedVideoFrames(): Long = videoFramesDropped.get()
+
     fun sendVideoFrame(frameData: ByteArray) {
         if (!actualSocketConnected) return
 
@@ -1715,8 +1729,24 @@ object WebSocketManager {
          * frame delayed by the uplink from one delayed by encoding.
          */
         val queueBytes = socket?.queueSize() ?: 0L
-        val sent = socket?.send(ByteString.of(*data)) ?: false
         val isAudio = data.firstOrNull()?.toInt() == 1
+
+        /*
+         * The one place the two media compete for the wire. Audio is always
+         * admitted; video is refused while the socket still holds a frame's
+         * worth, so it can never queue ahead of speech.
+         *
+         * Refused here rather than after enqueueing, because OkHttp cannot be
+         * asked to reorder what it already holds. A late video frame has no
+         * value either — by the time a backlog drained, its picture would be
+         * history — so dropping is the honest outcome, and it is counted.
+         */
+        if (!isAudio && !WireAdmission.shouldAdmitVideo(queueBytes)) {
+            videoFramesDropped.incrementAndGet()
+            return
+        }
+
+        val sent = socket?.send(ByteString.of(*data)) ?: false
 
         if (!sent) {
             SafeLog.w(TAG, "Failed to send binary payload size=${data.size}")

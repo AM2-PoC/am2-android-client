@@ -25,6 +25,26 @@ class VideoPipelineContractTest(unittest.TestCase):
         self.text = VIDEO.read_text()
         self.frame = section(self.text, "override fun onPreviewFrame(", "override fun onKeyDown(")
 
+    def test_the_receive_side_sheds_like_the_send_side(self):
+        # The unbounded-queue-behind-a-fixed-rate-producer defect, which was
+        # fixed on the send path, was still present here: every arriving frame
+        # was submitted to a single-thread executor that never shed, so display
+        # drifted further behind live and never recovered.
+        observer = section(self.text, "WebSocketManager.incomingVideoFrame.observe", "WebSocketManager.ptpTargetId.observe")
+        self.assertIn("decoding.compareAndSet(false, true)", observer)
+        self.assertRegex(observer, r"finally\s*\{[^}]*decoding\.set\(false\)")
+
+    def test_video_yields_the_wire_to_audio(self):
+        # Audio and video share one socket drained in order, so a video frame
+        # accepted ahead of speech delays it. Capture must not even encode a
+        # frame the wire has no room for.
+        self.assertIn("WebSocketManager.videoPressure()", self.frame)
+        self.assertIn("Pressure.BLOCKED", self.frame)
+
+    def test_video_softens_before_it_disappears(self):
+        self.assertIn("FRAME_QUALITY_HEAVY", self.text)
+        self.assertIn("Pressure.HEAVY", self.frame)
+
     def test_a_frame_is_captured_only_when_the_encoder_is_free(self):
         # Backpressure, not a schedule: queue depth can never exceed one.
         self.assertIn("compareAndSet(false, true)", self.frame)
