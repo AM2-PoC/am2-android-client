@@ -39,6 +39,7 @@ object WebSocketManager {
     private const val DEBOUNCE_DISCONNECT_MS = 5000L
     private const val MAX_RECONNECT_DELAY = 10000L
     private const val AUTHORIZATION_FALLBACK_MS = 500L
+    private const val BLUETOOTH_ROUTE_FALLBACK_MS = 700L
 
     private val RECONNECT_TOKEN = Any()
 
@@ -95,6 +96,7 @@ object WebSocketManager {
     @Volatile private var activeTransmitTraceId: Long? = null
     @Volatile private var transmitFrameSequence = 0L
     @Volatile private var captureStarted = false
+    @Volatile private var transmitAuthorized = false
     private var pendingAuthTimeout: Runnable? = null
 
     private val _activeVideoStreamers = MutableLiveData<Set<String>>(emptySet())
@@ -702,9 +704,11 @@ object WebSocketManager {
                     }
 
                     if (internalIsTalking) {
-                        // A reconnect must re-request relay authorization. Non-gateway
-                        // capture waits for the matching acknowledgement, under the
-                        // same fallback bound as the initial press.
+                        // A reconnect must re-request relay authorization; the
+                        // acknowledgement from before the drop no longer stands.
+                        // Non-gateway capture waits for the new one under the same
+                        // fallback bound as the initial press.
+                        transmitAuthorized = false
                         executePttStartSignal()
                         if (prefs?.getBoolean("gateway_mode", false) == true) {
                             executeStartRecording()
@@ -875,7 +879,8 @@ object WebSocketManager {
                     val traceId = dataObj.optLong("trace_id", 0L)
                     if (traceId > 0L && traceId == activeTransmitTraceId && internalIsTalking) {
                         PttTrace.emit(event = "start_authorized", traceId = traceId)
-                        executeStartRecording()
+                        transmitAuthorized = true
+                        startCaptureWhenReady()
                     }
                 }
 
@@ -1386,6 +1391,7 @@ object WebSocketManager {
 
         internalIsTalking = true
         captureStarted = false
+        transmitAuthorized = false
         activeTransmitTraceId = PttTrace.newTraceId().also {
             transmitFrameSequence = 0L
             PttTrace.emit(event = "button_down", traceId = it)
@@ -1423,18 +1429,43 @@ object WebSocketManager {
     }
 
     /*
-     * Non-gateway capture normally starts the moment the relay acknowledges
-     * this trace, which is what removed the former fixed 400/700 ms delay.
+     * Non-gateway capture needs two things, and the former fixed 400/700 ms
+     * delay was a single guess covering both: the relay must have authorized
+     * the transmission, and the microphone route must be carrying audio.
      *
-     * A relay that never sends the acknowledgement would otherwise leave the
-     * transmission silent with no symptom, so capture still opens after
-     * AUTHORIZATION_FALLBACK_MS. That bound is longer than an acknowledgement
-     * round trip and shorter than the delay it replaced, so a relay that
-     * answers is never slowed down by it.
+     * The route matters because AudioRecord binds its input on construction and
+     * will not move onto a Bluetooth SCO link that connects afterwards. Opening
+     * capture early does not clip the start of a transmission — it pins the
+     * whole transmission to the built-in microphone.
+     */
+    private fun startCaptureWhenReady() {
+        if (!internalIsTalking || captureStarted) return
+        if (!transmitAuthorized) return
+        if (!AudioDeviceManager.isCaptureRouteReady()) return
+        executeStartRecording()
+    }
+
+    /* Called when a Bluetooth route finishes connecting, which is usually after
+     * the press. A transmission already waiting on it starts here. */
+    fun onCaptureRouteReady() {
+        pttHandler.post { startCaptureWhenReady() }
+    }
+
+    /*
+     * Neither signal is guaranteed to arrive, so capture still opens on a bound.
+     * Without Bluetooth the only wait is the acknowledgement round trip. With a
+     * Bluetooth route that has not reported ready, the bound stays at the 700 ms
+     * the fixed delay used to spend, so the worst case is no worse than before
+     * while the common case pays nothing.
      */
     private fun armAuthorizationFallback() {
         cancelAuthorizationFallback()
         val traceId = activeTransmitTraceId ?: return
+        val bound = if (AudioDeviceManager.isBluetoothConnected && !AudioDeviceManager.isScoConnected) {
+            BLUETOOTH_ROUTE_FALLBACK_MS
+        } else {
+            AUTHORIZATION_FALLBACK_MS
+        }
         val fallback = Runnable {
             if (internalIsTalking && !captureStarted && traceId == activeTransmitTraceId) {
                 PttTrace.emit(event = "start_authorization_timeout", traceId = traceId)
@@ -1442,7 +1473,7 @@ object WebSocketManager {
             }
         }
         pendingAuthTimeout = fallback
-        pttHandler.postDelayed(fallback, AUTHORIZATION_FALLBACK_MS)
+        pttHandler.postDelayed(fallback, bound)
     }
 
     private fun cancelAuthorizationFallback() {
@@ -1498,6 +1529,7 @@ object WebSocketManager {
 
         internalIsTalking = false
         captureStarted = false
+        transmitAuthorized = false
         cancelAuthorizationFallback()
         activeTransmitTraceId?.let { PttTrace.emit(event = "button_up", traceId = it) }
         _isTalking.postValue(false)
