@@ -91,6 +91,8 @@ object WebSocketManager {
     private val activeSpeakers = Collections.synchronizedSet(LinkedHashSet<String>())
     private val speakerLastSeen = mutableMapOf<String, Long>()
     private val receivePttTraces = PttReceiveTraceRegistry()
+    /* Logged once per sender, not once per frame: a 50 Hz message is not a log. */
+    private val unknownSendersSeen = Collections.synchronizedSet(mutableSetOf<Int>())
     private var lastSpeakersBeforeEmpty = emptySet<String>()
     private var wasSomeoneElseTalking = false
     @Volatile private var activeTransmitTraceId: Long? = null
@@ -1138,15 +1140,9 @@ object WebSocketManager {
 
             val userIdTruncated = buffer.int
 
-            var senderName = findUserNameById(userIdTruncated)
             val targetId = internalPtpTargetId
             val targetIdInt = targetId?.toTruncatedId() ?: -1
-
-            if (senderName == null && targetId != null && userIdTruncated == targetIdInt) {
-                senderName = internalPtpTargetName
-            }
-
-            if (senderName == null) return
+            val senderName = senderIdentity(userIdTruncated, targetId, targetIdInt)
 
             val payload = ByteArray(dataArray.size - 5)
             System.arraycopy(dataArray, 5, payload, 0, payload.size)
@@ -1183,6 +1179,30 @@ object WebSocketManager {
         } catch (e: Exception) {
             SafeLog.e(TAG, "Binary Error", e)
         }
+    }
+
+    /**
+     * Who a frame is from, as a key that is always available.
+     *
+     * The roster arrives in its own message, separately from the stream status,
+     * so the two disagree while it is stale — after a reconnect, or for someone
+     * who joined after the snapshot. Frames used to be discarded in that window,
+     * which showed up as a black screen with nothing logged and as silence from
+     * a speaker the UI was already listing.
+     *
+     * The numeric id is on the frame itself and is all delivery needs. A name is
+     * a label: preferred when the roster has it, and stood in for otherwise, so
+     * the same sender always maps to the same decoder and the same speaker entry.
+     */
+    private fun senderIdentity(userIdTruncated: Int, targetId: String?, targetIdInt: Int): String {
+        findUserNameById(userIdTruncated)?.let { return it }
+        if (targetId != null && userIdTruncated == targetIdInt) {
+            internalPtpTargetName?.let { return it }
+        }
+        if (unknownSendersSeen.add(userIdTruncated)) {
+            SafeLog.d(TAG, "unknown sender $userIdTruncated not in roster yet; delivering anyway")
+        }
+        return "#$userIdTruncated"
     }
 
     private fun findUserNameById(id: Int): String? {
