@@ -1707,11 +1707,31 @@ object WebSocketManager {
     fun sendBinary(data: ByteArray) {
         if (!actualSocketConnected) return
 
-        val sent = webSocket?.send(ByteString.of(*data)) ?: false
+        val socket = webSocket
+        /*
+         * What is already waiting to go out. send() only enqueues and returns
+         * immediately, so a true result says the frame was accepted, not that
+         * it reached the wire. Recording the backlog here is what separates a
+         * frame delayed by the uplink from one delayed by encoding.
+         */
+        val queueBytes = socket?.queueSize() ?: 0L
+        val sent = socket?.send(ByteString.of(*data)) ?: false
+        val isAudio = data.firstOrNull()?.toInt() == 1
 
         if (!sent) {
             SafeLog.w(TAG, "Failed to send binary payload size=${data.size}")
-        } else if (data.firstOrNull()?.toInt() == 1) {
+            if (isAudio) {
+                activeTransmitTraceId?.let { traceId ->
+                    PttTrace.emit(
+                        event = "frame_dropped",
+                        traceId = traceId,
+                        frameSequence = transmitFrameSequence,
+                        frameBytes = data.size,
+                        queueBytes = queueBytes,
+                    )
+                }
+            }
+        } else if (isAudio) {
             activeTransmitTraceId?.let { traceId ->
                 val frameSequence = ++transmitFrameSequence
                 if (PttTrace.shouldSampleFrame(frameSequence)) {
@@ -1720,6 +1740,7 @@ object WebSocketManager {
                         traceId = traceId,
                         frameSequence = frameSequence,
                         frameBytes = data.size,
+                        queueBytes = queueBytes,
                     )
                 }
             }

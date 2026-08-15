@@ -11,6 +11,7 @@ internal object PttTraceFormat {
         frameSequence: Long? = null,
         frameBytes: Int? = null,
         queueFrames: Int? = null,
+        queueBytes: Long? = null,
     ): String = buildString {
         append("event=").append(event)
         append(" trace_id=").append(traceId)
@@ -18,6 +19,11 @@ internal object PttTraceFormat {
         frameSequence?.let { append(" frame_seq=").append(it) }
         frameBytes?.let { append(" frame_bytes=").append(it) }
         queueFrames?.let { append(" queue_frames=").append(it) }
+        // How much was already waiting on the socket when this frame was
+        // handed over. Without it a frame delayed by an uplink backlog is
+        // indistinguishable from one delayed by encoding, which is the
+        // difference that decides where a fix belongs.
+        queueBytes?.let { append(" queue_bytes=").append(it) }
     }
 }
 
@@ -82,6 +88,7 @@ internal object PttTrace {
         frameSequence: Long? = null,
         frameBytes: Int? = null,
         queueFrames: Int? = null,
+        queueBytes: Long? = null,
     ) {
         SafeLog.d(
             TAG,
@@ -92,6 +99,7 @@ internal object PttTrace {
                 frameSequence = frameSequence,
                 frameBytes = frameBytes,
                 queueFrames = queueFrames,
+                queueBytes = queueBytes,
             ),
         )
     }
