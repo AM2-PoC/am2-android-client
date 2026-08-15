@@ -38,6 +38,7 @@ object WebSocketManager {
 
     private const val DEBOUNCE_DISCONNECT_MS = 5000L
     private const val MAX_RECONNECT_DELAY = 10000L
+    private const val AUTHORIZATION_FALLBACK_MS = 500L
 
     private val RECONNECT_TOKEN = Any()
 
@@ -93,6 +94,8 @@ object WebSocketManager {
     private var wasSomeoneElseTalking = false
     @Volatile private var activeTransmitTraceId: Long? = null
     @Volatile private var transmitFrameSequence = 0L
+    @Volatile private var captureStarted = false
+    private var pendingAuthTimeout: Runnable? = null
 
     private val _activeVideoStreamers = MutableLiveData<Set<String>>(emptySet())
     val activeVideoStreamers: LiveData<Set<String>> = _activeVideoStreamers
@@ -700,10 +703,13 @@ object WebSocketManager {
 
                     if (internalIsTalking) {
                         // A reconnect must re-request relay authorization. Non-gateway
-                        // capture remains blocked until the matching acknowledgement.
+                        // capture waits for the matching acknowledgement, under the
+                        // same fallback bound as the initial press.
                         executePttStartSignal()
                         if (prefs?.getBoolean("gateway_mode", false) == true) {
                             executeStartRecording()
+                        } else if (!captureStarted) {
+                            armAuthorizationFallback()
                         }
                     }
                 }
@@ -1379,6 +1385,7 @@ object WebSocketManager {
         val isGateway = prefs?.getBoolean("gateway_mode", false) ?: false
 
         internalIsTalking = true
+        captureStarted = false
         activeTransmitTraceId = PttTrace.newTraceId().also {
             transmitFrameSequence = 0L
             PttTrace.emit(event = "button_down", traceId = it)
@@ -1410,9 +1417,37 @@ object WebSocketManager {
         updateTalkingStatusUI()
         reportLocation(force = false)
 
-        // Non-gateway capture starts only after the relay acknowledges the
-        // authorization of this trace. This removes the former fixed 400/700 ms
-        // delay without allowing media to race the async authorization handler.
+        if (!isGateway) {
+            armAuthorizationFallback()
+        }
+    }
+
+    /*
+     * Non-gateway capture normally starts the moment the relay acknowledges
+     * this trace, which is what removed the former fixed 400/700 ms delay.
+     *
+     * A relay that never sends the acknowledgement would otherwise leave the
+     * transmission silent with no symptom, so capture still opens after
+     * AUTHORIZATION_FALLBACK_MS. That bound is longer than an acknowledgement
+     * round trip and shorter than the delay it replaced, so a relay that
+     * answers is never slowed down by it.
+     */
+    private fun armAuthorizationFallback() {
+        cancelAuthorizationFallback()
+        val traceId = activeTransmitTraceId ?: return
+        val fallback = Runnable {
+            if (internalIsTalking && !captureStarted && traceId == activeTransmitTraceId) {
+                PttTrace.emit(event = "start_authorization_timeout", traceId = traceId)
+                executeStartRecording()
+            }
+        }
+        pendingAuthTimeout = fallback
+        pttHandler.postDelayed(fallback, AUTHORIZATION_FALLBACK_MS)
+    }
+
+    private fun cancelAuthorizationFallback() {
+        pendingAuthTimeout?.let { pttHandler.removeCallbacks(it) }
+        pendingAuthTimeout = null
     }
 
     private fun executePttStartSignal() {
@@ -1436,16 +1471,15 @@ object WebSocketManager {
     }
 
     private fun executeStartRecording() {
-        if (!internalIsTalking) return
-
+        if (!internalIsTalking || captureStarted) return
         val target = internalPtpTargetId
+        // Claim the capture only once the source is known, so a transmission
+        // with no channel yet can still start when one arrives.
+        val source = if (!target.isNullOrEmpty()) "private_$target" else currentChannelSlug ?: return
 
-        if (!target.isNullOrEmpty()) {
-            AudioRecorder.startRecording("private_$target")
-        } else {
-            val slug = currentChannelSlug ?: return
-            AudioRecorder.startRecording(slug)
-        }
+        cancelAuthorizationFallback()
+        captureStarted = true
+        AudioRecorder.startRecording(source)
     }
 
     fun stopTalking() {
@@ -1463,6 +1497,8 @@ object WebSocketManager {
         }
 
         internalIsTalking = false
+        captureStarted = false
+        cancelAuthorizationFallback()
         activeTransmitTraceId?.let { PttTrace.emit(event = "button_up", traceId = it) }
         _isTalking.postValue(false)
 
