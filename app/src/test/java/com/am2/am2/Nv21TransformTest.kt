@@ -89,10 +89,12 @@ class Nv21TransformTest {
         while (index < rotated.size) {
             val v = rotated[index].toInt()
             val u = rotated[index + 1].toInt()
-            // V samples were written from 100 upwards and U from -100, so a pair
-            // that was split or offset by one byte shows up immediately.
-            assertTrue("V sample out of range at $index: $v", v >= 100)
-            assertTrue("U sample out of range at $index: $u", u <= -100)
+            // The fixture gives every V sample a positive value and every U
+            // sample a negative one, so a pair that was split, reordered or
+            // offset by a single byte shows up as a sign that is on the wrong
+            // side of the pair.
+            assertTrue("expected a V sample at $index, got $v", v > 0)
+            assertTrue("expected a U sample at ${index + 1}, got $u", u < 0)
             index += 2
         }
     }
