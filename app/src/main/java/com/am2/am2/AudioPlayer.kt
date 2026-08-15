@@ -17,6 +17,7 @@ object AudioPlayer {
     private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_OUT_MONO
     private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
     private val MIN_BUFFER_SIZE = AudioTrack.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
+    private const val FRAME_BYTES = 640
 
     private var audioTrack: AudioTrack? = null
     private var isPlaying = false
@@ -28,6 +29,22 @@ object AudioPlayer {
     private var lastDataTime = 0L
     private const val SILENCE_TIMEOUT_MS = 1500L
     private val silentBuffer = ShortArray(320)
+
+    /*
+     * One frame is 20 ms, so every frame held anywhere on this path is 20 ms the
+     * listener waits. Prefill starts at the smallest amount that survives normal
+     * mobile jitter and only grows while a network keeps underrunning, then
+     * decays back so the delay is given up again once conditions improve.
+     */
+    private const val MIN_PREFILL_FRAMES = 3
+    private const val MAX_PREFILL_FRAMES = 10
+    /* A gap this long is a talk spurt that ended, not jitter. Only then is it
+     * right to prefill again; shorter gaps are covered by silence. */
+    private const val END_OF_SPURT_FRAMES = 15
+    /* Backlog above this is delay that will never be heard as anything but
+     * lateness, so the oldest frames are shed to recover it. */
+    private const val HIGH_WATER_FRAMES = 15
+    private const val PREFILL_DECAY_FRAMES = 250
     
     private var userVolume: Float = 1.0f
     private var isMuted: Boolean = false
@@ -109,14 +126,18 @@ object AudioPlayer {
         var lastSeen = System.currentTimeMillis()
         private var nextSequence = 0L
         private var isBuffering = true
-        
-        private val JITTER_THRESHOLD = 8 
+
+        private var targetPrefill = MIN_PREFILL_FRAMES
+        private var consecutiveUnderruns = 0
+        private var framesSinceUnderrun = 0L
 
         init { opusCodec.createDecoder(SAMPLE_RATE) }
 
         fun enqueue(data: ByteArray) {
             val sequence = ++nextSequence
-            if (queue.size > 150) queue.poll()
+            // Shed the oldest frames rather than the newest: the stale ones are
+            // what the listener would hear as lateness.
+            while (queue.size > HIGH_WATER_FRAMES) queue.poll()
             queue.offer(ReceivedFrame(data, sequence))
             if (PttTrace.shouldSampleFrame(sequence)) {
                 PttTrace.emit(
@@ -132,14 +153,33 @@ object AudioPlayer {
         @Synchronized
         fun decodeNext(): DecodedFrame? {
             if (isBuffering) {
-                if (queue.size >= JITTER_THRESHOLD) isBuffering = false
-                else return null
+                if (queue.size >= targetPrefill) {
+                    isBuffering = false
+                    consecutiveUnderruns = 0
+                } else return null
             }
+
             val frame = queue.poll()
             if (frame == null) {
-                isBuffering = true
+                // A gap is normal. The mixer covers it with silence and the
+                // stream resumes on the next frame; only a gap long enough to be
+                // the end of the spurt earns a fresh prefill.
+                consecutiveUnderruns++
+                framesSinceUnderrun = 0
+                if (consecutiveUnderruns == 1 && targetPrefill < MAX_PREFILL_FRAMES) {
+                    targetPrefill++
+                }
+                if (consecutiveUnderruns >= END_OF_SPURT_FRAMES) isBuffering = true
                 return null
             }
+
+            consecutiveUnderruns = 0
+            // Give the added prefill back once the network has behaved for a while.
+            if (++framesSinceUnderrun >= PREFILL_DECAY_FRAMES) {
+                framesSinceUnderrun = 0
+                if (targetPrefill > MIN_PREFILL_FRAMES) targetPrefill--
+            }
+
             return try {
                 opusCodec.decode(frame.data)?.let { pcm ->
                     if (PttTrace.shouldSampleFrame(frame.sequence)) {
@@ -198,7 +238,15 @@ object AudioPlayer {
                 totalFramesWritten = 0L
                 lastDataWriteTime = 0L
 
-                val bufferSize = (MIN_BUFFER_SIZE * 8).coerceAtLeast(16384)
+                /*
+                 * Sized to pace playback, not to hide jitter. A large track
+                 * buffer is a second jitter buffer downstream of the queue:
+                 * the mixer fills it as fast as write() permits, and backlog
+                 * parked there is invisible to the queue and can never be
+                 * recovered. Kept at the device minimum with a small floor so
+                 * a blocking write paces the mixer at real time instead.
+                 */
+                val bufferSize = MIN_BUFFER_SIZE.coerceAtLeast(FRAME_BYTES * 4)
 
                 audioTrack = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     val usage = if (useVoiceCommunication) AudioAttributes.USAGE_VOICE_COMMUNICATION else AudioAttributes.USAGE_MEDIA
@@ -268,36 +316,43 @@ object AudioPlayer {
 
                         audioFilter.apply(mixedFrame)
 
-                        synchronized(this) {
-                            val track = audioTrack
-                            if (track != null && track.state == AudioTrack.STATE_INITIALIZED) {
-                                if (track.playState != AudioTrack.PLAYSTATE_PLAYING) track.play()
-                                val written = track.write(mixedFrame, 0, mixedFrame.size)
-                                if (written > 0) {
-                                    totalFramesWritten += written
-                                    lastDataWriteTime = System.currentTimeMillis()
-                                    activeFrames.forEach { frame ->
-                                        if (PttTrace.shouldSampleFrame(frame.sequence)) {
-                                            PttTrace.emit(
-                                                event = "playback_written",
-                                                traceId = frame.traceId,
-                                                frameSequence = frame.sequence,
-                                                frameBytes = written * 2,
-                                            )
-                                        }
+                        // write() blocks once the track buffer is full, and that
+                        // is what paces this loop. playAudio() takes this lock on
+                        // the network thread, so the write must happen outside it
+                        // or the network thread blocks on playback.
+                        val track = synchronized(this) { audioTrack }
+                        if (track != null && track.state == AudioTrack.STATE_INITIALIZED) {
+                            if (track.playState != AudioTrack.PLAYSTATE_PLAYING) track.play()
+                            val written = track.write(mixedFrame, 0, mixedFrame.size)
+                            if (written > 0) {
+                                totalFramesWritten += written
+                                lastDataWriteTime = System.currentTimeMillis()
+                                activeFrames.forEach { frame ->
+                                    if (PttTrace.shouldSampleFrame(frame.sequence)) {
+                                        PttTrace.emit(
+                                            event = "playback_written",
+                                            traceId = frame.traceId,
+                                            frameSequence = frame.sequence,
+                                            frameBytes = written * 2,
+                                        )
                                     }
                                 }
                             }
                         }
                     } else {
                         if (now - lastDataTime < SILENCE_TIMEOUT_MS && lastDataTime > 0) {
-                            synchronized(this) {
-                                val track = audioTrack
-                                if (track != null && track.state == AudioTrack.STATE_INITIALIZED && track.playState == AudioTrack.PLAYSTATE_PLAYING) {
-                                    track.write(silentBuffer, 0, silentBuffer.size)
-                                }
-                            }
-                            Thread.sleep(10)
+                            // Cover the gap and keep the playback clock running,
+                            // so a resuming spurt does not have to prefill again.
+                            val track = synchronized(this) { audioTrack }
+                            val written = if (track != null && track.state == AudioTrack.STATE_INITIALIZED &&
+                                track.playState == AudioTrack.PLAYSTATE_PLAYING
+                            ) {
+                                track.write(silentBuffer, 0, silentBuffer.size)
+                            } else 0
+                            // The blocking write is the pacer; only sleep when it
+                            // did not run, so silence is never produced faster
+                            // than it is consumed.
+                            if (written <= 0) Thread.sleep(20)
                         } else {
                             synchronized(this) {
                                 if (audioTrack?.state == AudioTrack.STATE_INITIALIZED && audioTrack?.playState == AudioTrack.PLAYSTATE_PLAYING) {
