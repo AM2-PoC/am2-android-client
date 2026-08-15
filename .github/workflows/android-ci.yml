@@ -50,6 +50,8 @@ jobs:
           python3 scripts/test_ptt_authorization_source.py
           python3 scripts/test_audio_route_readiness.py
           python3 scripts/test_audio_jitter_contract.py
+          python3 scripts/test_video_pipeline_contract.py
+          python3 scripts/test_video_overlay_contract.py
           python3 scripts/test_tls_fixture.py
       - name: Unit tests and DEV debug build
         run: ./gradlew --no-daemon :app:testDevDebugUnitTest :app:assembleDevDebug
