@@ -1610,7 +1610,7 @@ object WebSocketManager {
      * Exposed so the capture side can spend less before it is refused outright:
      * a weak link should soften the picture rather than switch it on and off.
      */
-    fun videoPressure(): WireAdmission.Pressure =
+    internal fun videoPressure(): WireAdmission.Pressure =
         WireAdmission.videoPressure(webSocket?.queueSize() ?: 0L)
 
     /** Video frames refused so far to keep audio ahead of them. */
