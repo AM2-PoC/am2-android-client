@@ -699,8 +699,12 @@ object WebSocketManager {
                     }
 
                     if (internalIsTalking) {
+                        // A reconnect must re-request relay authorization. Non-gateway
+                        // capture remains blocked until the matching acknowledgement.
                         executePttStartSignal()
-                        executeStartRecording()
+                        if (prefs?.getBoolean("gateway_mode", false) == true) {
+                            executeStartRecording()
+                        }
                     }
                 }
 
@@ -859,6 +863,14 @@ object WebSocketManager {
                     }
 
                     updateTalkingStatusUI()
+                }
+
+                "ptt_audio_start_authorized" -> {
+                    val traceId = dataObj.optLong("trace_id", 0L)
+                    if (traceId > 0L && traceId == activeTransmitTraceId && internalIsTalking) {
+                        PttTrace.emit(event = "start_authorized", traceId = traceId)
+                        executeStartRecording()
+                    }
                 }
 
                 "ptt_active_status" -> {
@@ -1398,17 +1410,9 @@ object WebSocketManager {
         updateTalkingStatusUI()
         reportLocation(force = false)
 
-        if (!isGateway) {
-            val delay = if (AudioDeviceManager.isBluetoothConnected) {
-                700L
-            } else {
-                400L
-            }
-
-            pttHandler.postDelayed({
-                executeStartRecording()
-            }, delay)
-        }
+        // Non-gateway capture starts only after the relay acknowledges the
+        // authorization of this trace. This removes the former fixed 400/700 ms
+        // delay without allowing media to race the async authorization handler.
     }
 
     private fun executePttStartSignal() {
