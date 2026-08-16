@@ -38,6 +38,22 @@ object WebSocketManager {
 
     private const val DEBOUNCE_DISCONNECT_MS = 5000L
     private const val MAX_RECONNECT_DELAY = 10000L
+
+    /*
+     * Backoff protects a relay from a client that cannot connect. It should not
+     * be charged for the first attempt: a socket that just dropped has not
+     * failed to reconnect yet, and two seconds of not trying is heard as dead
+     * audio on a radio.
+     */
+    private const val RECONNECT_FIRST_ATTEMPT_MS = 0L
+    private const val RECONNECT_BASE_DELAY_MS = 2000L
+
+    /*
+     * Spread, so a site full of units that dropped together does not retry
+     * together, fail together and back off together.
+     */
+    private const val RECONNECT_JITTER_FRACTION = 0.25
+    private val reconnectJitter = java.util.Random()
     private const val AUTHORIZATION_FALLBACK_MS = 500L
     private const val BLUETOOTH_ROUTE_FALLBACK_MS = 700L
 
@@ -64,7 +80,7 @@ object WebSocketManager {
     private var lastSentLon: Double = 0.0
 
     @Volatile private var isConnecting = false
-    @Volatile private var reconnectDelay = 2000L
+    @Volatile private var reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS
     @Volatile private var actualSocketConnected = false
     @Volatile private var socketGeneration = 0
     @Volatile private var reconnectAttempts = 0
@@ -470,7 +486,7 @@ object WebSocketManager {
 
                     webSocket = socket
                     isConnecting = false
-                    reconnectDelay = 2000L
+                    reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS
                     actualSocketConnected = true
                     isAuthenticatedOnCurrentSocket = false
                     reconnectAttempts = 0
@@ -651,12 +667,26 @@ object WebSocketManager {
         resetTalkingState()
     }
 
+    /**
+     * The scheduled delay, spread a little either side.
+     *
+     * An immediate attempt stays immediate: spreading zero would reintroduce
+     * exactly the wait this removes. The result is clamped so the spread can
+     * never push a retry past the bound the backoff promises.
+     */
+    private fun jitteredDelay(base: Long): Long {
+        if (base <= 0L) return 0L
+        val spread = (base * RECONNECT_JITTER_FRACTION).toLong().coerceAtLeast(1L)
+        val offset = reconnectJitter.nextInt((spread * 2).toInt() + 1) - spread
+        return (base + offset).coerceIn(0L, MAX_RECONNECT_DELAY)
+    }
+
     private fun attemptReconnect() {
         if (!isAuthorizedSession) return
 
         cancelReconnect()
 
-        val delay = reconnectDelay
+        val delay = jitteredDelay(reconnectDelay)
 
         val runnable = Runnable {
             if (
@@ -666,7 +696,11 @@ object WebSocketManager {
                 SafeLog.d(TAG, "Attempting automatic reconnect. Delay was $delay ms")
                 reconnectAttempts += 1
                 connect()
-                reconnectDelay = (reconnectDelay * 2).coerceAtMost(MAX_RECONNECT_DELAY)
+                reconnectDelay = if (reconnectDelay <= 0L) {
+                    RECONNECT_BASE_DELAY_MS
+                } else {
+                    (reconnectDelay * 2).coerceAtMost(MAX_RECONNECT_DELAY)
+                }
             }
         }
 
@@ -689,7 +723,7 @@ object WebSocketManager {
                 "login_success" -> {
                     isAuthorizedSession = true
                     isAuthenticatedOnCurrentSocket = true
-                    reconnectDelay = 2000L
+                    reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS
 
                     myUserId = dataObj.optString("id")
                     myUserName = dataObj.optString("username")
@@ -1376,7 +1410,7 @@ object WebSocketManager {
         savedUsername = user.uppercase().trim()
         savedPassword = pass.trim()
         isAuthorizedSession = true
-        reconnectDelay = 2000L
+        reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS
 
         prefs?.edit()
             ?.putString("username", savedUsername)
