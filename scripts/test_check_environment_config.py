@@ -194,7 +194,13 @@ class EnvironmentConfigTest(unittest.TestCase):
         self.assertIn("create_tls_fixture.sh", emulator_script)
         self.assertIn("start_tls_fixture", emulator_script)
         self.assertIn("stop_tls_fixture", emulator_script)
-        self.assertIn("python3 scripts/test_tls_fixture.py", text)
+        # The policy step discovers scripts/test_*.py rather than listing them,
+        # so every contract in that directory runs — including this one — and a
+        # new contract cannot be added without being executed. Naming one file
+        # here would pin a weaker property and would break the moment the list
+        # stopped being hand-maintained.
+        self.assertIn("contracts=(scripts/test_*.py)", text)
+        self.assertIn("No source contracts were found", text)
         self.assertNotIn("DevLegacyCompat", text)
         self.assertNotIn("DevSystemTrust", text)
 
