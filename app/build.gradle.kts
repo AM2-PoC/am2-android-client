@@ -7,6 +7,26 @@ plugins {
 
 val approvedSigner = providers.gradleProperty("AM2_APPROVED_SIGNER_SHA256").orElse("")
 
+/**
+ * The build's identity, supplied by CI as its run number.
+ *
+ * This was the literal 3 in every APK ever produced. The device decides an
+ * update exists by comparing version codes, so an unchanging one made the
+ * channel permanently answer "already current" -- and left neither end able to
+ * name the build actually installed. A round of latency work was evaluated
+ * against an APK that could not be shown to contain it.
+ *
+ * A local build keeps a low number, so a developer APK can never look newer
+ * than a published one and is never offered to a field device.
+ */
+val buildVersionCode = providers.gradleProperty("AM2_VERSION_CODE")
+    .map { property ->
+        val parsed = property.trim().toIntOrNull()
+        require(parsed != null && parsed > 0) { "AM2_VERSION_CODE must be a positive integer" }
+        parsed
+    }
+    .orElse(1)
+
 fun quotedBuildConfig(value: String): String = "\"$value\""
 
 fun validateEndpoint(environment: String, value: String, scheme: String, host: String): String {
@@ -27,8 +47,8 @@ android {
         applicationId = "com.am2.tik"
         minSdk = 16
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.1.0"
+        versionCode = buildVersionCode.get()
+        versionName = "1.1.${buildVersionCode.get()}"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

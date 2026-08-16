@@ -120,7 +120,7 @@ jobs:
       - name: Install Android toolchain
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
       - name: Build one staging application and test APK
-        run: ./gradlew --no-daemon :app:testStagingDebugUnitTest :app:assembleStagingDebug :app:assembleStagingDebugAndroidTest
+        run: ./gradlew --no-daemon -PAM2_VERSION_CODE="$GITHUB_RUN_NUMBER" :app:testStagingDebugUnitTest :app:assembleStagingDebug :app:assembleStagingDebugAndroidTest
       - name: Record immutable staging candidate identity
         shell: bash
         run: |
@@ -142,6 +142,49 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs staging-candidate/am2-client-staging-debug.apk > staging-candidate/signer-metadata.txt
           stat --printf='byte_size=%s\n' staging-candidate/am2-client-staging-debug.apk > staging-candidate/build-metadata.txt
           printf 'source_commit=%s\nenvironment=staging\nvariant=StagingDebug\nsupported_api=16+\n' "$GITHUB_SHA" >> staging-candidate/build-metadata.txt
+      - name: Publish the manifest the device parses
+        shell: bash
+        env:
+          UPDATE_URL: https://staging-apiapi.am2-poc.com/update/update.apk
+        run: |
+          set -euo pipefail
+          # The manifest deployment used to publish carried `download_url` and no
+          # digests, while the device requires `update_url`, `sha256` and
+          # `signer_sha256` and throws on the first missing key. So the update
+          # check failed outright rather than reporting "no update", and the
+          # channel had never delivered anything to anyone.
+          #
+          # It is written here because this is the only place that holds the APK
+          # and its signature at the same time. Every field is read back off the
+          # artifact rather than restated, so a manifest cannot describe a build
+          # other than the one beside it.
+          APK=staging-candidate/am2-client-staging-debug.apk
+          BADGING=staging-candidate/apk-badging.txt
+          VERSION_CODE=$(sed -n "s/.*versionCode='\([0-9]\+\)'.*/\1/p" "$BADGING" | head -1)
+          VERSION_NAME=$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" "$BADGING" | head -1)
+          APK_SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+          SIGNER_SHA=$(sed -n 's/.*certificate SHA-256 digest: *\([0-9a-fA-F]\{64\}\).*/\1/p' \
+              staging-candidate/signer-metadata.txt | head -1 | tr 'A-F' 'a-f')
+
+          test -n "$VERSION_CODE" || { echo "::error::no versionCode in badging"; exit 1; }
+          test -n "$VERSION_NAME" || { echo "::error::no versionName in badging"; exit 1; }
+          [ "$VERSION_CODE" -gt 3 ] || { echo "::error::versionCode $VERSION_CODE cannot supersede a field unit"; exit 1; }
+          printf '%s' "$SIGNER_SHA" | grep -Eq '^[0-9a-f]{64}$' \
+              || { echo "::error::could not read the signer digest"; exit 1; }
+
+          jq -n \
+            --argjson version_code "$VERSION_CODE" \
+            --arg version_name "$VERSION_NAME" \
+            --arg update_url "$UPDATE_URL" \
+            --arg sha256 "$APK_SHA" \
+            --arg signer_sha256 "$SIGNER_SHA" \
+            --arg changelog "staging build from ${GITHUB_SHA:0:12}" \
+            '{version_code: $version_code, version_name: $version_name, update_url: $update_url,
+              sha256: $sha256, signer_sha256: $signer_sha256, changelog: $changelog}' \
+            > staging-candidate/version.json
+
+          echo "--- published manifest"
+          cat staging-candidate/version.json
       - name: Upload immutable staging handoff
         uses: actions/upload-artifact@v4
         with:
@@ -179,11 +222,28 @@ jobs:
             apk-badging.txt
             build-metadata.txt
             signer-metadata.txt
+            version.json
           )
           test "${#HANDOFF_FILES[@]}" -eq "${#EXPECTED_FILES[@]}"
           diff -u <(printf '%s\n' "${EXPECTED_FILES[@]}") <(printf '%s\n' "${HANDOFF_FILES[@]}")
       - name: Verify candidate digest before installation
         run: (cd staging-candidate && sha256sum -c SHA256SUMS)
+      - name: Require the manifest to describe the APK beside it
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A manifest that names a different build is worse than none: the
+          # device downloads, fails the digest check, deletes the file and
+          # reports nothing. Bind them here, where both are present.
+          cd staging-candidate
+          MANIFEST_SHA=$(jq -r '.sha256' version.json)
+          ACTUAL_SHA=$(sha256sum am2-client-staging-debug.apk | cut -d' ' -f1)
+          test "$MANIFEST_SHA" = "$ACTUAL_SHA" \
+            || { echo "::error::manifest describes $MANIFEST_SHA, artifact is $ACTUAL_SHA"; exit 1; }
+          MANIFEST_CODE=$(jq -r '.version_code' version.json)
+          BADGED_CODE=$(sed -n "s/.*versionCode='\([0-9]\+\)'.*/\1/p" apk-badging.txt | head -1)
+          test "$MANIFEST_CODE" = "$BADGED_CODE" \
+            || { echo "::error::manifest says $MANIFEST_CODE, APK says $BADGED_CODE"; exit 1; }
       - uses: android-actions/setup-android@v3
       - name: Install Android platform tools
         run: sdkmanager "platform-tools"
@@ -258,7 +318,9 @@ jobs:
           AM2_APPROVED_SIGNER_SHA256: ${{ vars.AM2_APPROVED_SIGNER_SHA256 }}
         run: |
           test "$(printf '%s' "$AM2_APPROVED_SIGNER_SHA256" | tr -d ':' | tr '[:upper:]' '[:lower:]' | grep -Ec '^[0-9a-f]{64}$')" -eq 1
-          ./gradlew --no-daemon :app:test :app:assembleProductionRelease -PAM2_APPROVED_SIGNER_SHA256="$AM2_APPROVED_SIGNER_SHA256"
+          ./gradlew --no-daemon :app:test :app:assembleProductionRelease \
+            -PAM2_APPROVED_SIGNER_SHA256="$AM2_APPROVED_SIGNER_SHA256" \
+            -PAM2_VERSION_CODE="$GITHUB_RUN_NUMBER"
       - name: Record artifact identity
         shell: bash
         run: |
