@@ -18,8 +18,15 @@ object AudioPlayer {
     private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
     private val MIN_BUFFER_SIZE = AudioTrack.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
     private const val FRAME_BYTES = 640
+    /* Long enough for the mixer to leave its loop at a frame boundary. */
+    private const val MIXER_DRAIN_TIMEOUT_MS = 200L
+    /* One frame, so a wait costs exactly what a frame is worth. */
+    private const val FRAME_MS = 20L
+    private val setupPending = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val setupExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     private var audioTrack: AudioTrack? = null
+    @Volatile
     private var isPlaying = false
     private var playbackThread: Thread? = null
 
@@ -123,6 +130,7 @@ object AudioPlayer {
     private class RemoteUserAudioHandler(val sender: String, val traceId: Long) {
         val opusCodec = OpusCodec()
         val queue = LinkedBlockingQueue<ReceivedFrame>(200)
+        @Volatile
         var lastSeen = System.currentTimeMillis()
         private var nextSequence = 0L
         private var isBuffering = true
@@ -321,7 +329,17 @@ object AudioPlayer {
                         // the network thread, so the write must happen outside it
                         // or the network thread blocks on playback.
                         val track = synchronized(this) { audioTrack }
-                        if (track != null && track.state == AudioTrack.STATE_INITIALIZED) {
+                        if (track == null || track.state != AudioTrack.STATE_INITIALIZED) {
+                            /*
+                             * No track to write to yet. Without this the loop
+                             * re-enters at once, decodes every handler again and
+                             * throws the PCM away — draining at CPU speed the
+                             * jitter buffer it had just filled, and burning a
+                             * core while doing it.
+                             */
+                            requestAudioTrack()
+                            Thread.sleep(FRAME_MS)
+                        } else {
                             if (track.playState != AudioTrack.PLAYSTATE_PLAYING) track.play()
                             val written = track.write(mixedFrame, 0, mixedFrame.size)
                             if (written > 0) {
@@ -383,9 +401,30 @@ object AudioPlayer {
         handler.lastSeen = System.currentTimeMillis()
         handler.enqueue(data)
         
-        synchronized(this) {
-            if (audioTrack == null || audioTrack?.state != AudioTrack.STATE_INITIALIZED) {
+        requestAudioTrack()
+    }
+
+    /*
+     * Ask for a track; do not build one here.
+     *
+     * playAudio runs on the OkHttp reader thread. Building an AudioTrack takes
+     * 10-50 ms and used to happen inline under this object's monitor, during
+     * which nothing was read from the socket at all — not this stream's audio,
+     * not anyone else's, and not video. The stall showed up as everything
+     * pausing together, which reads like the network rather than like us.
+     *
+     * The mixer tolerates a missing track by waiting, so handing the work to a
+     * dedicated thread costs nothing and keeps the reader free.
+     */
+    private fun requestAudioTrack() {
+        val track = synchronized(this) { audioTrack }
+        if (track != null && track.state == AudioTrack.STATE_INITIALIZED) return
+        if (!setupPending.compareAndSet(false, true)) return
+        setupExecutor.execute {
+            try {
                 setupAudioTrack("Audio Received")
+            } finally {
+                setupPending.set(false)
             }
         }
     }
@@ -408,7 +447,14 @@ object AudioPlayer {
 
     fun release() {
         isPlaying = false
-        playbackThread?.interrupt()
+        playbackThread?.let { thread ->
+            thread.interrupt()
+            try {
+                thread.join(MIXER_DRAIN_TIMEOUT_MS)
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+        }
         playbackThread = null
         remoteDecoders.values.forEach { it.release() }
         remoteDecoders.clear()

@@ -1246,6 +1246,17 @@ object WebSocketManager {
     }
 
     private fun updateTalkingStatusUI() {
+        /*
+         * Take the snapshot under the lock; do everything else outside it.
+         *
+         * The socket reader takes this same monitor for every inbound audio
+         * frame, at 50 Hz. This function used to hold it across a native
+         * AudioTrack query and across a LiveData write that reaches PTTService
+         * and, from there, AudioManager binder calls — tens of milliseconds
+         * during which the reader could not take the lock and no frame of any
+         * kind was read. Main-thread jank became a receive stall.
+         */
+        val effectiveSpeakers: Set<String>
         synchronized(activeSpeakers) {
             val now = System.currentTimeMillis()
             val iterator = activeSpeakers.iterator()
@@ -1260,23 +1271,31 @@ object WebSocketManager {
                 }
             }
 
-            val isAudioPlaying = AudioPlayer.isActuallyPlaying()
-
-            val effectiveSpeakers = if (activeSpeakers.isNotEmpty()) {
+            effectiveSpeakers = if (activeSpeakers.isNotEmpty()) {
                 val current = activeSpeakers.toSet()
                 lastSpeakersBeforeEmpty = current
                 current
-            } else if (isAudioPlaying && lastSpeakersBeforeEmpty.isNotEmpty()) {
-                lastSpeakersBeforeEmpty
             } else {
                 emptySet()
             }
+        }
 
-            val isNowTalking = effectiveSpeakers.isNotEmpty()
+        // Outside the lock: a native query, and a dispatch that reaches the
+        // audio manager. Neither is anything the reader thread should wait on.
+        val resolvedSpeakers = if (effectiveSpeakers.isEmpty() &&
+            AudioPlayer.isActuallyPlaying() && lastSpeakersBeforeEmpty.isNotEmpty()
+        ) {
+            lastSpeakersBeforeEmpty
+        } else {
+            effectiveSpeakers
+        }
+
+        run {
+            val isNowTalking = resolvedSpeakers.isNotEmpty()
             wasSomeoneElseTalking = isNowTalking
 
             val isMeTalking = internalIsTalking
-            val isCommActive = isMeTalking || effectiveSpeakers.isNotEmpty()
+            val isCommActive = isMeTalking || resolvedSpeakers.isNotEmpty()
 
             if (_isCommunicationActive.value != isCommActive) {
                 if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -1301,9 +1320,9 @@ object WebSocketManager {
                     "You are Speaking"
                 }
 
-                effectiveSpeakers.isNotEmpty() -> {
-                    val names = effectiveSpeakers.joinToString(", ")
-                    if (effectiveSpeakers.size == 1) {
+                resolvedSpeakers.isNotEmpty() -> {
+                    val names = resolvedSpeakers.joinToString(", ")
+                    if (resolvedSpeakers.size == 1) {
                         "$names is Speaking"
                     } else {
                         "$names are Speaking"
@@ -1328,7 +1347,7 @@ object WebSocketManager {
                     CommState.TX
                 }
 
-                effectiveSpeakers.isNotEmpty() -> {
+                resolvedSpeakers.isNotEmpty() -> {
                     CommState.RX
                 }
 
@@ -1345,8 +1364,8 @@ object WebSocketManager {
                 _communicationState.postValue(commState)
             }
 
-            if (_activeSpeakersList.value != effectiveSpeakers) {
-                _activeSpeakersList.postValue(effectiveSpeakers)
+            if (_activeSpeakersList.value != resolvedSpeakers) {
+                _activeSpeakersList.postValue(resolvedSpeakers)
             }
         }
     }

@@ -31,6 +31,8 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
 
     private lateinit var binding: ActivityVideoBinding
     private var camera: Camera? = null
+    /* Written on the main thread, read on the camera callback thread. */
+    @Volatile
     private var isStreaming = false
     private lateinit var prefs: SharedPreferences
     private var pttHardwareKey: Int = -1
@@ -400,8 +402,14 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
         val mirror = mirrorFrame
         val quality = if (pressure == WireAdmission.Pressure.HEAVY) FRAME_QUALITY_HEAVY else FRAME_QUALITY
 
-        videoProcessingExecutor.execute {
-            try {
+        /*
+         * onDestroy shuts the executor down, but surfaceDestroyed and the
+         * camera callback can still run after it. A frame arriving then would
+         * be rejected on the camera thread with nothing catching it.
+         */
+        try {
+            videoProcessingExecutor.execute {
+                try {
                 val rotated = Nv21Transform.rotate(data, width, height, rotation, mirror)
                 val outWidth = Nv21Transform.rotatedWidth(width, height, rotation)
                 val outHeight = Nv21Transform.rotatedHeight(width, height, rotation)
@@ -409,8 +417,11 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
                 YuvImage(rotated, ImageFormat.NV21, outWidth, outHeight, null)
                     .compressToJpeg(Rect(0, 0, outWidth, outHeight), quality, out)
                 WebSocketManager.sendVideoFrame(out.toByteArray())
-            } catch (e: Exception) { SafeLog.e("VideoActivity", "Frame error", e)
-            } finally { encoding.set(false) }
+                } catch (e: Exception) { SafeLog.e("VideoActivity", "Frame error", e)
+                } finally { encoding.set(false) }
+            }
+        } catch (e: java.util.concurrent.RejectedExecutionException) {
+            encoding.set(false)
         }
     }
 
