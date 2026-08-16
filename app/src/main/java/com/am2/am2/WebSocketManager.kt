@@ -106,6 +106,8 @@ object WebSocketManager {
     private val unknownSendersSeen = Collections.synchronizedSet(mutableSetOf<Int>())
     /* Video refused so audio would not wait. Reported, never silently absorbed. */
     private val videoFramesDropped = java.util.concurrent.atomic.AtomicLong(0)
+    /* Audio lost while the session was re-establishing, counted rather than guessed at. */
+    private val reauthFramesDropped = java.util.concurrent.atomic.AtomicLong(0)
     private var lastSpeakersBeforeEmpty = emptySet<String>()
     private var wasSomeoneElseTalking = false
     @Volatile private var activeTransmitTraceId: Long? = null
@@ -1708,6 +1710,9 @@ object WebSocketManager {
     /** Video frames refused so far to keep audio ahead of them. */
     fun droppedVideoFrames(): Long = videoFramesDropped.get()
 
+    /** Audio frames lost while the socket was reconnecting or reauthenticating. */
+    fun droppedReauthFrames(): Long = reauthFramesDropped.get()
+
     fun sendVideoFrame(frameData: ByteArray) {
         if (!actualSocketConnected) return
 
@@ -1811,7 +1816,34 @@ object WebSocketManager {
     }
 
     fun sendBinary(data: ByteArray) {
-        if (!actualSocketConnected) return
+        val isAudioFrame = data.firstOrNull()?.toInt() == 1
+
+        /*
+         * The session gate, moved here from the recorder.
+         *
+         * isAuthenticatedOnCurrentSocket goes false the moment a socket drops
+         * and stays false until login_success arrives on the new one — two to
+         * eight hundred milliseconds on every reconnect, during which the
+         * operator is still talking. The recorder used to check this itself and
+         * return, so those frames never reached the one place that records a
+         * drop, and the largest single source of lost audio was the only one
+         * the trace could not see.
+         */
+        if (!isConnectedOnSocket()) {
+            if (isAudioFrame) {
+                activeTransmitTraceId?.let { traceId ->
+                    PttTrace.emit(
+                        event = "frame_dropped",
+                        traceId = traceId,
+                        frameSequence = transmitFrameSequence,
+                        frameBytes = data.size,
+                        queueBytes = if (actualSocketConnected) 0L else -1L,
+                    )
+                }
+                reauthFramesDropped.incrementAndGet()
+            }
+            return
+        }
 
         val socket = webSocket
         /*
