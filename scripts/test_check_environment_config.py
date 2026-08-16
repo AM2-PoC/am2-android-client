@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 import unittest
 from pathlib import Path
 
@@ -38,6 +39,18 @@ class EnvironmentConfigTest(unittest.TestCase):
         self.assertNotIn('"wss://apiapi.am2-poc.com"', ws)
         self.assertNotIn('"https://apiapi.am2-poc.com/update/version.json"', about)
 
+        # Naming the two endpoints that existed at the time let a third one
+        # through: UpdateMetadata carried the production APK URL as a literal,
+        # so every build — staging included — would only accept an update
+        # served from production. The rule is that no source file holds an
+        # endpoint of its own, so it is checked by absence across the tree.
+        offenders = sorted(
+            path.relative_to(ROOT).as_posix()
+            for path in (ROOT / "app/src/main/java").rglob("*.kt")
+            if re.search(r'"(https|wss)://[^"]*am2-poc\.com', path.read_text())
+        )
+        self.assertEqual([], offenders)
+
         verifier = (ROOT / "app/src/main/java/com/am2/am2/update/UpdateVerifier.kt").read_text()
         self.assertIn("if (!BuildConfig.SELF_UPDATE_ENABLED) return false", verifier)
         self.assertIn("BuildConfig.APPLICATION_ID", verifier)
@@ -54,6 +67,14 @@ class EnvironmentConfigTest(unittest.TestCase):
 
         network = (ROOT / "app/src/main/res/xml/network_security_config.xml").read_text()
         self.assertNotIn("@raw/isrg_root_x1", network)
+
+    def test_every_environment_declares_its_own_update_apk_url(self):
+        text = GRADLE.read_text()
+        for host in ("dev-api.am2-poc.com", "staging-apiapi.am2-poc.com", "apiapi.am2-poc.com"):
+            self.assertIn(f'"https://{host}/update/update.apk"', text)
+        self.assertEqual(3, text.count("UPDATE_APK_URL"))
+        # Staging must be able to exercise the update path it now owns.
+        self.assertEqual(3, text.count("SELF_UPDATE_ENABLED"))
 
     def test_nonproduction_urls_are_not_production_hosts(self):
         text = GRADLE.read_text()

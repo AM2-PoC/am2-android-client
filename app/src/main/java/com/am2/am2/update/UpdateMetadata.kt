@@ -1,5 +1,6 @@
 package com.am2.am2.update
 
+import com.am2.am2.BuildConfig
 import org.json.JSONObject
 
 data class UpdateMetadata(
@@ -11,7 +12,15 @@ data class UpdateMetadata(
     val changelog: String
 ) {
     companion object {
-        const val APPROVED_URL = "https://apiapi.am2-poc.com/update/update.apk"
+        /**
+         * The one URL this build accepts an update from.
+         *
+         * It was the production URL written as a literal and compiled into
+         * every environment, so a staging build refused its own channel and
+         * would only have taken an APK served from production — the exact
+         * cross-environment hand-off that separate channels exist to prevent.
+         */
+        val approvedUrl: String get() = BuildConfig.UPDATE_APK_URL
         private val DIGEST = Regex("^[0-9a-f]{64}$")
         private val INTEGER = Regex("^-?[0-9]+$")
 
@@ -26,7 +35,7 @@ data class UpdateMetadata(
             val signer = normalize(json.getString("signer_sha256"))
             require(code > 0) { "version_code invalid" }
             require(name.isNotEmpty()) { "version_name invalid" }
-            require(url == APPROVED_URL) { "update_url not approved" }
+            require(url == approvedUrl) { "update_url not approved" }
             require(DIGEST.matches(sha)) { "sha256 invalid" }
             require(DIGEST.matches(signer)) { "signer_sha256 invalid" }
             return UpdateMetadata(code, name, url, sha, signer, json.optString("changelog", ""))
