@@ -64,12 +64,20 @@ android {
                 "UPDATE_MANIFEST_URL",
                 quotedBuildConfig(validateEndpoint("dev", "https://dev-api.am2-poc.com/update/version.json", "https", "dev-api.am2-poc.com")),
             )
+            buildConfigField(
+                "String",
+                "UPDATE_APK_URL",
+                quotedBuildConfig(validateEndpoint("dev", "https://dev-api.am2-poc.com/update/update.apk", "https", "dev-api.am2-poc.com")),
+            )
         }
         create("staging") {
             dimension = "environment"
             applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging"
             resValue("string", "app_name", "am² STAGING")
+            // Staging carries its own channel, so the update path can be
+            // exercised before a production release depends on it.
+            buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "true")
             buildConfigField(
                 "String",
                 "WEBSOCKET_URL",
@@ -79,6 +87,11 @@ android {
                 "String",
                 "UPDATE_MANIFEST_URL",
                 quotedBuildConfig(validateEndpoint("staging", "https://staging-apiapi.am2-poc.com/update/version.json", "https", "staging-apiapi.am2-poc.com")),
+            )
+            buildConfigField(
+                "String",
+                "UPDATE_APK_URL",
+                quotedBuildConfig(validateEndpoint("staging", "https://staging-apiapi.am2-poc.com/update/update.apk", "https", "staging-apiapi.am2-poc.com")),
             )
         }
         create("production") {
@@ -93,6 +106,11 @@ android {
                 "String",
                 "UPDATE_MANIFEST_URL",
                 quotedBuildConfig(validateEndpoint("production", "https://apiapi.am2-poc.com/update/version.json", "https", "apiapi.am2-poc.com")),
+            )
+            buildConfigField(
+                "String",
+                "UPDATE_APK_URL",
+                quotedBuildConfig(validateEndpoint("production", "https://apiapi.am2-poc.com/update/update.apk", "https", "apiapi.am2-poc.com")),
             )
             val signer = approvedSigner.get().replace(":", "").lowercase()
             if (gradle.startParameter.taskNames.any { it.contains("Production", ignoreCase = true) && it.contains("Release", ignoreCase = true) }) {
