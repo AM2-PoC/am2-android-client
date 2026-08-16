@@ -48,6 +48,7 @@ jobs:
           python3 scripts/check_log_policy.py
           python3 scripts/test_check_environment_config.py
           python3 scripts/test_ptt_trace_contract.py
+          python3 scripts/test_frame_delivery_contract.py
           python3 scripts/test_ptt_authorization_source.py
           python3 scripts/test_audio_route_readiness.py
           python3 scripts/test_audio_jitter_contract.py
