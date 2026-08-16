@@ -21,13 +21,37 @@ object AudioRecorder {
     private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
     private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
     private const val FRAME_SIZE = 320 // 20ms frame untuk 16kHz
+
+    /*
+     * How long a restart waits for the previous recording to unwind.
+     *
+     * The thread leaves its loop at the next frame boundary, so this only has
+     * to outlast one blocking read plus teardown. It is a ceiling on a wait
+     * that normally does not happen, not a delay every press pays.
+     */
+    private const val RECORDER_DRAIN_TIMEOUT_MS = 250L
     private val MIN_BUFFER_SIZE = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
 
+    @Volatile
     private var audioRecord: AudioRecord? = null
+
+    /*
+     * Held so a restart can wait for it.
+     *
+     * stopRecording only ever set a flag, and the thread was usually still
+     * blocked inside AudioRecord.read(). A restart in that window recreated the
+     * shared encoder under the old thread and published a new AudioRecord that
+     * the old thread's cleanup then released — leaving the new transmission
+     * with nothing to read from. It sent zero frames while the UI showed TX,
+     * and nothing threw or logged.
+     */
+    @Volatile
+    private var recordingThread: Thread? = null
     @Volatile
     private var isRecording = false
     private val opusCodec = OpusCodec()
 
+    @Volatile
     private var currentAudioSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION
 
     @Volatile
@@ -91,11 +115,32 @@ object AudioRecorder {
         val userIdStr = WebSocketManager.myUserId ?: "0"
         val userIdTruncated = userIdStr.toLongOrNull()?.toInt() ?: userIdStr.hashCode()
 
+        /*
+         * Wait for the previous recording to finish before touching anything it
+         * shares. A flag cannot express this: the old thread is inside a
+         * blocking read and has not reached its cleanup yet.
+         */
+        recordingThread?.let { previous ->
+            if (previous.isAlive) {
+                try {
+                    previous.join(RECORDER_DRAIN_TIMEOUT_MS)
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return
+                }
+                if (previous.isAlive) {
+                    SafeLog.e(TAG, "Previous recording did not finish; refusing to start another")
+                    return
+                }
+            }
+        }
+        recordingThread = null
+
         try {
             opusCodec.createEncoder(SAMPLE_RATE, 32000, 5)
             isRecording = true
 
-            thread(priority = Thread.MAX_PRIORITY, name = "AudioRecordThread") {
+            recordingThread = thread(priority = Thread.MAX_PRIORITY, name = "AudioRecordThread") {
                 try {
                     var success = false
                     val sources = arrayOf(currentAudioSource, MediaRecorder.AudioSource.VOICE_COMMUNICATION, MediaRecorder.AudioSource.MIC)
