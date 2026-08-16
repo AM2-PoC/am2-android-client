@@ -72,9 +72,21 @@ def main() -> None:
     with socket.create_server(("127.0.0.1", args.port), reuse_port=False) as listener:
         while True:
             raw, _ = listener.accept()
+            # Two instrumented tests abort the handshake on purpose, to prove a
+            # bad certificate is rejected. An abort arrives here as a peer reset
+            # rather than an SSLError, so catching only SSLError let it escape
+            # and end the loop -- and whichever tests ran after a negative one
+            # then failed against a dead fixture, a confusing multi-test failure
+            # whose cause appeared nowhere in the output.
+            #
+            # The timeout covers the other half: wrap_socket runs inline in this
+            # single-threaded loop, so a peer that connects and then says nothing
+            # would otherwise block every later connection indefinitely.
             try:
+                raw.settimeout(10)
                 connection = context.wrap_socket(raw, server_side=True)
-            except ssl.SSLError:
+                connection.settimeout(None)
+            except OSError:
                 raw.close()
                 continue
             threading.Thread(target=handle, args=(connection,), daemon=True).start()
