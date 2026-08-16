@@ -52,6 +52,11 @@ class AudioDeviceManager(private val context: Context) {
         var isScoConnected = false
             private set
 
+        /** A Bluetooth device that offers a microphone, not just a speaker. */
+        @Volatile
+        var isBluetoothScoCapable = false
+            private set
+
         /*
          * Whether capture may open now.
          *
@@ -59,7 +64,16 @@ class AudioDeviceManager(private val context: Context) {
          * requests the link and the system reports CONNECTED later. Wired, USB and
          * the built-in microphone are usable as soon as they are selected.
          */
-        fun isCaptureRouteReady(): Boolean = !isBluetoothConnected || isScoConnected
+        /*
+         * Only a headset that can carry a microphone is worth waiting for.
+         *
+         * A2DP is an output profile: a Bluetooth speaker has no microphone, so
+         * capture will use the built-in one and there is no link to wait for.
+         * Treating any Bluetooth device as SCO-capable made every press on such
+         * a device pay the full fallback, every time, for a handshake that was
+         * never going to happen.
+         */
+        fun isCaptureRouteReady(): Boolean = !isBluetoothScoCapable || isScoConnected
 
         fun getCurrentStreamType(audioManager: AudioManager): Int {
             val hasAccessory = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -319,6 +333,18 @@ class AudioDeviceManager(private val context: Context) {
     fun updateDeviceStatus() {
         val deviceStatus = getHardwareDeviceStatus()
         isBluetoothConnected = deviceStatus.hasBluetooth
+        /*
+         * Whether anything connected can actually carry a microphone. The
+         * headset profile is the authority: a device in the output list may be
+         * A2DP only, which is a speaker and has no input to wait for.
+         */
+        isBluetoothScoCapable = deviceStatus.hasBluetooth && try {
+            bluetoothHeadset?.connectedDevices?.isNotEmpty() == true
+        } catch (e: SecurityException) {
+            // Without the runtime permission the proxy cannot be asked. Assume
+            // a microphone exists so a real headset is still waited for.
+            true
+        }
         // A link that is gone cannot still be carrying audio; leaving this set
         // would report a ready route for a headset that has been switched off.
         if (!deviceStatus.hasBluetooth) isScoConnected = false

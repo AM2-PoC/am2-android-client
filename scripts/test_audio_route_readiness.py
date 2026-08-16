@@ -38,9 +38,11 @@ class AudioRouteReadinessTest(unittest.TestCase):
     def test_route_readiness_is_exposed_and_is_true_without_bluetooth(self):
         self.assertIn("fun isCaptureRouteReady()", self.device)
         ready = section(self.device, "fun isCaptureRouteReady()", "\n    }")
-        # Only Bluetooth has an asynchronous route handshake. Wired, USB and the
-        # built-in microphone are ready as soon as they are selected.
-        self.assertIn("isBluetoothConnected", ready)
+        # Only a Bluetooth device that can carry a microphone has an
+        # asynchronous handshake worth waiting for. Wired, USB, the built-in
+        # microphone and an A2DP speaker are all usable immediately — the
+        # speaker because it has no input to wait for at all.
+        self.assertIn("isBluetoothScoCapable", ready)
 
     def test_capture_requires_authorization_and_a_ready_route(self):
         self.assertIn("fun startCaptureWhenReady()", self.ws)
