@@ -205,9 +205,10 @@ object AudioRecorder {
                                             .putInt(userIdTruncated)
                                             .put(encodedData)
                                             .array()
-                                        if (WebSocketManager.isConnectedOnSocket()) {
-                                            WebSocketManager.sendBinary(packet)
-                                        }
+                                        // Hand every frame over. Whether it can
+                                        // go is sendBinary's decision, and it is
+                                        // the only place that can record it.
+                                        WebSocketManager.sendBinary(packet)
                                     }
                                 }
                             } else if (read < 0) {

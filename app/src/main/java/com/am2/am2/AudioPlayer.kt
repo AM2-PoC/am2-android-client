@@ -141,6 +141,13 @@ object AudioPlayer {
 
         init { opusCodec.createDecoder(SAMPLE_RATE) }
 
+        /*
+         * Mutually exclusive with release(), which the mixer calls when a
+         * sender goes quiet. Without that, the reader thread could land a frame
+         * in a queue being cleared, on a handler whose decoder was being
+         * destroyed — lost with nothing to show for it.
+         */
+        @Synchronized
         fun enqueue(data: ByteArray) {
             val sequence = ++nextSequence
             // Shed the oldest frames rather than the newest: the stale ones are
