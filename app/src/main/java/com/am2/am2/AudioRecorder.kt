@@ -81,7 +81,6 @@ object AudioRecorder {
     @SuppressLint("MissingPermission")
     fun startRecording(channelSlug: String) {
         if (isRecording) return
-        val traceId = WebSocketManager.currentTransmitTraceId()
         
         val context = appContext ?: return
         if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -110,7 +109,9 @@ object AudioRecorder {
                                 if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                                     audioRecord = recorder
                                     success = true
-                                    traceId?.let { PttTrace.emit(event = "capture_started", traceId = it) }
+                                    WebSocketManager.currentTransmitTraceId()?.let {
+                                        PttTrace.emit(event = "capture_started", traceId = it)
+                                    }
                                 } else recorder.release()
                             } else recorder.release()
                         } catch (e: Exception) {
@@ -141,7 +142,12 @@ object AudioRecorder {
                                     audioFilter.apply(pcmBuffer, read)
                                     val encodedData = opusCodec.encode(pcmBuffer, FRAME_SIZE)
                                     if (encodedData != null && isRecording) {
-                                        traceId?.let {
+                                        // Read per frame: in VOX and gateway
+                                        // mode this thread outlives a single
+                                        // transmission, so an id captured once
+                                        // would label every later frame with
+                                        // the first transmission's id.
+                                        WebSocketManager.currentTransmitTraceId()?.let {
                                             PttTrace.emit(
                                                 event = "frame_encoded",
                                                 traceId = it,
@@ -177,7 +183,9 @@ object AudioRecorder {
                 }
             }
         } catch (e: Exception) {
-            traceId?.let { PttTrace.emit(event = "recorder_start_failed", traceId = it) }
+            WebSocketManager.currentTransmitTraceId()?.let {
+                PttTrace.emit(event = "recorder_start_failed", traceId = it)
+            }
             SafeLog.e(TAG, "Failed to start recording", e)
             isRecording = false 
         }
