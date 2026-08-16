@@ -431,6 +431,15 @@ class PTTService : Service() {
     }
 
     private fun performStopTalking() {
+        /*
+         * Disarm the volume-key timer.
+         *
+         * Volume-key PTT has no release event, so a timer ends the
+         * transmission. It was never cancelled when a stop arrived by any other
+         * route, so it stayed armed and fired later — ending the NEXT
+         * transmission, at a moment nothing on screen explained.
+         */
+        handler.removeCallbacksAndMessages("VOL_PTT_END")
         WebSocketManager.stopTalking()
     }
 
