@@ -46,6 +46,10 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
      */
     private val encoding = AtomicBoolean(false)
 
+    /* The receive-side twin of [encoding]: at most one frame decoding at a time,
+     * so a slow decoder sheds instead of falling further behind. */
+    private val decoding = AtomicBoolean(false)
+
     private var previewWidth = 0
     private var previewHeight = 0
     private var frameRotation = 0
@@ -65,6 +69,9 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
          * is about the size the previous WEBP pass produced for a fraction of
          * the work. The receiver decodes by content, not by declared format. */
         const val FRAME_QUALITY = 55
+        /* Used while the uplink is backing up: a softer picture still arriving
+         * beats a sharp one that is refused. */
+        const val FRAME_QUALITY_HEAVY = 35
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -207,14 +214,20 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
         WebSocketManager.incomingVideoFrame.observe(this) { pair ->
             if (isFinishing) return@observe
             val data = pair.second
+            // The same backpressure the send side already has. Without it a
+            // decoder slower than the arrival rate builds a backlog that never
+            // clears, and the picture drifts further behind live for as long as
+            // the stream runs. The newest frame is always the useful one.
+            if (!decoding.compareAndSet(false, true)) return@observe
             decodingExecutor.execute {
                 try {
                     val rawBitmap = BitmapFactory.decodeByteArray(data, 0, data.size) ?: return@execute
-                    runOnUiThread { 
-                        if (!isFinishing) binding.ivIncomingVideo.setImageBitmap(rawBitmap) 
+                    runOnUiThread {
+                        if (!isFinishing) binding.ivIncomingVideo.setImageBitmap(rawBitmap)
                         else rawBitmap.recycle()
                     }
-                } catch (e: Exception) { SafeLog.e("VideoActivity", "Decoding error", e) }
+                } catch (e: Exception) { SafeLog.e("VideoActivity", "Decoding error", e)
+                } finally { decoding.set(false) }
             }
         }
 
@@ -370,12 +383,22 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
         if (previewWidth == 0 || previewHeight == 0) return
         // Drop this frame rather than queue it: the next one is more current
         // than anything a backlog could deliver.
+        /*
+         * Spend less before the wire refuses us. Encoding a frame the socket
+         * has no room for costs a rotate and a compress and is thrown away at
+         * the last moment, so read the pressure here and decline early — and
+         * soften the picture in between, so a weak uplink degrades rather than
+         * switching video on and off.
+         */
+        val pressure = WebSocketManager.videoPressure()
+        if (pressure == WireAdmission.Pressure.BLOCKED) return
         if (!encoding.compareAndSet(false, true)) return
 
         val width = previewWidth
         val height = previewHeight
         val rotation = frameRotation
         val mirror = mirrorFrame
+        val quality = if (pressure == WireAdmission.Pressure.HEAVY) FRAME_QUALITY_HEAVY else FRAME_QUALITY
 
         videoProcessingExecutor.execute {
             try {
@@ -384,7 +407,7 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
                 val outHeight = Nv21Transform.rotatedHeight(width, height, rotation)
                 val out = ByteArrayOutputStream()
                 YuvImage(rotated, ImageFormat.NV21, outWidth, outHeight, null)
-                    .compressToJpeg(Rect(0, 0, outWidth, outHeight), FRAME_QUALITY, out)
+                    .compressToJpeg(Rect(0, 0, outWidth, outHeight), quality, out)
                 WebSocketManager.sendVideoFrame(out.toByteArray())
             } catch (e: Exception) { SafeLog.e("VideoActivity", "Frame error", e)
             } finally { encoding.set(false) }
