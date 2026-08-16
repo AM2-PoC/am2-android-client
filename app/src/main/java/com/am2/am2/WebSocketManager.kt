@@ -1429,6 +1429,12 @@ object WebSocketManager {
             .put("username", user)
             .put("password", pass)
             .put("current_device_id", deviceId)
+            // Which build is talking. The relay logged a username and nothing
+            // about the software, so "is the unit running the fix" could only be
+            // answered by holding the handset -- and was answered wrongly. A
+            // signer digest names a keystore, not a commit; this names the build.
+            .put("client_version_code", BuildConfig.VERSION_CODE)
+            .put("client_version_name", BuildConfig.VERSION_NAME)
 
         emit("app_login", data)
     }
