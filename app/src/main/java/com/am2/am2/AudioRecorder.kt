@@ -61,11 +61,6 @@ object AudioRecorder {
      */
     private const val VOX_TRIGGER_INTERVAL_MS = 500L
 
-    /** Sensitivity when the operator has never chosen one. */
-    const val VOX_THRESHOLD_DEFAULT = 2200
-    /* The settings screen maps its slider onto this range. */
-    const val VOX_THRESHOLD_MIN = 500
-    const val VOX_THRESHOLD_MAX = 12000
 
     @Volatile
     private var audioRecord: AudioRecord? = null
@@ -92,7 +87,7 @@ object AudioRecorder {
     var gatewayModeEnabled = false
 
     @Volatile
-    private var voxThreshold = VOX_THRESHOLD_DEFAULT
+    private var voxThreshold = VoxSensitivity.DEFAULT_THRESHOLD
     private var voxSilenceTimer = 0L
     private const val VOX_SILENCE_TIMEOUT = 1500L
     private var voxTriggerCount = 0
@@ -125,7 +120,7 @@ object AudioRecorder {
      * this is the one control a VOX radio always exposes.
      */
     fun setVoxThreshold(threshold: Int) {
-        voxThreshold = threshold.coerceIn(VOX_THRESHOLD_MIN, VOX_THRESHOLD_MAX)
+        voxThreshold = threshold.coerceIn(VoxSensitivity.MIN_THRESHOLD, VoxSensitivity.MAX_THRESHOLD)
     }
 
     private class AudioFilter(sampleRate: Int) {
