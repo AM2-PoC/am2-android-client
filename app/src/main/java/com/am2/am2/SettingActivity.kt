@@ -17,6 +17,7 @@ import android.support.v4.media.session.MediaSessionCompat
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.View
+import android.widget.SeekBar
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -101,6 +102,9 @@ class SettingActivity : BaseActivity() {
 
         binding.cbPttToggle.isChecked = prefs.getBoolean("ptt_toggle", false)
         binding.cbVox.isChecked = prefs.getBoolean("vox_enabled", false)
+        binding.sbVoxSensitivity.progress = voxSensitivityFromThreshold(
+            prefs.getInt("vox_threshold", AudioRecorder.VOX_THRESHOLD_DEFAULT),
+        )
         binding.cbShowVirtualPtt.isChecked = prefs.getBoolean("show_virtual_ptt", true)
         binding.cbShowInfoBox.isChecked = prefs.getBoolean("show_info_box", true)
         binding.cbStartOnBoot.isChecked = prefs.getBoolean("start_on_boot", false)
@@ -167,20 +171,28 @@ class SettingActivity : BaseActivity() {
 
         binding.cbVox.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("vox_enabled", isChecked).apply()
-            // Notifikasi PTTService untuk update status VOX secara realtime
-            try {
-                val intent = Intent(this, PTTService::class.java).apply {
-                    action = PTTService.ACTION_UPDATE_VOX
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(intent)
-                } else {
-                    startService(intent)
-                }
-            } catch (e: Exception) {
-                SafeLog.e("SettingActivity", "Failed to notify PTTService: ${e.message}")
-            }
+            notifyVoxChanged()
         }
+
+        /*
+         * Sensitivity, not threshold, because that is what the operator is
+         * choosing: further right means VOX keys on a quieter voice. The
+         * recorder wants the amplitude to compare against, so the two are
+         * inverses of each other and the conversion lives here.
+         *
+         * Written when the finger lifts rather than on every pixel, so a drag
+         * across the bar is one preference write and one service intent.
+         */
+        binding.sbVoxSensitivity.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {}
+            override fun onStartTrackingTouch(bar: SeekBar?) {}
+            override fun onStopTrackingTouch(bar: SeekBar?) {
+                prefs.edit()
+                    .putInt("vox_threshold", voxThresholdFromSensitivity(bar?.progress ?: 0))
+                    .apply()
+                notifyVoxChanged()
+            }
+        })
 
         binding.cbShowVirtualPtt.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("show_virtual_ptt", isChecked).apply()
@@ -238,6 +250,43 @@ class SettingActivity : BaseActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Tell a running PTTService that something about VOX changed.
+     *
+     * Without this the new value waits for the next service start, and on a
+     * radio that is left switched on that is never.
+     */
+    private fun notifyVoxChanged() {
+        try {
+            val intent = Intent(this, PTTService::class.java).apply {
+                action = PTTService.ACTION_UPDATE_VOX
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+        } catch (e: Exception) {
+            SafeLog.e("SettingActivity", "Failed to notify PTTService: ${e.message}")
+        }
+    }
+
+    /*
+     * Sensitivity runs the opposite way to the amplitude threshold behind it:
+     * a fuller bar means VOX keys on a quieter voice, which is a smaller
+     * number. Both directions are written out so neither drifts.
+     */
+    private fun voxThresholdFromSensitivity(progress: Int): Int {
+        val span = AudioRecorder.VOX_THRESHOLD_MAX - AudioRecorder.VOX_THRESHOLD_MIN
+        return AudioRecorder.VOX_THRESHOLD_MAX - (progress.coerceIn(0, 100) * span / 100)
+    }
+
+    private fun voxSensitivityFromThreshold(threshold: Int): Int {
+        val span = AudioRecorder.VOX_THRESHOLD_MAX - AudioRecorder.VOX_THRESHOLD_MIN
+        val clamped = threshold.coerceIn(AudioRecorder.VOX_THRESHOLD_MIN, AudioRecorder.VOX_THRESHOLD_MAX)
+        return (AudioRecorder.VOX_THRESHOLD_MAX - clamped) * 100 / span
     }
 
     private fun performResetToDefault() {

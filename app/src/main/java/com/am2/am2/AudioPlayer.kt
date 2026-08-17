@@ -27,6 +27,13 @@ object AudioPlayer {
     private val setupPending = java.util.concurrent.atomic.AtomicBoolean(false)
     private val setupExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
+    /*
+     * Published because isActuallyPlaying() reads them from other threads --
+     * the talk indicator on the main thread, and now VOX from the recording
+     * thread, which asks whether the loudspeaker it is listening to is busy.
+     * A plain Long is not guaranteed to be read whole on 32-bit.
+     */
+    @Volatile
     private var audioTrack: AudioTrack? = null
     @Volatile
     private var isPlaying = false
@@ -57,6 +64,7 @@ object AudioPlayer {
     
     private var userVolume: Float = 1.0f
     private var isMuted: Boolean = false
+    @Volatile
     private var totalFramesWritten = 0L
     private var lastDataWriteTime = 0L
 

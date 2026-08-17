@@ -166,6 +166,23 @@
                             android:buttonTint="@color/orange_accent" />
 
                         <TextView
+                            android:id="@+id/tvVoxSensitivity"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/margin_small"
+                            android:text="Sensitivitas VOX"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/text_setting_label_small"
+                            android:paddingStart="@dimen/padding_xsmall"
+                            tools:ignore="HardcodedText,RtlSymmetry" />
+
+                        <androidx.appcompat.widget.AppCompatSeekBar
+                            android:id="@+id/sbVoxSensitivity"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:max="100" />
+
+                        <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:text="*Aktifkan jika ingin transmisi otomatis saat mendeteksi suara."
