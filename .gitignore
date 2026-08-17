@@ -16,3 +16,9 @@ local.properties
 
 __pycache__/
 *.py[cod]
+
+# Signing material. The release key never lives here; these patterns exist so
+# an accidental copy cannot be committed.
+*.jks
+*.keystore
+keystore.properties

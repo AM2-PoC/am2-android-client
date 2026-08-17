@@ -64,7 +64,10 @@ jobs:
           done
           python3 scripts/check_log_policy.py
       - name: Unit tests and DEV debug build
-        run: ./gradlew --no-daemon :app:testDevDebugUnitTest :app:assembleDevDebug
+        # assemblePlayDebug rides along here on purpose. A flavour nothing
+        # compiles is configuration that rots, and a job of its own would cost
+        # a runner on every push to prove one assemble.
+        run: ./gradlew --no-daemon :app:testDevDebugUnitTest :app:assembleDevDebug :app:assemblePlayDebug
 
   compatibility:
     name: compatibility-api-${{ matrix.api }}-${{ matrix.variant }}
