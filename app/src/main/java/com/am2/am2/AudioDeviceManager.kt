@@ -360,9 +360,18 @@ class AudioDeviceManager(private val context: Context) {
         toggleKeepAlive(deviceStatus.hasBluetooth)
 
         val useVoiceComm = deviceStatus.hasBluetooth || deviceStatus.hasWired || deviceStatus.hasUsb
-        
+
         AudioPlayer.updateAudioRouting(useVoiceComm)
-        AudioRecorder.updateAudioSource(useVoiceComm)
+        /*
+         * Capture no longer takes its source from this answer.
+         *
+         * Where the audio comes *out* and which source should record it are
+         * different questions, and sharing one boolean got the second one
+         * backwards: a headset -- no acoustic path back to the microphone --
+         * was given VOICE_COMMUNICATION and its echo canceller, while the
+         * built-in loudspeaker, the only route that has such a path, was given
+         * raw MIC. AudioRecorder now always prefers VOICE_COMMUNICATION.
+         */
 
         listener?.onDeviceChanged(currentDevice)
     }

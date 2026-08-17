@@ -1472,6 +1472,16 @@ object WebSocketManager {
 
     fun currentTransmitTraceId(): Long? = activeTransmitTraceId
 
+    /**
+     * Whether the relay has agreed to carry this transmission.
+     *
+     * A press cannot ask -- capture is armed only after the acknowledgement,
+     * so by the time there is anything to send the answer is always yes. VOX
+     * needs it: the microphone is already open there, so frames exist before
+     * the relay has decided, and the relay drops audio while it decides.
+     */
+    fun isTransmitAuthorized(): Boolean = transmitAuthorized
+
     fun startTalking() {
         if (!isConnectedOnSocket() || myUserId == null) return
 
@@ -1667,12 +1677,14 @@ object WebSocketManager {
         if (!internalIsTalking || captureStarted) return
         val target = internalPtpTargetId
         // Claim the capture only once the source is known, so a transmission
-        // with no channel yet can still start when one arrives.
-        val source = if (!target.isNullOrEmpty()) "private_$target" else currentChannelSlug ?: return
+        // with no channel yet can still start when one arrives. Capture itself
+        // is told nothing: a frame carries a user id and the relay resolves the
+        // room from it, so the destination was never this side's to pass.
+        if (target.isNullOrEmpty() && currentChannelSlug == null) return
 
         cancelAuthorizationFallback()
         captureStarted = true
-        AudioRecorder.startRecording(source)
+        AudioRecorder.startRecording()
     }
 
     fun stopTalking() {
