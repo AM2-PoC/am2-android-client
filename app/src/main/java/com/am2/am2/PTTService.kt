@@ -151,7 +151,7 @@ class PTTService : Service() {
         AudioRecorder.voxEnabled = voxEnabled
         AudioRecorder.gatewayModeEnabled = gatewayMode
         AudioRecorder.setVoxThreshold(
-            prefs.getInt("vox_threshold", AudioRecorder.VOX_THRESHOLD_DEFAULT),
+            prefs.getInt("vox_threshold", VoxSensitivity.DEFAULT_THRESHOLD),
         )
 
         if ((voxEnabled || gatewayMode) && WebSocketManager.isConnected()) {

@@ -102,8 +102,8 @@ class SettingActivity : BaseActivity() {
 
         binding.cbPttToggle.isChecked = prefs.getBoolean("ptt_toggle", false)
         binding.cbVox.isChecked = prefs.getBoolean("vox_enabled", false)
-        binding.sbVoxSensitivity.progress = voxSensitivityFromThreshold(
-            prefs.getInt("vox_threshold", AudioRecorder.VOX_THRESHOLD_DEFAULT),
+        binding.sbVoxSensitivity.progress = VoxSensitivity.progressFor(
+            prefs.getInt("vox_threshold", VoxSensitivity.DEFAULT_THRESHOLD),
         )
         binding.cbShowVirtualPtt.isChecked = prefs.getBoolean("show_virtual_ptt", true)
         binding.cbShowInfoBox.isChecked = prefs.getBoolean("show_info_box", true)
@@ -188,7 +188,7 @@ class SettingActivity : BaseActivity() {
             override fun onStartTrackingTouch(bar: SeekBar?) {}
             override fun onStopTrackingTouch(bar: SeekBar?) {
                 prefs.edit()
-                    .putInt("vox_threshold", voxThresholdFromSensitivity(bar?.progress ?: 0))
+                    .putInt("vox_threshold", VoxSensitivity.thresholdFor(bar?.progress ?: 0))
                     .apply()
                 notifyVoxChanged()
             }
@@ -271,22 +271,6 @@ class SettingActivity : BaseActivity() {
         } catch (e: Exception) {
             SafeLog.e("SettingActivity", "Failed to notify PTTService: ${e.message}")
         }
-    }
-
-    /*
-     * Sensitivity runs the opposite way to the amplitude threshold behind it:
-     * a fuller bar means VOX keys on a quieter voice, which is a smaller
-     * number. Both directions are written out so neither drifts.
-     */
-    private fun voxThresholdFromSensitivity(progress: Int): Int {
-        val span = AudioRecorder.VOX_THRESHOLD_MAX - AudioRecorder.VOX_THRESHOLD_MIN
-        return AudioRecorder.VOX_THRESHOLD_MAX - (progress.coerceIn(0, 100) * span / 100)
-    }
-
-    private fun voxSensitivityFromThreshold(threshold: Int): Int {
-        val span = AudioRecorder.VOX_THRESHOLD_MAX - AudioRecorder.VOX_THRESHOLD_MIN
-        val clamped = threshold.coerceIn(AudioRecorder.VOX_THRESHOLD_MIN, AudioRecorder.VOX_THRESHOLD_MAX)
-        return (AudioRecorder.VOX_THRESHOLD_MAX - clamped) * 100 / span
     }
 
     private fun performResetToDefault() {
