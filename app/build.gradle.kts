@@ -170,6 +170,44 @@ android {
                 }
             }
         }
+
+        /*
+         * The Play artifact.
+         *
+         * The same application as `production`, talking to the same endpoints,
+         * and deliberately without an applicationIdSuffix: a suffix would make
+         * this a different app that could never upgrade an installation
+         * already in the field.
+         *
+         * What differs is that it cannot update itself. Play does not permit
+         * an app it distributes to install an APK outside Play, so
+         * SELF_UPDATE_ENABLED stays false and REQUEST_INSTALL_PACKAGES is
+         * stripped from the merged manifest in src/play. Leaving the
+         * permission in place and merely unused would still read, to a
+         * reviewer, as a permission the app asked for.
+         *
+         * The update URLs are still defined because AboutActivity references
+         * them at compile time; with self-update off they are never fetched.
+         */
+        create("play") {
+            dimension = "environment"
+            buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "false")
+            buildConfigField(
+                "String",
+                "WEBSOCKET_URL",
+                quotedBuildConfig(validateEndpoint("play", "wss://apiapi.am2-poc.com", "wss", "apiapi.am2-poc.com")),
+            )
+            buildConfigField(
+                "String",
+                "UPDATE_MANIFEST_URL",
+                quotedBuildConfig(validateEndpoint("play", "https://apiapi.am2-poc.com/update/version.json", "https", "apiapi.am2-poc.com")),
+            )
+            buildConfigField(
+                "String",
+                "UPDATE_APK_URL",
+                quotedBuildConfig(validateEndpoint("play", "https://apiapi.am2-poc.com/update/update.apk", "https", "apiapi.am2-poc.com")),
+            )
+        }
     }
 
     signingConfigs {
