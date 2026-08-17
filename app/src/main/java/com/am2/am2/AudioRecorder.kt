@@ -164,6 +164,20 @@ object AudioRecorder {
                         }
                     }
 
+                    if (!success) {
+                        /*
+                         * Every source refused. That is what a Bluetooth route
+                         * in the wrong state looks like, and it used to end
+                         * here: the thread fell through to `finally`, the
+                         * talking state it was started for was never cleared,
+                         * and the UI held TX while no frame was ever sent. The
+                         * operator was told nothing -- the failure that looks
+                         * exactly like working.
+                         */
+                        SafeLog.e(TAG, "No audio source could be opened; capture refused")
+                        WebSocketManager.onCaptureFailed()
+                    }
+
                     if (success && isRecording) {
                         val pcmBuffer = ShortArray(FRAME_SIZE)
                         val audioFilter = AudioFilter(SAMPLE_RATE)

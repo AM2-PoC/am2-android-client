@@ -64,12 +64,17 @@ class AudioRouteReadinessTest(unittest.TestCase):
 
     def test_bluetooth_keeps_the_original_worst_case_bound(self):
         # The fallback still guarantees audio, but the longer bound is only paid
-        # when a Bluetooth route genuinely has not reported ready.
+        # when a route that can actually carry a microphone has not reported
+        # ready. It used to key off mere Bluetooth presence, which made an
+        # A2DP-only speaker -- a device with no input to wait for -- extend the
+        # bound as though a headset were still connecting. The bound now asks
+        # the same question isCaptureRouteReady() asks.
         self.assertIn("private const val AUTHORIZATION_FALLBACK_MS = 500L", self.ws)
         self.assertIn("private const val BLUETOOTH_ROUTE_FALLBACK_MS = 700L", self.ws)
         arm = section(self.ws, "private fun armAuthorizationFallback()", "\n    }")
         self.assertIn("BLUETOOTH_ROUTE_FALLBACK_MS", arm)
-        self.assertIn("isBluetoothConnected", arm)
+        self.assertIn("isBluetoothScoCapable", arm)
+        self.assertNotIn("isBluetoothConnected", arm)
 
     def test_no_fixed_delay_returns_to_the_press_path(self):
         start = section(self.ws, "fun startTalking()", "private fun executePttStartSignal()")
