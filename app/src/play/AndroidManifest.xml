@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Removes the one permission the Play artifact must not carry.
+
+    The app's field distribution installs its own updates, which is what
+    REQUEST_INSTALL_PACKAGES is for. Play does not permit that for an app it
+    distributes, and a reviewer reads the permission list rather than the code
+    that would have used it. So the permission is removed from the merged
+    manifest here instead of being left present and unreachable.
+
+    SELF_UPDATE_ENABLED is already false for this flavour, so nothing in the
+    app reaches for it. This file is the half that survives someone flipping
+    that flag back.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.REQUEST_INSTALL_PACKAGES"
+        tools:node="remove" />
+
+</manifest>
