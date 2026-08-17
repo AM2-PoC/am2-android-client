@@ -65,11 +65,9 @@ class RecorderLifecycleContractTest(unittest.TestCase):
         # atomic, or named here as deliberately confined to one thread.
         confined = {
             # Written and read only by the recording thread, inside handleVoxLogic.
-            "voxTriggerCount", "voxSilenceTimer",
+            "voxTriggerCount", "voxSilenceTimer", "lastVoxTriggerAt",
             # Set once during init, before any thread reads it.
             "appContext",
-            # Never written after initialisation.
-            "voxThreshold",
         }
         # Public vars count too: settings write them, the recording thread reads
         # them. Restricting this to `private` is how two of them were missed.

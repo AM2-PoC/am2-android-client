@@ -49,6 +49,17 @@ class PTTService : Service() {
         const val ACTION_START_PTT = "com.am2.am2.ACTION_START_PTT"
         const val ACTION_STOP_PTT = "com.am2.am2.ACTION_STOP_PTT"
         const val ACTION_UPDATE_VOX = "com.am2.am2.ACTION_UPDATE_VOX"
+
+        /*
+         * The recorder asking for VOX back after losing the microphone.
+         *
+         * Separate from ACTION_UPDATE_VOX because it carries a delay: the
+         * recording thread cannot serve its own wait -- the next
+         * startRecording joins it, so a thread that slept before exiting would
+         * make that join time out and refuse the restart it just asked for.
+         */
+        const val ACTION_VOX_RESTART = "com.am2.am2.ACTION_VOX_RESTART"
+        const val EXTRA_RESTART_DELAY_MS = "restart_delay_ms"
     }
 
     private val talkingStatusObserver = Observer<String> { status ->
@@ -139,11 +150,12 @@ class PTTService : Service() {
         
         AudioRecorder.voxEnabled = voxEnabled
         AudioRecorder.gatewayModeEnabled = gatewayMode
-        
-        val channel = WebSocketManager.currentChannelSlug ?: "default"
+        AudioRecorder.setVoxThreshold(
+            prefs.getInt("vox_threshold", AudioRecorder.VOX_THRESHOLD_DEFAULT),
+        )
 
         if ((voxEnabled || gatewayMode) && WebSocketManager.isConnected()) {
-            AudioRecorder.startRecording(channel)
+            AudioRecorder.startRecording()
         } else if (!voxEnabled && !gatewayMode) {
             // Hentikan rekaman secara paksa jika VOX dan Gateway dimatikan
             AudioRecorder.stopRecording(true)
@@ -416,7 +428,15 @@ class PTTService : Service() {
         val isPtpActive = WebSocketManager.ptpTargetId.value != null
 
         if (voxEnabled && !fromVox && !isPtpActive) {
-            return 
+            /*
+             * VOX owns the transmit decision, so the press is refused -- but
+             * say so. The on-screen button is dimmed and explains itself; a
+             * Bluetooth or wired PTT button arrives here with no affordance at
+             * all and used to get nothing back, which is indistinguishable
+             * from a button that has stopped working.
+             */
+            SoundManager.playRefused()
+            return
         }
 
         val isRx = WebSocketManager.isRxOnly.value ?: false
@@ -532,6 +552,10 @@ class PTTService : Service() {
             }
             ACTION_STOP_PTT -> performStopTalking()
             ACTION_UPDATE_VOX -> checkVoxState()
+            ACTION_VOX_RESTART -> {
+                val delay = intent.getLongExtra(EXTRA_RESTART_DELAY_MS, 0L)
+                handler.postDelayed({ checkVoxState() }, delay)
+            }
             else -> {
                 MediaButtonReceiver.handleIntent(mediaSession, intent)
                 checkVoxState()
