@@ -78,7 +78,7 @@ class PttTraceContractTest(unittest.TestCase):
             p.read_text() for p in JAVA.rglob("*.kt")
         )))
         known = {
-            "button_down", "button_up", "capture_started", "end_sent",
+            "button_down", "button_up", "capture_failed", "capture_started", "end_sent",
             "frame_decoded", "frame_dropped", "frame_encoded", "frame_received",
             "frame_sent", "playback_written", "recorder_start_failed",
             "start_authorization_timeout", "start_authorized", "start_sent",
