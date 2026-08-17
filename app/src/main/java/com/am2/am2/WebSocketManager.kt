@@ -228,7 +228,6 @@ object WebSocketManager {
 
     private val pttHandler = Handler(Looper.getMainLooper())
     private var lastPttStartTime: Long = 0
-    private var lastPttEndTime: Long = 0
 
     private val idleCheckRunnable = object : Runnable {
         override fun run() {
@@ -1577,10 +1576,41 @@ object WebSocketManager {
         SoundManager.playRefused()
     }
 
+    /**
+     * The microphone never opened, so this is not a transmission.
+     *
+     * Every audio source refused -- the shape a Bluetooth route in the wrong
+     * state takes. The transmission used to stay up regardless: the UI held TX,
+     * the relay held the floor, and not one frame was ever sent. Nobody on the
+     * channel heard anything and the operator had no way to know, which makes it
+     * the worst kind of failure to have in a radio.
+     *
+     * Ending it is the honest answer. stopTalking() releases the floor and tells
+     * the relay; the refusal tone is the same one a refused press makes, because
+     * to the operator this is the same event -- the button did not take.
+     */
+    fun onCaptureFailed() {
+        pttHandler.post {
+            if (!internalIsTalking) return@post
+            activeTransmitTraceId?.let { PttTrace.emit(event = "capture_failed", traceId = it) }
+            captureStarted = false
+            stopTalking()
+            SoundManager.playRefused()
+            appContext?.let {
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(it, "Mikrofon tidak dapat dibuka", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     private fun armAuthorizationFallback() {
         cancelAuthorizationFallback()
         val traceId = activeTransmitTraceId ?: return
-        val bound = if (AudioDeviceManager.isBluetoothConnected && !AudioDeviceManager.isScoConnected) {
+        // The same question isCaptureRouteReady() asks. Keying off mere Bluetooth
+        // presence made an A2DP speaker -- which has no microphone to wait for --
+        // extend the bound as though a headset were still connecting.
+        val bound = if (AudioDeviceManager.isBluetoothScoCapable && !AudioDeviceManager.isScoConnected) {
             BLUETOOTH_ROUTE_FALLBACK_MS
         } else {
             AUTHORIZATION_FALLBACK_MS
@@ -1650,6 +1680,19 @@ object WebSocketManager {
              * used to queue another.
              */
             if (pendingStop == null) {
+                /*
+                 * Close the microphone now; hold only the slot.
+                 *
+                 * The recording loop runs until isTalkingNow() goes false, and
+                 * that is exactly what this deferral postpones -- so a short
+                 * press used to keep capturing, and whatever was said in the
+                 * room after the operator let go went out over the air. A
+                 * minimum transmission length is a floor policy; it was
+                 * behaving as a hot mic.
+                 */
+                AudioRecorder.stopRecording(force = true)
+                captureStarted = false
+
                 val deferred = Runnable {
                     pendingStop = null
                     stopTalking()
@@ -1662,7 +1705,6 @@ object WebSocketManager {
 
         pendingStop?.let { pttHandler.removeCallbacks(it) }
         pendingStop = null
-        lastPttEndTime = now
         internalIsTalking = false
         captureStarted = false
         transmitAuthorized = false
