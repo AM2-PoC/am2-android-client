@@ -7,6 +7,37 @@ plugins {
 
 val approvedSigner = providers.gradleProperty("AM2_APPROVED_SIGNER_SHA256").orElse("")
 
+/*
+ * Release signing material, supplied from outside the repository.
+ *
+ * Absent by default, because CI builds the production artifact unsigned on
+ * purpose -- the release key is deliberately not there. An unconfigured build
+ * is legitimate and has to keep working.
+ *
+ * The state worth guarding is the one in between. Hand Gradle a keystore path
+ * with no password and it attaches no signing config at all, so the release
+ * artifact comes out signed with the *debug* key: it builds, it installs, and
+ * it is not a release. Nothing in the output says otherwise.
+ *
+ * This check runs at configuration time, so a half-configured machine fails
+ * every Gradle invocation rather than only the release task. That is the
+ * intent: the wrong state should be loud where it is set, not discovered
+ * later in an artifact that already shipped.
+ */
+val signingProps: Map<String, String?> = listOf(
+    "AM2_KEYSTORE_FILE",
+    "AM2_KEYSTORE_PASSWORD",
+    "AM2_KEY_ALIAS",
+    "AM2_KEY_PASSWORD",
+).associateWith { name ->
+    providers.gradleProperty(name).orNull?.takeIf { it.isNotBlank() }
+}
+val signingConfigured = signingProps.values.all { it != null }
+require(signingConfigured || signingProps.values.all { it == null }) {
+    "Release signing is half configured; missing: " +
+        signingProps.filterValues { it == null }.keys.joinToString(", ")
+}
+
 /**
  * The build's identity, supplied by CI as its run number.
  *
@@ -141,8 +172,22 @@ android {
         }
     }
 
+    signingConfigs {
+        if (signingConfigured) {
+            create("release") {
+                storeFile = file(signingProps.getValue("AM2_KEYSTORE_FILE")!!)
+                storePassword = signingProps.getValue("AM2_KEYSTORE_PASSWORD")
+                keyAlias = signingProps.getValue("AM2_KEY_ALIAS")
+                keyPassword = signingProps.getValue("AM2_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Null when unconfigured, which leaves the artifact unsigned --
+            // the deliberate CI behaviour. It is never the debug config.
+            signingConfig = if (signingConfigured) signingConfigs.getByName("release") else null
             isMinifyEnabled = true
             isShrinkResources = false
             proguardFiles(
