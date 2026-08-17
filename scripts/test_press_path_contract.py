@@ -53,27 +53,29 @@ class PressPathContractTest(unittest.TestCase):
         self.assertLess(signal, self.start.index("SoundManager.playStartTx()"),
                         "the tone is played before the relay is even asked")
 
-    def test_the_minimum_transmission_is_named_and_is_the_only_spacing_rule(self):
-        self.assertIn("MIN_TRANSMISSION_MS", self.ws)
-        # The second timer measured from a value the first one kept moving, so
-        # the two compounded into a lockout neither of them intended.
+    def test_no_spacing_rule_stands_between_two_presses(self):
+        # Two timers used to compound here: the second measured from a value the
+        # first kept moving, so a 50 ms tap locked the button for 800 ms. The
+        # compounding went first and the remaining 500 ms floor went with it --
+        # release is the end of a transmission, and the next press is immediate.
+        self.assertNotIn("MIN_TRANSMISSION_MS", self.ws,
+                         "a minimum transmission length still gates the release")
         self.assertNotRegex(self.ws, r"now - lastPttEndTime < \d+",
                             "a second, unnamed spacing rule is still in place")
         for literal in ("300", "500"):
             self.assertNotIn(f"< {literal})", self.start,
                              f"a bare {literal} is still deciding press behaviour")
 
-    def test_a_deferred_stop_does_not_push_the_end_further_away(self):
+    def test_the_release_is_not_deferred_at_all(self):
+        # There is nothing left to cancel or to queue twice, because the release
+        # no longer schedules any part of itself. What remains deferred is the
+        # end *signal*, which only lets the last frames land; see
+        # test_release_ends_transmission.py.
         stop = section(self.ws, "fun stopTalking()", "fun startVideoStreaming()")
-        # Restamping on re-entry is what turned a 50 ms tap into 800 ms.
-        self.assertNotRegex(stop, r"lastPttEndTime = now[\s\S]{0,200}?postDelayed",
-                            "the end time is still stamped before the deferral")
-
-    def test_a_deferred_stop_is_cancellable_and_cannot_queue_twice(self):
-        self.assertIn("pendingStop", self.ws)
-        stop = section(self.ws, "fun stopTalking()", "fun startVideoStreaming()")
+        self.assertNotIn("pendingStop", self.ws,
+                         "the deferred-stop machinery is still present")
         self.assertNotRegex(stop, r"postDelayed\(\{\s*stopTalking\(\)",
-                            "the deferral is still an anonymous lambda nobody can cancel")
+                            "stopTalking still re-posts itself")
 
     def test_a_refused_press_tells_the_operator(self):
         # Returning in silence is why the button felt broken rather than busy.

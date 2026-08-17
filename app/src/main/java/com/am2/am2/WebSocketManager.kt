@@ -58,6 +58,17 @@ object WebSocketManager {
     private const val BLUETOOTH_ROUTE_FALLBACK_MS = 700L
 
     /*
+     * How long the end signal waits for the last frames to land.
+     *
+     * The relay discards audio from a speaker it has already removed, so ending
+     * the instant the key is released truncates the transmission. This is not a
+     * debounce and the operator cannot feel it: everything they perceive --
+     * the flag, the UI, the mute state, the microphone -- is already settled
+     * before it starts.
+     */
+    private const val TRANSMIT_TAIL_DRAIN_MS = 100L
+
+    /*
      * The shortest transmission that is worth sending.
      *
      * A tap shorter than this arrives as a clipped syllable and a roger beep,
@@ -66,7 +77,6 @@ object WebSocketManager {
      * end time the first rule kept moving, and together they turned a 50 ms tap
      * into an 800 ms dead button.
      */
-    private const val MIN_TRANSMISSION_MS = 500L
 
     private val RECONNECT_TOKEN = Any()
 
@@ -132,7 +142,6 @@ object WebSocketManager {
     @Volatile private var transmitAuthorized = false
     private var pendingAuthTimeout: Runnable? = null
     /* The one deferred stop, held so it can be cancelled and never queued twice. */
-    @Volatile private var pendingStop: Runnable? = null
 
     private val _activeVideoStreamers = MutableLiveData<Set<String>>(emptySet())
     val activeVideoStreamers: LiveData<Set<String>> = _activeVideoStreamers
@@ -1461,13 +1470,6 @@ object WebSocketManager {
         if (isRx && ptpId == null) return
         if (internalIsTalking || ptpRequestPending) return
 
-        // Refused only while the previous transmission is still on the air.
-        // Once it has ended there is nothing left to protect.
-        if (pendingStop != null) {
-            onPressRefused()
-            return
-        }
-
         val now = System.currentTimeMillis()
         lastPttStartTime = now
 
@@ -1665,46 +1667,6 @@ object WebSocketManager {
     fun stopTalking() {
         if (!internalIsTalking) return
 
-        val now = System.currentTimeMillis()
-        val elapsed = now - lastPttStartTime
-
-        if (elapsed < MIN_TRANSMISSION_MS) {
-            /*
-             * Hold the key open to the floor, once.
-             *
-             * The end time is deliberately not stamped here: it used to be
-             * stamped on every re-entry, so each deferral pushed the next
-             * permitted press further away. And the deferral is held rather
-             * than posted anonymously, because several sources can ask to stop
-             * — the button, VOX, a disconnect, a relay error — and each one
-             * used to queue another.
-             */
-            if (pendingStop == null) {
-                /*
-                 * Close the microphone now; hold only the slot.
-                 *
-                 * The recording loop runs until isTalkingNow() goes false, and
-                 * that is exactly what this deferral postpones -- so a short
-                 * press used to keep capturing, and whatever was said in the
-                 * room after the operator let go went out over the air. A
-                 * minimum transmission length is a floor policy; it was
-                 * behaving as a hot mic.
-                 */
-                AudioRecorder.stopRecording(force = true)
-                captureStarted = false
-
-                val deferred = Runnable {
-                    pendingStop = null
-                    stopTalking()
-                }
-                pendingStop = deferred
-                pttHandler.postDelayed(deferred, MIN_TRANSMISSION_MS - elapsed)
-            }
-            return
-        }
-
-        pendingStop?.let { pttHandler.removeCallbacks(it) }
-        pendingStop = null
         internalIsTalking = false
         captureStarted = false
         transmitAuthorized = false
@@ -1726,30 +1688,37 @@ object WebSocketManager {
 
         AudioRecorder.stopRecording()
 
-        pttHandler.postDelayed({
-            if (!internalIsTalking) {
-                val target = internalPtpTargetId
+        /*
+         * Tell the relay last, so the tail is not cut off.
+         *
+         * This used to run only `if (!internalIsTalking)`, so a press inside the
+         * window meant the previous transmission's end was never sent at all. It
+         * recovered only because the next start re-added the speaker, which is
+         * luck rather than design. The transmission that is ending is identified
+         * by its own trace id, so a newer press cannot swallow it.
+         */
+        val endingTraceId = activeTransmitTraceId
+        val endingTarget = internalPtpTargetId
+        val endingChannel = currentChannelSlug
+        activeTransmitTraceId = null
+        transmitFrameSequence = 0L
 
-                if (!target.isNullOrEmpty()) {
+        pttHandler.postDelayed({
+            if (!endingTarget.isNullOrEmpty()) {
+                emit(
+                    "ptt_audio_end_private",
+                    JSONObject().put("target_id", endingTarget).put("trace_id", endingTraceId),
+                )
+            } else {
+                endingChannel?.let {
                     emit(
-                        "ptt_audio_end_private",
-                        JSONObject().put("target_id", target).put("trace_id", activeTransmitTraceId),
+                        "ptt_audio_end",
+                        JSONObject().put("channel_slug", it).put("trace_id", endingTraceId),
                     )
-                } else {
-                    currentChannelSlug?.let {
-                        emit(
-                            "ptt_audio_end",
-                            JSONObject().put("channel_slug", it).put("trace_id", activeTransmitTraceId),
-                        )
-                    }
                 }
-                activeTransmitTraceId?.let { traceId ->
-                    PttTrace.emit(event = "end_sent", traceId = traceId)
-                }
-                activeTransmitTraceId = null
-                transmitFrameSequence = 0L
             }
-        }, 100)
+            endingTraceId?.let { PttTrace.emit(event = "end_sent", traceId = it) }
+        }, TRANSMIT_TAIL_DRAIN_MS)
     }
 
     fun startVideoStreaming() {

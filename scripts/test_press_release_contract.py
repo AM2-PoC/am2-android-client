@@ -43,20 +43,22 @@ def section(text, start, end):
 
 
 class ReleaseStopsTheMicrophone(unittest.TestCase):
-    def test_the_deferred_stop_releases_capture_immediately(self):
-        """Letting go must close the microphone, whatever the floor policy is.
+    def test_release_closes_capture(self):
+        """Letting go must close the microphone.
 
-        Holding the transmission slot open is a defensible choice. Holding the
-        *microphone* open is not: it broadcasts the room after the operator
-        stopped speaking, and they have no way to know.
+        This was first missed while a minimum transmission length held the slot:
+        the recording loop ran until the talking flag cleared, and the deferral
+        was what postponed it, so the room went out over the air after the
+        operator stopped speaking. The floor has since been removed entirely,
+        which makes the microphone close on release by construction -- and this
+        keeps it that way if a hold is ever reintroduced.
         """
         body = section(read(SOCKET), "fun stopTalking()", "\n    fun ")
-        deferral = body[: body.index("pendingStop?.let")]
+        head = body[: body.index("postDelayed")] if "postDelayed" in body else body
         self.assertRegex(
-            deferral,
+            head,
             r"AudioRecorder\.stopRecording\(",
-            "the microphone stays open for the rest of the minimum transmission, "
-            "so the room is transmitted after the operator let go",
+            "the microphone is not closed before the release returns",
         )
 
 
