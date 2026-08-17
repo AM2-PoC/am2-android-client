@@ -70,7 +70,15 @@ object TlsCompat {
             // OkHttp 3.12's default COMPATIBLE_TLS fallback is TLS 1.0-only.
             // Keep the modern spec so API 16/19 can negotiate TLS 1.2 where
             // the platform supports it; never re-enable TLS 1.0/1.1.
-            .connectionSpecs(listOf(ConnectionSpec.MODERN_TLS))
+            //
+            // CLEARTEXT is listed because replacing the specs replaces all of
+            // them, and OkHttp refuses an http:// URL outright when it is
+            // absent. That silently killed the ip-api geolocation fallback --
+            // the app's only plain-HTTP call, and its last resort for a fix --
+            // on every device below API 24, which is exactly the hardware most
+            // likely to need it. It permits no plaintext that the manifest and
+            // network_security_config do not already allow.
+            .connectionSpecs(listOf(ConnectionSpec.MODERN_TLS, ConnectionSpec.CLEARTEXT))
             .sslSocketFactory(
                 socketFactory,
                 compositeTrustManager
