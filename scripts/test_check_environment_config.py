@@ -72,9 +72,34 @@ class EnvironmentConfigTest(unittest.TestCase):
         text = GRADLE.read_text()
         for host in ("dev-api.am2-poc.com", "staging-apiapi.am2-poc.com", "apiapi.am2-poc.com"):
             self.assertIn(f'"https://{host}/update/update.apk"', text)
-        self.assertEqual(3, text.count("UPDATE_APK_URL"))
-        # Staging must be able to exercise the update path it now owns.
-        self.assertEqual(3, text.count("SELF_UPDATE_ENABLED"))
+
+        # Counted against the flavours themselves rather than a literal, so
+        # adding one cannot leave it silently sharing another's endpoint --
+        # and so the assertion does not have to be re-derived by hand every
+        # time the flavour list grows.
+        flavours = self.flavour_names(text)
+        self.assertEqual(
+            len(flavours), text.count("UPDATE_APK_URL"),
+            f"one of {flavours} does not declare its own update APK URL",
+        )
+        # One per flavour, plus the defaultConfig value they override. Staging
+        # and play both need their own: staging exercises the update path it
+        # owns, play must have it switched off.
+        self.assertEqual(
+            len(flavours) + 1, text.count("SELF_UPDATE_ENABLED"),
+            f"one of {flavours} does not state whether it updates itself",
+        )
+
+    @staticmethod
+    def flavour_names(text: str) -> list:
+        """The product flavours, and not the signing configs beside them.
+
+        Both are declared with `create("name")`, so this is scoped to the
+        productFlavors block, which closes at four spaces where its contents
+        do not.
+        """
+        block = text[text.index("productFlavors {"):]
+        return re.findall(r'create\("(\w+)"\)', block[:block.index("\n    }")])
 
     def test_nonproduction_urls_are_not_production_hosts(self):
         text = GRADLE.read_text()
