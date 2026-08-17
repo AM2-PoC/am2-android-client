@@ -53,5 +53,40 @@ class TlsFixtureResponseTest(unittest.TestCase):
         self.assertTrue(response.startswith(b"HTTP/1.1 400 Bad Request\r\n"))
 
 
+class TlsFixtureAcceptLoopTest(unittest.TestCase):
+    """The fixture must survive the handshakes the tests deliberately abort.
+
+    Two instrumented tests exist to prove a bad certificate is rejected, and
+    rejection means the client tears the connection down mid-handshake. The
+    accept loop caught only `ssl.SSLError`, so a peer reset -- `ConnectionResetError`
+    -- propagated out of `main()` and killed the fixture.
+
+    JUnit4 does not run methods in source order. Whenever a negative test ran
+    first, every remaining test in the class then failed against a dead server,
+    and the legacy lanes reported a confusing multi-test failure whose cause was
+    nowhere in the output.
+    """
+
+    def setUp(self):
+        self.source = MODULE_PATH.read_text(encoding="utf-8")
+
+    def test_an_aborted_handshake_does_not_kill_the_fixture(self):
+        self.assertIn(
+            "OSError",
+            self.source,
+            "only ssl.SSLError is caught; a peer reset ends the accept loop",
+        )
+
+    def test_a_stalled_peer_cannot_wedge_the_accept_loop(self):
+        # wrap_socket runs inline in a single-threaded loop, so a client that
+        # connects and then says nothing blocks every later connection forever.
+        self.assertIn(
+            "settimeout",
+            self.source,
+            "the handshake has no timeout; one silent peer stops the fixture",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
+
