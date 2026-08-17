@@ -32,6 +32,11 @@ from pathlib import Path
 
 FIELD = re.compile(r"(\w+)=(-?\d+|\w+)")
 
+# One Opus frame of audio. AudioRecorder captures 320 samples at 16 kHz, so the
+# device owes the socket one frame every 20 ms; the relay uses the same figure
+# to judge arrivals. Send pacing is measured against it.
+FRAME_INTERVAL_MS = 20.0
+
 # Ordered stages within one transmission on the sending device. Each pair is
 # reported as the time from the first event to the second.
 TRANSMIT_SEGMENTS = [
@@ -96,6 +101,66 @@ def durations_ms(stages, start, end):
     return out
 
 
+def send_pacing_ms(events, frame_interval_ms=FRAME_INTERVAL_MS):
+    """How far behind its own schedule the sending device fell, per sample gap.
+
+    Audio is produced at a fixed rate, so between two `frame_sent` samples the
+    elapsed time *should* be the number of frames between them times the frame
+    interval. Anything more was spent somewhere between the microphone and the
+    socket, on this device, measured on one clock with no network in it.
+
+    That is the number the relay cannot obtain. It sees only arrivals, so it
+    cannot separate a handset that produced frames unevenly from a network that
+    delivered even ones unevenly -- and those have opposite fixes.
+
+    Positive means the device fell behind. Negative means frames reached the
+    socket faster than real time, which is a burst after a hold rather than
+    good news, so the sign is kept.
+
+    Grouped per transmission: two presses are two schedules, and measuring
+    across the gap between them would report the operator's thinking time as a
+    device stall.
+    """
+    per_trace = defaultdict(list)
+    for event in events:
+        if event.get("event") != "frame_sent" or "frame_seq" not in event:
+            continue
+        try:
+            per_trace[event["trace_id"]].append(
+                (int(event["frame_seq"]), event["mono_ns"]))
+        except (TypeError, ValueError):
+            continue
+
+    errors = []
+    for samples in per_trace.values():
+        # By sequence, not by log order: logcat interleaves.
+        samples.sort()
+        for (seq_a, ns_a), (seq_b, ns_b) in zip(samples, samples[1:]):
+            expected_ms = (seq_b - seq_a) * frame_interval_ms
+            actual_ms = (ns_b - ns_a) / 1_000_000
+            errors.append(round(actual_ms - expected_ms, 3))
+    return errors
+
+
+def report_send_pacing(events):
+    """Whether the frames left late, which is the half the relay cannot see."""
+    errors = send_pacing_ms(events)
+    if not errors:
+        return
+    behind = [e for e in errors if e > 0]
+    print("\nsend pacing (this device, no network)")
+    print("-" * 73)
+    print(f"{'schedule error between samples':<38}"
+          f"{len(errors):>5}{percentile(errors, 0.5):>10.1f}"
+          f"{percentile(errors, 0.95):>10.1f}{max(errors):>10.1f}")
+    print(f"\n  gaps where the device fell behind: {len(behind)} of {len(errors)}")
+    print("\n  Compare against the relay's uplink_jitter_ms and stalls for the")
+    print("  same session. Near zero here while the relay reports stalls means")
+    print("  the frames left on time and the network delayed them. Matching")
+    print("  numbers mean the device produced them late, and the transport is")
+    print("  not the thing to change.")
+
+
 def percentile(values, fraction):
     ordered = sorted(values)
     index = min(len(ordered) - 1, int(round(fraction * (len(ordered) - 1))))
@@ -156,6 +221,7 @@ def main():
         if not sent and not received:
             print("no complete segment found; was the capture taken during a transmission?")
         report_backlog(events)
+        report_send_pacing(events)
 
     print("\nSegments are within one device. Do not subtract a timestamp on one")
     print("device from a timestamp on another: the clocks share no origin.")
