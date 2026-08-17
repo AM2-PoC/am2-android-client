@@ -58,6 +58,17 @@ object WebSocketManager {
     private const val BLUETOOTH_ROUTE_FALLBACK_MS = 700L
 
     /*
+     * How long a speaker stays listed with no frames arriving.
+     *
+     * A fallback, not the rule: ptt_active_status clears the list
+     * authoritatively about a hundred milliseconds after the key is released.
+     * This only has to cover an end message that never arrives at all -- a lost
+     * packet, a sender that dropped off -- so it is a backstop rather than the
+     * thing the indicator normally waits for.
+     */
+    private const val SPEAKER_FRAME_IDLE_MS = 2000L
+
+    /*
      * How long the end signal waits for the last frames to land.
      *
      * The relay discards audio from a speaker it has already removed, so ending
@@ -1309,7 +1320,7 @@ object WebSocketManager {
                 val speaker = iterator.next()
                 val last = speakerLastSeen[speaker] ?: 0L
 
-                if (now - last > 2000) {
+                if (now - last > SPEAKER_FRAME_IDLE_MS) {
                     iterator.remove()
                     speakerLastSeen.remove(speaker)
                 }

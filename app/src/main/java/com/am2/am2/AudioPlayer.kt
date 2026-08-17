@@ -20,6 +20,8 @@ object AudioPlayer {
     private const val FRAME_BYTES = 640
     /* Long enough for the mixer to leave its loop at a frame boundary. */
     private const val MIXER_DRAIN_TIMEOUT_MS = 200L
+    /** Write-to-head-position reporting lag, not the length of a transmission. */
+    private const val PLAYBACK_REPORT_GRACE_MS = 150L
     /* One frame, so a wait costs exactly what a frame is worth. */
     private const val FRAME_MS = 20L
     private val setupPending = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -67,9 +69,21 @@ object AudioPlayer {
         // Cek apakah hardware masih memproses data
         val isHardwarePlaying = totalFramesWritten > head
         
-        // Hang-time (Grace Period) 1000ms untuk menutupi latency hardware/OS 
-        // agar UI tidak berkedip ke IDLE saat suara sebenarnya masih terdengar tipis di akhir.
-        val isWithinGracePeriod = (System.currentTimeMillis() - lastDataWriteTime) < 1000
+        /*
+         * Only the reporting lag, not the transmission.
+         *
+         * The line above is the precise answer: the hardware's own account of
+         * what it still has to render. This covers the short window where a
+         * write has landed but the head position has not caught up yet, so the
+         * indicator does not flicker to idle mid-speech.
+         *
+         * It was a flat second, which is not lag -- it is long enough to
+         * outlast the tail entirely, so the receiving handset kept showing the
+         * sender as talking well after the audio had finished and the relay had
+         * already broadcast an empty speaker list.
+         */
+        val isWithinGracePeriod =
+            (System.currentTimeMillis() - lastDataWriteTime) < PLAYBACK_REPORT_GRACE_MS
         
         return isHardwarePlaying || isWithinGracePeriod
     }
