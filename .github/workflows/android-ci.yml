@@ -351,12 +351,41 @@ jobs:
       - uses: android-actions/setup-android@v3
       - name: Install Android toolchain
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
-      - name: Full unit tests and unsigned production APK
+      # The upload key. It used to be kept out of CI deliberately, and the lane
+      # produced an unsigned artifact somebody signed by hand. That is reversed:
+      # the key lives in repository secrets, the lane signs what it builds, and
+      # the operator uploads rather than re-signs.
+      #
+      # Written to RUNNER_TEMP, never the workspace -- the artifact upload step
+      # below globs a directory, and a key inside it would be published.
+      - name: Restore the upload key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.AM2_UPLOAD_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "AM2_UPLOAD_KEYSTORE_BASE64 is not set; a release cannot be signed" >&2
+            exit 1
+          fi
+          printf '%s' "${KEYSTORE_BASE64}" | base64 -d > "${RUNNER_TEMP}/upload.jks"
+      # Signing material through ORG_GRADLE_PROJECT_*, which Gradle reads as
+      # project properties. Passing it with -P would put the passwords in the
+      # process list.
+      - name: Full unit tests, signed production APK and Play bundle
         env:
           AM2_APPROVED_SIGNER_SHA256: ${{ vars.AM2_APPROVED_SIGNER_SHA256 }}
+          ORG_GRADLE_PROJECT_AM2_KEYSTORE_FILE: ${{ runner.temp }}/upload.jks
+          ORG_GRADLE_PROJECT_AM2_KEYSTORE_PASSWORD: ${{ secrets.AM2_UPLOAD_KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_AM2_KEY_ALIAS: ${{ secrets.AM2_UPLOAD_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_AM2_KEY_PASSWORD: ${{ secrets.AM2_UPLOAD_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
           test "$(printf '%s' "$AM2_APPROVED_SIGNER_SHA256" | tr -d ':' | tr '[:upper:]' '[:lower:]' | grep -Ec '^[0-9a-f]{64}$')" -eq 1
-          ./gradlew --no-daemon :app:test :app:assembleProductionRelease \
+          # Two outputs from one build: the APK the field sideloads, and the
+          # App Bundle Play has required for new apps since 2021. The bundle
+          # was named in the design and never actually produced by anything.
+          ./gradlew --no-daemon :app:test \
+            :app:assembleProductionRelease :app:bundlePlayRelease \
             -PAM2_APPROVED_SIGNER_SHA256="$AM2_APPROVED_SIGNER_SHA256" \
             -PAM2_VERSION_CODE="$GITHUB_RUN_NUMBER"
       - name: Record artifact identity
@@ -365,21 +394,27 @@ jobs:
           set -euo pipefail
           APK="$(find app/build/outputs/apk/production/release -name '*.apk' -type f -print -quit)"
           test -n "$APK"
+          AAB="$(find app/build/outputs/bundle/playRelease -name '*.aab' -type f -print -quit)"
+          test -n "$AAB"
           mkdir -p release-artifact
-          cp "$APK" release-artifact/am2-client-production-unsigned.apk
-          sha256sum release-artifact/am2-client-production-unsigned.apk > release-artifact/am2-client-production-unsigned.apk.sha256
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release-artifact/am2-client-production-unsigned.apk > release-artifact/apk-badging.txt
-          stat --printf='byte_size=%s\n' release-artifact/am2-client-production-unsigned.apk > release-artifact/build-metadata.txt
-          if "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs release-artifact/am2-client-production-unsigned.apk > release-artifact/signer-metadata.txt 2>&1; then
-            printf 'signed=true\n' >> release-artifact/signer-metadata.txt
-          else
-            printf 'signed=false\nsigner_sha256=none\n' > release-artifact/signer-metadata.txt
-          fi
+          cp "$APK" release-artifact/am2-client-production.apk
+          cp "$AAB" release-artifact/am2-client-play.aab
+          sha256sum release-artifact/am2-client-production.apk release-artifact/am2-client-play.aab \
+            > release-artifact/SHA256SUMS
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release-artifact/am2-client-production.apk > release-artifact/apk-badging.txt
+          stat --printf='apk_byte_size=%s\n' release-artifact/am2-client-production.apk > release-artifact/build-metadata.txt
+          stat --printf='aab_byte_size=%s\n' release-artifact/am2-client-play.aab >> release-artifact/build-metadata.txt
+          # Signed is now the expected state, so a verification failure has to
+          # stop the lane. It used to be recorded as signed=false and shipped,
+          # which was correct when unsigned was intended and is not any more.
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs \
+            release-artifact/am2-client-production.apk > release-artifact/signer-metadata.txt 2>&1
+          printf 'signed=true\n' >> release-artifact/signer-metadata.txt
           printf 'source_commit=%s\nenvironment=production\n' "$GITHUB_SHA" >> release-artifact/build-metadata.txt
       - name: Upload release candidate only
         uses: actions/upload-artifact@v4
         with:
-          name: am2-client-production-unsigned-${{ github.sha }}
+          name: am2-client-release-${{ github.sha }}
           path: release-artifact/
           if-no-files-found: error
           retention-days: 3
