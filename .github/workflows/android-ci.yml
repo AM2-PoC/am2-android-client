@@ -122,7 +122,42 @@ jobs:
       - uses: android-actions/setup-android@v3
       - name: Install Android toolchain
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+      # One key across every staging build, so a handset can be updated in
+      # place. Without it each runner generates its own throwaway debug key and
+      # the field pays an uninstall per round. The keystore arrives as base64
+      # because a secret is text; it is written outside the workspace so it
+      # cannot be picked up by any packaging step.
+      # One key across every staging build, so a handset can be updated in
+      # place. Without it each runner generates its own throwaway debug key and
+      # the field pays an uninstall per round. The keystore arrives as base64
+      # because a secret is text, and is written to RUNNER_TEMP rather than the
+      # workspace so no packaging step can pick it up.
+      - name: Restore the staging signing key
+        id: staging_key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.AM2_STAGING_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "::warning::no staging keystore configured; this APK cannot be installed over the previous one"
+            echo "path=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          printf '%s' "${KEYSTORE_BASE64}" | base64 -d > "${RUNNER_TEMP}/staging.jks"
+          echo "path=${RUNNER_TEMP}/staging.jks" >> "$GITHUB_OUTPUT"
+      # Passed as ORG_GRADLE_PROJECT_* rather than -P: Gradle reads those as
+      # project properties, and a password on the command line is visible in
+      # the process list to anything else running on the machine.
+      #
+      # All four empty is the unconfigured case and builds normally. Some but
+      # not all is a misconfiguration, and build.gradle.kts stops on it by
+      # name rather than quietly signing with the runner's own debug key.
       - name: Build one staging application and test APK
+        env:
+          ORG_GRADLE_PROJECT_AM2_STAGING_KEYSTORE_FILE: ${{ steps.staging_key.outputs.path }}
+          ORG_GRADLE_PROJECT_AM2_STAGING_KEYSTORE_PASSWORD: ${{ secrets.AM2_STAGING_KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_AM2_STAGING_KEY_ALIAS: ${{ secrets.AM2_STAGING_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_AM2_STAGING_KEY_PASSWORD: ${{ secrets.AM2_STAGING_KEY_PASSWORD }}
         run: ./gradlew --no-daemon -PAM2_VERSION_CODE="$GITHUB_RUN_NUMBER" :app:testStagingDebugUnitTest :app:assembleStagingDebug :app:assembleStagingDebugAndroidTest
       - name: Record immutable staging candidate identity
         shell: bash
