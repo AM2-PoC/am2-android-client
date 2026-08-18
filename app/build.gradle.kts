@@ -38,6 +38,39 @@ require(signingConfigured || signingProps.values.all { it == null }) {
         signingProps.filterValues { it == null }.keys.joinToString(", ")
 }
 
+/*
+ * The staging key, which is a different key on purpose.
+ *
+ * Android permits an install over an existing app only when the new package
+ * carries the *same* signature. It does not care whether the key is called
+ * debug or release -- a debug keystore holds a real private key. What matters
+ * is continuity, and this project has never had any: every staging APK is
+ * built on a runner that generates a debug key and discards it, so 1.1.119
+ * could not be overwritten by 1.1.124 and each round of field testing costs
+ * an operator their local state.
+ *
+ * Separate from the release key because this one has to live in CI to be of
+ * any use, and the upload key must not. Collapsing them would put the app's
+ * permanent identity on every runner that builds a staging APK.
+ *
+ * Unconfigured is legitimate: a developer without the key still builds and
+ * runs, falling back to their own debug key. Continuity only matters for the
+ * artifact that reaches a handset.
+ */
+val stagingSigningProps: Map<String, String?> = listOf(
+    "AM2_STAGING_KEYSTORE_FILE",
+    "AM2_STAGING_KEYSTORE_PASSWORD",
+    "AM2_STAGING_KEY_ALIAS",
+    "AM2_STAGING_KEY_PASSWORD",
+).associateWith { name ->
+    providers.gradleProperty(name).orNull?.takeIf { it.isNotBlank() }
+}
+val stagingSigningConfigured = stagingSigningProps.values.all { it != null }
+require(stagingSigningConfigured || stagingSigningProps.values.all { it == null }) {
+    "Staging signing is half configured; missing: " +
+        stagingSigningProps.filterValues { it == null }.keys.joinToString(", ")
+}
+
 /**
  * The build's identity, supplied by CI as its run number.
  *
@@ -211,6 +244,20 @@ android {
     }
 
     signingConfigs {
+        /*
+         * staging is a product flavour on the *debug* build type, so
+         * assembleStagingDebug signs with this one. Overriding the existing
+         * debug config rather than inventing a `staging` build type: a fourth
+         * build type would be one nobody assembles.
+         */
+        if (stagingSigningConfigured) {
+            getByName("debug") {
+                storeFile = file(stagingSigningProps.getValue("AM2_STAGING_KEYSTORE_FILE")!!)
+                storePassword = stagingSigningProps.getValue("AM2_STAGING_KEYSTORE_PASSWORD")
+                keyAlias = stagingSigningProps.getValue("AM2_STAGING_KEY_ALIAS")
+                keyPassword = stagingSigningProps.getValue("AM2_STAGING_KEY_PASSWORD")
+            }
+        }
         if (signingConfigured) {
             create("release") {
                 storeFile = file(signingProps.getValue("AM2_KEYSTORE_FILE")!!)
