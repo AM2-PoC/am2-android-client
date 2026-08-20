@@ -337,9 +337,20 @@ jobs:
   release-artifact:
     name: release-artifact
     needs: compatibility
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.lane == 'release')
+    # The ref check lives here rather than in a deployment branch policy on the
+    # `android-release` environment. That policy allowed main and v* and was the
+    # only thing stopping a dispatched release from an arbitrary branch -- the
+    # condition below used to accept any ref for lane=release. GitHub ignores
+    # environment protection rules outright on a private repository under Free,
+    # so the policy would have gone quiet without failing anything, leaving a
+    # line that looked like a guard. Conditions are read from the workflow file
+    # at the commit being run, and that does not depend on the plan.
+    if: >-
+      startsWith(github.ref, 'refs/tags/v')
+      || (github.event_name == 'workflow_dispatch'
+          && github.event.inputs.lane == 'release'
+          && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
-    environment: android-release
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
