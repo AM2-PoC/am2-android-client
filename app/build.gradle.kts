@@ -1,4 +1,5 @@
 import java.net.URI
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -91,6 +92,29 @@ val buildVersionCode = providers.gradleProperty("AM2_VERSION_CODE")
     }
     .orElse(1)
 
+/*
+ * The release a human declared, read from version.properties rather than
+ * written here.
+ *
+ * CI has to know this string to write the update manifest the field app fetches,
+ * and a quoted literal inside a build script is not something another job can
+ * read. -PAM2_VERSION_NAME overrides it for a one-off build.
+ */
+val buildVersionName = providers.gradleProperty("AM2_VERSION_NAME")
+    .orElse(
+        providers.provider {
+            val file = layout.projectDirectory.file("version.properties").asFile
+            require(file.isFile) { "version.properties is missing: ${file.path}" }
+            val declared = Properties()
+                .apply { file.inputStream().use { load(it) } }
+                .getProperty("versionName")
+                ?.trim()
+                .orEmpty()
+            require(declared.isNotEmpty()) { "version.properties declares no versionName" }
+            declared
+        }
+    )
+
 fun quotedBuildConfig(value: String): String = "\"$value\""
 
 fun validateEndpoint(environment: String, value: String, scheme: String, host: String): String {
@@ -112,7 +136,7 @@ android {
         minSdk = 16
         targetSdk = 35
         versionCode = buildVersionCode.get()
-        versionName = "1.1.${buildVersionCode.get()}"
+        versionName = buildVersionName.get()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -136,7 +160,7 @@ android {
         create("dev") {
             dimension = "environment"
             applicationIdSuffix = ".dev"
-            versionNameSuffix = "-dev"
+            versionNameSuffix = "-dev+${buildVersionCode.get()}"
             resValue("string", "app_name", "am² DEV")
             buildConfigField(
                 "String",
@@ -157,7 +181,7 @@ android {
         create("staging") {
             dimension = "environment"
             applicationIdSuffix = ".staging"
-            versionNameSuffix = "-staging"
+            versionNameSuffix = "-staging+${buildVersionCode.get()}"
             resValue("string", "app_name", "am² STAGING")
             // Staging carries its own channel, so the update path can be
             // exercised before a production release depends on it.
@@ -180,6 +204,12 @@ android {
         }
         create("production") {
             dimension = "environment"
+            /*
+             * Sideloaded to every unit and never listed anywhere, so it carries
+             * the build like the internal lanes do. Only `play` stays a plain
+             * release, because only `play` has a store listing to keep tidy.
+             */
+            versionNameSuffix = "+${buildVersionCode.get()}"
             buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "true")
             buildConfigField(
                 "String",
