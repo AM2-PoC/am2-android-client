@@ -19,6 +19,7 @@ than silently restoring the old behaviour.
 """
 
 import pathlib
+import json
 import re
 import unittest
 
@@ -121,6 +122,41 @@ class PublishedManifest(unittest.TestCase):
         missing = sorted(field for field in required if field not in workflow)
         self.assertFalse(
             missing, f"the build never publishes these required fields: {missing}"
+        )
+
+    def test_release_notes_are_published_in_every_language_the_panel_renders(self):
+        # The panel is bilingual and release notes are the one string on it that
+        # cannot live in a catalogue -- they are written per release, not per
+        # key. So the manifest carries an object keyed by locale, and both ends
+        # already know how to read one: am2_release_notes() in the panel and
+        # resolveReleaseNotes() in the relay, which fall back to a plain string
+        # for every manifest published before this.
+        #
+        # It used to publish "staging build from <sha>", which is not a release
+        # note in any language and which the version name now says better --
+        # 1.1.0-staging+124 identifies the build on its own.
+        notes = ROOT / "app/release-notes.json"
+        self.assertTrue(notes.is_file(), "app/release-notes.json is missing")
+
+        published = json.loads(notes.read_text())
+        self.assertEqual(
+            set(published), {"id", "en"},
+            "the panel renders both languages, so both must be published",
+        )
+        for locale, text in published.items():
+            self.assertTrue(
+                isinstance(text, str) and text.strip(),
+                f"the {locale} note is empty",
+            )
+
+        workflow = WORKFLOW.read_text()
+        self.assertIn(
+            "app/release-notes.json", workflow,
+            "CI writes a changelog of its own instead of the published notes",
+        )
+        self.assertNotRegex(
+            workflow, r'--arg changelog "staging build from',
+            "CI still publishes a build stamp where a release note belongs",
         )
 
     def test_the_build_writes_a_manifest_at_all(self):

@@ -196,6 +196,13 @@ jobs:
           # and its signature at the same time. Every field is read back off the
           # artifact rather than restated, so a manifest cannot describe a build
           # other than the one beside it.
+          #
+          # changelog is the exception, and comes from app/release-notes.json:
+          # it is the one string here written for a person to read, and the
+          # panel renders it in whichever language that person chose. It used to
+          # be "staging build from <sha>", which is not a release note in any
+          # language -- and the version name says that better now anyway, since
+          # 1.1.0-staging+124 identifies the build on its own.
           APK=staging-candidate/am2-client-staging-debug.apk
           BADGING=staging-candidate/apk-badging.txt
           VERSION_CODE=$(sed -n "s/.*versionCode='\([0-9]\+\)'.*/\1/p" "$BADGING" | head -1)
@@ -216,7 +223,7 @@ jobs:
             --arg update_url "$UPDATE_URL" \
             --arg sha256 "$APK_SHA" \
             --arg signer_sha256 "$SIGNER_SHA" \
-            --arg changelog "staging build from ${GITHUB_SHA:0:12}" \
+            --argjson changelog "$(cat app/release-notes.json)" \
             '{version_code: $version_code, version_name: $version_name, update_url: $update_url,
               sha256: $sha256, signer_sha256: $signer_sha256, changelog: $changelog}' \
             > staging-candidate/version.json
