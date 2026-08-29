@@ -207,6 +207,10 @@ class DeviceTokenContractTest(unittest.TestCase):
             "shouldRemember", manager_success,
             "an explicit successful login ignores the Remember Me choice",
         )
+        self.assertIn(
+            "persistAuthorizedSession", manager_success,
+            "a non-persistent session becomes persistent on automatic reconnect",
+        )
 
     def test_explicit_logout_clears_the_persisted_session(self):
         socket = code(self.socket)
@@ -240,6 +244,10 @@ class DeviceTokenContractTest(unittest.TestCase):
         self.assertNotIn(
             "System.exit", menu,
             "logout force-kills the process around credential deletion",
+        )
+        self.assertIn(
+            "secureUnavailable(candidate)", clear,
+            "logout treats an unreadable encrypted credential file as already cleared",
         )
 
     def test_a_revoked_token_is_discarded_rather_than_retried(self):
