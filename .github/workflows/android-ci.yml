@@ -453,6 +453,10 @@ jobs:
             -PAM2_VERSION_CODE="$GITHUB_RUN_NUMBER"
       - name: Record artifact identity
         shell: bash
+        env:
+          # In scope here as well as in the build: this step compares what was
+          # declared against what apksigner reports actually signed.
+          AM2_APPROVED_SIGNER_SHA256: ${{ vars.AM2_APPROVED_SIGNER_SHA256 }}
         run: |
           set -euo pipefail
           APK="$(find app/build/outputs/apk/production/release -name '*.apk' -type f -print -quit)"
@@ -474,6 +478,20 @@ jobs:
             release-artifact/am2-client-production.apk > release-artifact/signer-metadata.txt 2>&1
           printf 'signed=true\n' >> release-artifact/signer-metadata.txt
           printf 'source_commit=%s\nenvironment=production\n' "$GITHUB_SHA" >> release-artifact/build-metadata.txt
+          # The declared signer against the one that actually signed.
+          #
+          # The check on the build step is a shape check: sixty-four hex
+          # characters. A value of the right shape and the wrong content passes
+          # it, is compiled into the APK, and every handset carrying that build
+          # then refuses every update it will ever be offered -- repairable only
+          # by a manual install on each unit, which is the cost this channel
+          # exists to avoid. apksigner already read the truth two lines up.
+          SIGNED_BY=$(sed -n 's/.*certificate SHA-256 digest: *\([0-9a-fA-F]\{64\}\).*/\1/p' \
+            release-artifact/signer-metadata.txt | head -1 | tr 'A-F' 'a-f')
+          DECLARED=$(printf '%s' "$AM2_APPROVED_SIGNER_SHA256" | tr -d ':' | tr 'A-F' 'a-f')
+          test "$DECLARED" = "$SIGNED_BY" \
+            || { echo "::error::build trusts $DECLARED but was signed by $SIGNED_BY"; exit 1; }
+          printf 'approved_signer=%s\n' "$DECLARED" >> release-artifact/build-metadata.txt
       - name: Upload release candidate only
         uses: actions/upload-artifact@v4
         with:
