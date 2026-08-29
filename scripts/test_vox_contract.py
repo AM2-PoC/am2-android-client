@@ -328,6 +328,60 @@ class VoxHearsTheBuiltInMicrophoneTest(VoxTestCase):
                 "{} is never recorded, so that guard stays invisible".format(reason),
             )
 
+    def test_the_sustained_level_is_measured_not_only_the_peak(self):
+        """A peak cannot decide where the floor belongs.
+
+        Every sample the field has returned carries threshold=500, which is
+        MIN_THRESHOLD -- slider position 100 of 100. The operator has run out
+        of travel and the radio is still deaf, so the floor itself is the
+        constraint, and the only argument against lowering it was that no
+        handset had ever reported an amplitude.
+
+        A peak over three seconds is the wrong number to lower it on. A quiet
+        room returned a peak of 427 against a threshold of 500: as a peak that
+        looks like the floor is already too low to move, but a single transient
+        in three seconds is a door or a chair, not a noise floor. What decides
+        this is the level that is sustained, and nothing measures it.
+
+        So the window reports its mean and its minimum alongside its peak.
+        Cheap -- two accumulators, no buffer -- and it is the difference
+        between lowering the floor on evidence and lowering it on a guess.
+        """
+        report = section(self.recorder, "private fun reportVoxLevel", "private fun handleVoxLogic")
+        body = code(report)
+
+        # Asserted as the accumulation, not as the name. `voxLevelSum` appears
+        # in its own reset line, so a check for the bare identifier stays green
+        # with the summing deleted -- which is exactly what it did.
+        self.assertIn(
+            "voxLevelSum += amplitude", body,
+            "the window's mean is never accumulated",
+        )
+        self.assertRegex(
+            body, r"amplitude\s*<\s*voxLevelFloor[\s\S]{0,60}?voxLevelFloor\s*=\s*amplitude",
+            "the window's minimum is never tracked",
+        )
+        self.assertIn(
+            "voxLevelFrames++", body,
+            "frames are never counted, so the mean divides by nothing",
+        )
+
+        payload = report[report.index("WebSocketManager.emit("):]
+        for field in ("mean", "floor"):
+            self.assertIn(
+                '"{}"'.format(field), payload,
+                "the {} never leaves the handset, so the floor stays a guess".format(field),
+            )
+
+        # Reset with the window, like the peak and the block counts. A running
+        # total that is never cleared reports the whole session every time and
+        # converges on a number that describes nothing.
+        for reset in ("voxLevelSum = 0", "voxLevelFloor = Int.MAX_VALUE", "voxLevelFrames = 0"):
+            self.assertIn(
+                reset, body,
+                "{} is never cleared, so each report restates the session".format(reset),
+            )
+
     def test_the_block_counts_reach_the_relay(self):
         """A count that only ever reaches logcat is a count nobody reads."""
         report = section(self.recorder, "private fun reportVoxLevel", "private fun handleVoxLogic")

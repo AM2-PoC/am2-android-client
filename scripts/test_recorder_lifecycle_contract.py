@@ -66,9 +66,12 @@ class RecorderLifecycleContractTest(unittest.TestCase):
         confined = {
             # Written and read only by the recording thread, inside handleVoxLogic.
             "voxTriggerCount", "voxSilenceTimer", "lastVoxTriggerAt",
-            # Same thread, inside reportVoxLevel: a diagnostic counter and the
-            # stamp that rate-limits it. Nothing outside the loop reads either.
+            # Same thread, inside reportVoxLevel: diagnostic accumulators and
+            # the stamp that rate-limits them. Nothing outside the loop reads
+            # any of these -- they are summed per frame by the recording thread
+            # and zeroed by the same thread when the window closes.
             "voxLevelPeak", "voxLevelReportedAt",
+            "voxLevelSum", "voxLevelFloor", "voxLevelFrames",
             # Set once during init, before any thread reads it.
             "appContext",
         }

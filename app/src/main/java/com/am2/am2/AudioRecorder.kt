@@ -563,24 +563,53 @@ object AudioRecorder {
     private var voxLevelPeak = 0
     private var voxLevelReportedAt = 0L
 
+    /*
+     * The sustained level, not only the loudest instant.
+     *
+     * Every sample the field has returned carries threshold=500, which is
+     * MIN_THRESHOLD -- the slider at 100 of 100. The operator has run out of
+     * travel and the radio is still deaf, so the floor itself is what has to
+     * move, and the only argument against moving it was that no handset had
+     * ever reported an amplitude.
+     *
+     * A peak is the wrong number to move it on. A quiet room returned a peak
+     * of 427 against a threshold of 500, which reads as no headroom at all --
+     * but one transient in three seconds is a door or a chair, not a floor.
+     * The mean and the minimum separate a room that is genuinely quiet from
+     * one that is not, and two accumulators cost nothing.
+     */
+    private var voxLevelSum = 0L
+    private var voxLevelFloor = Int.MAX_VALUE
+    private var voxLevelFrames = 0
+
     private fun reportVoxLevel(amplitude: Int) {
         if (!voxEnabled) {
             voxLevelPeak = 0
+            voxLevelSum = 0
+            voxLevelFloor = Int.MAX_VALUE
+            voxLevelFrames = 0
             return
         }
         if (amplitude > voxLevelPeak) voxLevelPeak = amplitude
+        if (amplitude < voxLevelFloor) voxLevelFloor = amplitude
+        voxLevelSum += amplitude
+        voxLevelFrames++
 
         val now = System.currentTimeMillis()
         if (voxLevelReportedAt == 0L) voxLevelReportedAt = now
         if (now - voxLevelReportedAt < VOX_LEVEL_REPORT_MS) return
 
         val talking = WebSocketManager.isTalkingNow()
+        val mean = if (voxLevelFrames > 0) (voxLevelSum / voxLevelFrames).toInt() else 0
+        val floor = if (voxLevelFrames > 0) voxLevelFloor else 0
+
         SafeLog.i(TAG, "vox_level peak=$voxLevelPeak threshold=$voxThreshold " +
             "would_trigger=${voxLevelPeak > voxThreshold} talking=$talking " +
             "blocked_others=${voxBlocks[BLOCK_OTHERS]} " +
             "blocked_playback=${voxBlocks[BLOCK_PLAYBACK]} " +
             "blocked_tone=${voxBlocks[BLOCK_TONE]} " +
-            "blocked_interval=${voxBlocks[BLOCK_INTERVAL]}")
+            "blocked_interval=${voxBlocks[BLOCK_INTERVAL]} " +
+            "mean=$mean floor=$floor frames=$voxLevelFrames")
 
         /*
          * And to the relay, because logcat is where this number went to die.
@@ -604,16 +633,17 @@ object AudioRecorder {
                 .put("blocked_others", voxBlocks[BLOCK_OTHERS])
                 .put("blocked_playback", voxBlocks[BLOCK_PLAYBACK])
                 .put("blocked_tone", voxBlocks[BLOCK_TONE])
-                .put("blocked_interval", voxBlocks[BLOCK_INTERVAL]),
+                .put("blocked_interval", voxBlocks[BLOCK_INTERVAL])
+                .put("mean", mean)
+                .put("floor", floor),
         )
 
         voxLevelPeak = 0
+        voxLevelSum = 0
+        voxLevelFloor = Int.MAX_VALUE
+        voxLevelFrames = 0
         voxBlocks.fill(0)
         voxLevelReportedAt = now
-    }
-
-    private fun noteVoxBlock(which: Int, amplitude: Int) {
-        if (amplitude > voxThreshold) voxBlocks[which]++
     }
 
     private fun handleVoxLogic(amplitude: Int) {
