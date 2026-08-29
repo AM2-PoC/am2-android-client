@@ -306,35 +306,16 @@ class LoginActivity : BaseActivity() {
     }
 
     private fun saveCredentials(user: String, pass: String) {
-        // Save to SharedPreferences
-        sharedPreferences.edit().apply {
-            putString("username", user)
-            putString("password", pass)
-            putBoolean("remember_me", true)
-            apply()
-        }
-        // Save to Internal Storage as backup (Device Protected Storage)
-        try {
-            val file = File(safeContext.filesDir, "cred.txt")
-            file.writeText("$user|$pass")
-        } catch (e: Exception) {
-            SafeLog.e("Exception", "Operation failed", e)
-        }
+        // Sealed where the platform can seal it; see CredentialStore. The
+        // second copy this used to write -- cred.txt, cleartext, described as a
+        // backup -- doubled the exposure and protected nothing.
+        CredentialStore.save(safeContext, user, pass)
+        sharedPreferences.edit().putBoolean("remember_me", true).apply()
     }
 
     private fun clearCredentials() {
-        sharedPreferences.edit().apply {
-            remove("username")
-            remove("password")
-            putBoolean("remember_me", false)
-            apply()
-        }
-        try {
-            val file = File(safeContext.filesDir, "cred.txt")
-            if (file.exists()) file.delete()
-        } catch (e: Exception) {
-            SafeLog.e("Exception", "Operation failed", e)
-        }
+        CredentialStore.clear(safeContext)
+        sharedPreferences.edit().putBoolean("remember_me", false).apply()
     }
 
     private fun sendLoginRequest(identity: String, pass: String) {
@@ -342,27 +323,13 @@ class LoginActivity : BaseActivity() {
     }
 
     private fun checkAutoLogin() {
-        var savedUser = sharedPreferences.getString("username", null)
-        var savedPass = sharedPreferences.getString("password", null)
+        // One reader, which also migrates a handset that still has its
+        // credentials in cleartext and removes them once it has.
+        val stored = CredentialStore.load(safeContext)
+        val savedUser = stored?.first
+        val savedPass = stored?.second
         val rememberMe = sharedPreferences.getBoolean("remember_me", false)
 
-        // Try reading from internal storage if Prefs are empty
-        if (savedUser == null || savedPass == null) {
-            try {
-                val file = File(safeContext.filesDir, "cred.txt")
-                if (file.exists()) {
-                    val content = file.readText()
-                    val parts = content.split("|")
-                    if (parts.size == 2) {
-                        savedUser = parts[0]
-                        savedPass = parts[1]
-                    }
-                }
-            } catch (e: Exception) {
-                SafeLog.e("Exception", "Operation failed", e)
-            }
-        }
-        
         if (savedUser != null) {
             binding.etUsername.setText(savedUser)
             binding.cbRememberMe.isChecked = rememberMe
