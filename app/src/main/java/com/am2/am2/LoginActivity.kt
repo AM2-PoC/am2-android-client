@@ -29,6 +29,7 @@ class LoginActivity : BaseActivity() {
     private lateinit var sharedPreferences: SharedPreferences
     private lateinit var safeContext: Context
 
+
     private val REQUIRED_PERMISSIONS: Array<String>
         get() {
             val permissions = mutableListOf(
@@ -277,16 +278,9 @@ class LoginActivity : BaseActivity() {
             when (event) {
                 is WebSocketManager.LoginEvent.Success -> {
                     runOnUiThread {
-                        // Simpan kredensial untuk fitur auto-isi manual jika checkbox dicentang
-                        val identity = binding.etUsername.text.toString().trim()
-                        val password = binding.etPassword.text.toString().trim()
-                        
-                        if (binding.cbRememberMe.isChecked) {
-                            saveCredentials(identity, password)
-                        } else {
-                            clearCredentials()
-                        }
-
+                        // WebSocketManager owns the persisted session. This
+                        // event also fires for automatic token reconnects, when
+                        // there was no interactive request to evaluate.
                         startMainActivity()
                         WebSocketManager.clearLoginEvent()
                     }
@@ -305,29 +299,19 @@ class LoginActivity : BaseActivity() {
         }
     }
 
-    private fun saveCredentials(user: String, pass: String) {
-        // Sealed where the platform can seal it; see CredentialStore. The
-        // second copy this used to write -- cred.txt, cleartext, described as a
-        // backup -- doubled the exposure and protected nothing.
-        CredentialStore.save(safeContext, user, pass)
-        sharedPreferences.edit().putBoolean("remember_me", true).apply()
-    }
-
-    private fun clearCredentials() {
-        CredentialStore.clear(safeContext)
-        sharedPreferences.edit().putBoolean("remember_me", false).apply()
-    }
-
     private fun sendLoginRequest(identity: String, pass: String) {
-        WebSocketManager.login(identity, pass)
+        sharedPreferences.edit()
+            .putBoolean("remember_me", binding.cbRememberMe.isChecked)
+            .apply()
+        WebSocketManager.login(identity, pass, binding.cbRememberMe.isChecked)
     }
 
     private fun checkAutoLogin() {
         // One reader, which also migrates a handset that still has its
         // credentials in cleartext and removes them once it has.
-        val stored = CredentialStore.load(safeContext)
-        val savedUser = stored?.first
-        val savedPass = stored?.second
+        val stored = CredentialStore.state(safeContext)
+        val savedUser = stored.username
+        val savedPass = stored.password
         val rememberMe = sharedPreferences.getBoolean("remember_me", false)
 
         if (savedUser != null) {
