@@ -319,8 +319,22 @@ object WebSocketManager {
 
         currentChannelSlug = prefs?.getString("last_channel_slug", null)
 
-        val startOnBoot = prefs?.getBoolean("start_on_boot", false) ?: false
-        isAuthorizedSession = startOnBoot &&
+        /*
+         * A stored login is a session, whether or not the handset was asked to
+         * start on boot.
+         *
+         * This used to read `startOnBoot && credentials`, so a radio with a
+         * perfectly good login came back signed out unless the operator had
+         * also enabled an unrelated preference about booting. It was reported
+         * as "every update deletes the session" -- updates do end the process,
+         * but so does swiping the app away and so does the system reclaiming
+         * memory. The update is only where it is noticed most.
+         *
+         * They are two questions. Whether to start without being asked is
+         * start_on_boot's, and it still owns it. Whether there is a session to
+         * resume is answered by whether there is anything to resume it with.
+         */
+        isAuthorizedSession =
                 !savedUsername.isNullOrEmpty() &&
                 !savedPassword.isNullOrEmpty()
 
