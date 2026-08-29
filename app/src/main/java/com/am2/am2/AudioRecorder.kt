@@ -8,6 +8,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.NoiseSuppressor
 import android.media.MediaRecorder
 import android.os.Build
 import androidx.core.content.ContextCompat
@@ -43,6 +46,26 @@ object AudioRecorder {
     private const val VOX_PREROLL_FRAMES = 15
 
     /*
+     * The word that triggered VOX.
+     *
+     * Frames reach the encoder only while isTalkingNow(). In push-to-talk that
+     * is right -- the operator pressed, so nothing before the press was meant
+     * to be sent. In VOX it is the whole complaint: VOX is triggered *by* the
+     * onset of speech, so by the time talking is true the syllable that crossed
+     * the threshold has already been read, measured for its amplitude, and
+     * dropped on the floor.
+     *
+     * VOX_PREROLL_FRAMES above does not cover it. That holds frames between
+     * "talking started" and "the relay authorized" -- a later window entirely.
+     * Everything before the trigger was never captured at all.
+     *
+     * So frames are kept before there is any reason to keep them, and handed to
+     * the encoder in order when the reason arrives. Fifteen frames is 300 ms;
+     * the cost is under ten kilobytes of 16-bit mono.
+     */
+    private const val VOX_PRETRIGGER_FRAMES = 15
+
+    /*
      * Restart pacing after the microphone is lost.
      *
      * A microphone held by a phone call refuses every source immediately, so
@@ -64,6 +87,31 @@ object AudioRecorder {
 
     @Volatile
     private var audioRecord: AudioRecord? = null
+
+    /*
+     * The processing the platform was only ever asked for indirectly.
+     *
+     * VOICE_COMMUNICATION is a request, and on many handsets it is honoured
+     * with gain control, noise suppression and echo cancellation. On many
+     * others it is not, and nothing here ever asked directly -- which is the
+     * shape of the report: audio arriving quiet on *some* devices, VOX deaf on
+     * *some* devices. Both follow from a capture level nobody set.
+     *
+     * AudioFilter cannot fix it. It multiplies by 1.0, 1.0 and 0.8 -- unity,
+     * with the treble pulled down -- and its own comment records why: a fixed
+     * boost was there and came out because it clipped. A fixed boost is
+     * precisely what cannot serve a loud handset and a quiet one at once. Gain
+     * that follows the signal can.
+     *
+     * Held so they can be released with the recorder: each holds a native
+     * session, and VOX restarts every time a phone call takes the microphone.
+     */
+    @Volatile
+    private var gainControl: AutomaticGainControl? = null
+    @Volatile
+    private var noiseSuppressor: NoiseSuppressor? = null
+    @Volatile
+    private var echoCanceler: AcousticEchoCanceler? = null
 
     /*
      * Held so a restart can wait for it.
@@ -105,6 +153,9 @@ object AudioRecorder {
      * hold. VOX is why it exists — see holdOrSend.
      */
     private val preRoll = ArrayDeque<ByteArray>()
+
+    /** Raw PCM held before VOX has decided anything. See VOX_PRETRIGGER_FRAMES. */
+    private val preTrigger = ArrayDeque<ShortArray>()
 
     private var appContext: Context? = null
 
@@ -183,6 +234,7 @@ object AudioRecorder {
             opusCodec.createEncoder(SAMPLE_RATE, 32000, 5)
             isRecording = true
             preRoll.clear()
+            preTrigger.clear()
 
             recordingThread = thread(priority = Thread.MAX_PRIORITY, name = "AudioRecordThread") {
                 try {
@@ -213,6 +265,7 @@ object AudioRecorder {
                                 recorder.startRecording()
                                 if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                                     audioRecord = recorder
+                                    attachCaptureEffects(recorder.audioSessionId)
                                     success = true
                                     WebSocketManager.currentTransmitTraceId()?.let {
                                         PttTrace.emit(event = "capture_started", traceId = it)
@@ -263,6 +316,11 @@ object AudioRecorder {
                                 // Gunakan isTalkingNow() untuk respons yang lebih cepat (tanpa delay LiveData)
                                 val talking = WebSocketManager.isTalkingNow()
                                 if (talking) {
+                                    // In order and before the live frame, so
+                                    // the transmission opens on the syllable
+                                    // that caused it rather than on whatever
+                                    // followed it.
+                                    flushPreTrigger(audioFilter, userIdTruncated)
                                     audioFilter.apply(pcmBuffer, read)
                                     val encodedData = opusCodec.encode(pcmBuffer, FRAME_SIZE)
                                     if (encodedData != null && isRecording) {
@@ -286,10 +344,23 @@ object AudioRecorder {
                                             .array()
                                         holdOrSend(packet)
                                     }
-                                } else if (preRoll.isNotEmpty()) {
-                                    // The transmission ended without ever being
-                                    // authorized. Nothing left to flush to.
-                                    preRoll.clear()
+                                } else {
+                                    if (preRoll.isNotEmpty()) {
+                                        // The transmission ended without ever
+                                        // being authorized. Nothing left to
+                                        // flush to.
+                                        preRoll.clear()
+                                    }
+                                    if (voxEnabled) {
+                                        // A copy: pcmBuffer is read into every
+                                        // iteration, so holding the array
+                                        // itself would leave a ring of fifteen
+                                        // references to the latest frame.
+                                        preTrigger.addLast(pcmBuffer.copyOf(read))
+                                        while (preTrigger.size > VOX_PRETRIGGER_FRAMES) {
+                                            preTrigger.removeFirst()
+                                        }
+                                    }
                                 }
                             } else if (read < 0) {
                                 break
@@ -358,6 +429,78 @@ object AudioRecorder {
         }
         preRoll.addLast(packet)
         while (preRoll.size > VOX_PREROLL_FRAMES) preRoll.removeFirst()
+    }
+
+    /**
+     * Ask this device for the capture processing it has, and say what it gave.
+     *
+     * Availability is per device and per effect, so isAvailable() decides and
+     * a create() that returns null or throws is simply an effect this handset
+     * does not have. None of it is fatal: capture without them is what every
+     * build before this one did.
+     *
+     * The line it logs is the point. "Sebagian device" cannot be answered by
+     * reading source, and this is the only place that knows.
+     */
+    private fun attachCaptureEffects(sessionId: Int) {
+        releaseCaptureEffects()
+
+        gainControl = try {
+            if (AutomaticGainControl.isAvailable()) {
+                AutomaticGainControl.create(sessionId)?.apply { enabled = true }
+            } else null
+        } catch (e: Exception) { null }
+
+        noiseSuppressor = try {
+            if (NoiseSuppressor.isAvailable()) {
+                NoiseSuppressor.create(sessionId)?.apply { enabled = true }
+            } else null
+        } catch (e: Exception) { null }
+
+        echoCanceler = try {
+            if (AcousticEchoCanceler.isAvailable()) {
+                AcousticEchoCanceler.create(sessionId)?.apply { enabled = true }
+            } else null
+        } catch (e: Exception) { null }
+
+        SafeLog.i(
+            TAG,
+            "capture effects: gain_control=" + (gainControl?.enabled == true) +
+                " noise_suppressor=" + (noiseSuppressor?.enabled == true) +
+                " echo_canceler=" + (echoCanceler?.enabled == true),
+        )
+    }
+
+    private fun releaseCaptureEffects() {
+        try { gainControl?.release() } catch (e: Exception) {}
+        try { noiseSuppressor?.release() } catch (e: Exception) {}
+        try { echoCanceler?.release() } catch (e: Exception) {}
+        gainControl = null
+        noiseSuppressor = null
+        echoCanceler = null
+    }
+
+    /**
+     * Hand over what was kept before VOX decided, oldest first.
+     *
+     * Through the same filter and the same authorization hold as a live frame:
+     * these are not a special kind of audio, they are simply audio that was
+     * recorded before anything knew it would be wanted.
+     */
+    private fun flushPreTrigger(filter: AudioFilter, userIdTruncated: Int) {
+        while (preTrigger.isNotEmpty()) {
+            val pcm = preTrigger.removeFirst()
+            filter.apply(pcm, pcm.size)
+            val encoded = opusCodec.encode(pcm, FRAME_SIZE) ?: continue
+            holdOrSend(
+                ByteBuffer.allocate(5 + encoded.size)
+                    .order(ByteOrder.LITTLE_ENDIAN)
+                    .put(1.toByte())
+                    .putInt(userIdTruncated)
+                    .put(encoded)
+                    .array()
+            )
+        }
     }
 
     private fun flushPreRoll() {
@@ -473,8 +616,10 @@ object AudioRecorder {
     }
 
     private fun cleanup() {
+        releaseCaptureEffects()
         cleanupAudioRecord()
         preRoll.clear()
+        preTrigger.clear()
         try { opusCodec.destroyEncoder() } catch (e: Exception) {}
     }
 }

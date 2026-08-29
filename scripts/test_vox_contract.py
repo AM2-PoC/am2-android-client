@@ -180,6 +180,148 @@ class VoxWaitsForTheRelayTest(VoxTestCase):
         )
 
 
+class CaptureAsksForTheProcessingItNeedsTest(VoxTestCase):
+    """Asking for VOICE_COMMUNICATION is a request, not a guarantee.
+
+    The source is chosen for echo cancellation, and on many handsets the
+    platform obliges with gain control and noise suppression too. On many
+    others it does not, and nothing here ever asked: no AutomaticGainControl,
+    no NoiseSuppressor, no AcousticEchoCanceler is attached to the session
+    anywhere in this module.
+
+    What the operator reports is exactly the shape of that: audio arriving
+    quiet on *some* devices, and VOX deaf on *some* devices. Both follow from a
+    capture level nobody set.
+
+    The app's own gain stage cannot fix it. AudioFilter multiplies by 1.0, 1.0
+    and 0.8 -- unity, with the treble pulled down -- and its comment records
+    why: a fixed boost was there and was taken out because it clipped. A fixed
+    boost is exactly what cannot serve a loud handset and a quiet one at once.
+    Gain that follows the signal can, and that is the effect that was never
+    attached.
+
+    Availability is per device, so what matters as much as asking is recording
+    which ones answered.
+    """
+
+    def setUp(self):
+        self.recorder = RECORDER.read_text()
+
+    def test_gain_control_is_asked_for(self):
+        # create(), not the import: naming the class proves nothing, and an
+        # earlier version of this assertion passed against a build where the
+        # effect was never attached to any session.
+        self.assertHas(
+            self.recorder, r"AutomaticGainControl\.create\(",
+            "capture takes whatever level the device happens to give, so a "
+            "handset with no platform gain control transmits quietly and "
+            "hears nothing on VOX",
+        )
+
+    def test_availability_is_checked_rather_than_assumed(self):
+        # create() on a device without the effect returns null or throws, and
+        # either one taken as success is a silent no-op.
+        for effect in ("AutomaticGainControl", "NoiseSuppressor", "AcousticEchoCanceler"):
+            self.assertHas(
+                self.recorder, effect + r"\.isAvailable\(\)",
+                f"{effect} is created without asking whether the device has it",
+            )
+
+    def test_the_effects_reach_the_session_that_is_recording(self):
+        # Everything above can be true of code nothing calls. The session id
+        # comes from the AudioRecord that just started, and this is the only
+        # line that ties the two together.
+        self.assertHas(
+            self.recorder, r"attachCaptureEffects\(recorder\.audioSessionId\)",
+            "the effects are configured for no session, so capture is "
+            "processed exactly as it was before",
+        )
+
+    def test_which_effects_were_obtained_is_recorded(self):
+        # The whole complaint is "sebagian device". Which half a handset is in
+        # cannot be answered by reading this file.
+        self.assertHas(
+            self.recorder, r"(SafeLog|PttTrace)[\s\S]{0,400}?(agc|effects|gain_control)",
+            "nothing says which effects a device actually granted, so the "
+            "device-dependent half of the report stays unanswerable",
+        )
+
+    def test_the_effects_are_released_with_the_recorder(self):
+        # They hold a native session. Leaking one per restart is a leak per
+        # VOX dropout, and VOX drops out on every phone call.
+        self.assertHas(
+            self.recorder, r"(agc|noiseSuppressor|echoCanceler)[\s\S]{0,200}?release\(\)",
+            "the effects outlive the AudioRecord they were attached to",
+        )
+
+
+class VoxKeepsTheWordThatTriggeredItTest(VoxTestCase):
+    """The word that opens a transmission is the one VOX throws away.
+
+    Frames reach the encoder only while `isTalkingNow()`:
+
+        val talking = WebSocketManager.isTalkingNow()
+        if (talking) { audioFilter.apply(...); opusCodec.encode(...) }
+
+    In push-to-talk that is right -- the operator pressed, so nothing before
+    the press was meant to be sent. In VOX it is the whole complaint. VOX is
+    triggered *by* the onset of speech, so by the time `talking` is true the
+    syllable that crossed the threshold has already been read, measured, and
+    dropped on the floor.
+
+    The existing pre-roll does not cover it. That one holds frames between
+    "talking started" and "the relay authorized", which is a later window
+    entirely; everything before the trigger is never captured at all.
+
+    So the frames have to be kept before there is any reason to keep them, and
+    handed to the encoder in order when the reason arrives. Memory is the whole
+    cost: fifteen frames of 16-bit mono at 16 kHz is under ten kilobytes.
+    """
+
+    def setUp(self):
+        self.recorder = RECORDER.read_text()
+
+    def test_frames_are_kept_before_vox_has_any_reason_to_keep_them(self):
+        self.assertHas(
+            self.recorder, r"VOX_PRETRIGGER_FRAMES",
+            "nothing is retained before the trigger, so the syllable that "
+            "crossed the threshold is read and discarded",
+        )
+
+    def test_the_ring_holds_copies_rather_than_the_buffer_it_reads_into(self):
+        # pcmBuffer is reused every iteration. Keeping references to it would
+        # leave a ring of fifteen pointers to the same, latest, frame.
+        ring = section(self.recorder, "val talking = WebSocketManager.isTalkingNow()",
+                       "private fun handleVoxLogic")
+        self.assertHas(
+            ring, r"copyOf\(",
+            "the ring stores the live buffer rather than a copy of it, so "
+            "every held frame is whichever frame was read last",
+        )
+
+    def test_the_ring_is_bounded(self):
+        self.assertHas(
+            self.recorder, r"preTrigger[\s\S]{0,200}?removeFirst\(\)",
+            "a radio left on in a quiet room fills the ring for as long as it "
+            "is on",
+        )
+
+    def test_what_was_kept_is_handed_over_when_the_transmission_opens(self):
+        self.assertHas(
+            self.recorder, r"fun flushPreTrigger|flushPreTrigger\(\)",
+            "the ring is filled and never emptied, which is a slower way of "
+            "losing the same word",
+        )
+
+    def test_the_ring_is_dropped_when_it_can_no_longer_be_sent(self):
+        # A transmission that ends, or a recorder that stops, must not leave
+        # last week's syllable to be prepended to next week's transmission.
+        self.assertHas(
+            self.recorder, r"preTrigger\.clear\(\)",
+            "the ring outlives the transmission it was collected for",
+        )
+
+
 class VoxIsNotTriggeredByItsOwnLoudspeakerTest(VoxTestCase):
     """The microphone is open while the radio is talking to the operator.
 
