@@ -255,6 +255,72 @@ class CaptureAsksForTheProcessingItNeedsTest(VoxTestCase):
         )
 
 
+class VoxHearsTheBuiltInMicrophoneTest(VoxTestCase):
+    """Noise suppression is tuned for a telephone call, not for a radio.
+
+    Capture asks for VOICE_COMMUNICATION on every route, because only that
+    source asks the platform for echo cancellation and without it the open VOX
+    microphone closes a loop through the room. That was the right trade and it
+    is not being undone.
+
+    What came with it was the platform's noise suppressor, tuned to keep a
+    near-field voice and discard everything else. On a headset the microphone
+    is at the mouth and it has an easy job. On the built-in microphone -- a
+    handset on a desk, or held at arm's length -- it treats the operator's own
+    speech as ambient and crushes it, and VOX compares what is left against a
+    threshold. Reported from the field exactly that way: headset fine, built-in
+    microphone deaf, and still deaf with the sensitivity bar at its limit.
+
+    Then it was made worse here. NoiseSuppressor was force-enabled while
+    attaching gain control, which turned a platform default into a guarantee.
+
+    Echo cancellation stays: it is the reason the source was made unconditional.
+    Gain control stays: it is what raises a quiet capture. Suppression goes,
+    explicitly rather than by omission, because what the platform does when
+    nobody says is exactly what varies between the two microphones.
+    """
+
+    def setUp(self):
+        self.recorder = RECORDER.read_text()
+
+    def test_suppression_is_turned_off_rather_than_left_to_the_platform(self):
+        block = section(self.recorder, "fun attachCaptureEffects", "private fun releaseCaptureEffects")
+        self.assertRegex(
+            block, r"NoiseSuppressor[\s\S]{0,200}?enabled\s*=\s*false",
+            "noise suppression is enabled or left to the platform, and on the "
+            "built-in microphone it removes the speech VOX is listening for",
+        )
+
+    def test_echo_cancellation_and_gain_control_stay(self):
+        block = section(self.recorder, "fun attachCaptureEffects", "private fun releaseCaptureEffects")
+        for effect in ("AcousticEchoCanceler", "AutomaticGainControl"):
+            self.assertRegex(
+                block, effect + r"[\s\S]{0,200}?enabled\s*=\s*true",
+                f"{effect} was turned off with the suppressor; the first is why "
+                "the source is unconditional and the second is what raises a "
+                "quiet capture",
+            )
+
+    def test_the_amplitude_vox_compares_is_observable(self):
+        # Three rounds of this were argued from source because nothing ever
+        # recorded the one number that decides: what VOX measured, against what
+        # it was measuring for.
+        self.assertRegex(
+            self.recorder, r"(SafeLog|PttTrace)[\s\S]{0,300}?vox[_ ]?level",
+            "nothing reports the amplitude VOX saw, so whether a threshold is "
+            "wrong or a microphone is silent cannot be told apart",
+        )
+        # And that it is called on the amplitude the loop just measured. The
+        # call, with its argument -- the declaration uses a different parameter
+        # name, so matching the bare name matches the definition and passes
+        # against a build that never invokes it. Two versions of this assertion
+        # did exactly that.
+        self.assertIn(
+            "reportVoxLevel(maxAmplitude)", self.recorder,
+            "the level is never reported from the frame loop that measures it",
+        )
+
+
 class VoxKeepsTheWordThatTriggeredItTest(VoxTestCase):
     """The word that opens a transmission is the one VOX throws away.
 
