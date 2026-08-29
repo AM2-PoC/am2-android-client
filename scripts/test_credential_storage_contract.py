@@ -191,14 +191,21 @@ class DeviceTokenContractTest(unittest.TestCase):
         observer = login[login.index("WebSocketManager.loginEvent.observe"):]
         observer = code(observer[:observer.index("\n    }")])
         success = observer[observer.index("LoginEvent.Success"):observer.index("LoginEvent.Error")]
-        self.assertRegex(
-            success,
-            r"interactiveLoginPending\s*&&[\s\S]{0,120}?clearCredentials\(\)",
-            "credential clearing is not restricted to an explicit login request",
-        )
         self.assertNotIn(
-            "saveCredentials(", success,
-            "automatic token login rewrites blank UI fields over the stored identity",
+            "CredentialStore", success,
+            "the login screen mutates an automatic token session after success",
+        )
+        manager_success = code(self.socket)
+        manager_success = manager_success[
+            manager_success.index('"login_success" ->'):manager_success.index('"login_error" ->')
+        ]
+        self.assertIn(
+            "wasInteractive", manager_success,
+            "login success cannot distinguish explicit login from automatic reconnect",
+        )
+        self.assertIn(
+            "shouldRemember", manager_success,
+            "an explicit successful login ignores the Remember Me choice",
         )
 
     def test_explicit_logout_clears_the_persisted_session(self):
@@ -221,10 +228,18 @@ class DeviceTokenContractTest(unittest.TestCase):
             ".commit()", clear,
             "logout uses asynchronous preference removal before process termination",
         )
+        self.assertIn(
+            "return cleared", clear,
+            "logout ignores a failed durable credential deletion",
+        )
         menu = code((JAVA / "MenuActivity.kt").read_text())
         self.assertIn(
-            "WebSocketManager.logout()", menu,
-            "the Logout button only closes the socket and preserves the session",
+            "if (!WebSocketManager.logout())", menu,
+            "the Logout button exits even when session deletion failed",
+        )
+        self.assertNotIn(
+            "System.exit", menu,
+            "logout force-kills the process around credential deletion",
         )
 
     def test_a_revoked_token_is_discarded_rather_than_retried(self):

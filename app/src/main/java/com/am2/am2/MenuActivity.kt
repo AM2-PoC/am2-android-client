@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
+import android.widget.Toast
 import com.am2.am2.databinding.ActivityMenuBinding
 
 class MenuActivity : BaseActivity() {
@@ -81,10 +82,12 @@ class MenuActivity : BaseActivity() {
     }
 
     private fun performLogout() {
-        WebSocketManager.logout()
+        if (!WebSocketManager.logout()) {
+            Toast.makeText(this, "Logout belum tersimpan. Coba lagi.", Toast.LENGTH_LONG).show()
+            return
+        }
         val serviceIntent = Intent(this, PTTService::class.java)
         stopService(serviceIntent)
         finishAffinity()
-        System.exit(0)
     }
 }

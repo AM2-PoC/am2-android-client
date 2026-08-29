@@ -28,7 +28,7 @@ class LoginActivity : BaseActivity() {
     private lateinit var binding: ActivityLoginBinding
     private lateinit var sharedPreferences: SharedPreferences
     private lateinit var safeContext: Context
-    private var interactiveLoginPending = false
+
 
     private val REQUIRED_PERMISSIONS: Array<String>
         get() {
@@ -281,19 +281,12 @@ class LoginActivity : BaseActivity() {
                         // WebSocketManager owns the persisted session. This
                         // event also fires for automatic token reconnects, when
                         // there was no interactive request to evaluate.
-                        if (interactiveLoginPending && !binding.cbRememberMe.isChecked) {
-                            clearCredentials()
-                        } else if (interactiveLoginPending) {
-                            sharedPreferences.edit().putBoolean("remember_me", true).apply()
-                        }
-                        interactiveLoginPending = false
                         startMainActivity()
                         WebSocketManager.clearLoginEvent()
                     }
                 }
                 is WebSocketManager.LoginEvent.Error -> {
                     runOnUiThread {
-                        interactiveLoginPending = false
                         Toast.makeText(this, event.message, Toast.LENGTH_LONG).show()
                         WebSocketManager.clearLoginEvent()
                     }
@@ -306,22 +299,11 @@ class LoginActivity : BaseActivity() {
         }
     }
 
-    private fun saveCredentials(user: String, pass: String) {
-        // Sealed where the platform can seal it; see CredentialStore. The
-        // second copy this used to write -- cred.txt, cleartext, described as a
-        // backup -- doubled the exposure and protected nothing.
-        CredentialStore.save(safeContext, user, pass)
-        sharedPreferences.edit().putBoolean("remember_me", true).apply()
-    }
-
-    private fun clearCredentials() {
-        CredentialStore.clear(safeContext)
-        sharedPreferences.edit().putBoolean("remember_me", false).apply()
-    }
-
     private fun sendLoginRequest(identity: String, pass: String) {
-        interactiveLoginPending = true
-        WebSocketManager.login(identity, pass)
+        sharedPreferences.edit()
+            .putBoolean("remember_me", binding.cbRememberMe.isChecked)
+            .apply()
+        WebSocketManager.login(identity, pass, binding.cbRememberMe.isChecked)
     }
 
     private fun checkAutoLogin() {

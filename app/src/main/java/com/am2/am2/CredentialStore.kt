@@ -110,23 +110,31 @@ object CredentialStore {
     fun token(context: Context): String? = state(context).token
 
     @Synchronized
-    fun clearToken(context: Context) {
+    fun clearToken(context: Context): Boolean {
+        var cleared = true
         contexts(context).forEach { candidate ->
-            secure(candidate)?.edit()?.remove(TOKEN)?.commit()
-            plain(candidate).edit().remove(TOKEN).commit()
+            secure(candidate)?.let {
+                cleared = it.edit().remove(TOKEN).commit() && cleared
+            }
+            cleared = plain(candidate).edit().remove(TOKEN).commit() && cleared
         }
+        return cleared
     }
 
     /** Logout is durable before the caller may terminate the process. */
     @Synchronized
-    fun clear(context: Context) {
+    fun clear(context: Context): Boolean {
+        var cleared = true
         contexts(context).forEach { candidate ->
-            secure(candidate)?.edit()
-                ?.remove(USER)?.remove(PASS)?.remove(TOKEN)?.commit()
-            plain(candidate).edit()
-                .remove(USER).remove(PASS).remove(TOKEN).commit()
-            deleteLegacyFile(candidate)
+            secure(candidate)?.let {
+                cleared = it.edit()
+                    .remove(USER).remove(PASS).remove(TOKEN).commit() && cleared
+            }
+            cleared = plain(candidate).edit()
+                .remove(USER).remove(PASS).remove(TOKEN).commit() && cleared
+            cleared = deleteLegacyFile(candidate) && cleared
         }
+        return cleared
     }
 
     private fun writeCanonical(context: Context, state: StoredCredentialState): Boolean {
@@ -172,14 +180,17 @@ object CredentialStore {
         null
     }
 
-    private fun deleteLegacyFile(context: Context) {
+    private fun deleteLegacyFile(context: Context): Boolean {
         try {
             val file = File(context.filesDir, LEGACY_FILE)
             if (file.exists() && !file.delete()) {
                 SafeLog.w("CredentialStore", "the legacy credential file could not be removed")
+                return false
             }
         } catch (_: Exception) {
             SafeLog.w("CredentialStore", "the legacy credential file could not be removed")
+            return false
         }
+        return true
     }
 }

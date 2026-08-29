@@ -126,7 +126,10 @@ object WebSocketManager {
 
     @Volatile private var isAuthorizedSession = false
     @Volatile private var hasDeviceToken = false
+    @Volatile private var activeDeviceToken: String? = null
     @Volatile private var isAuthenticatedOnCurrentSocket = false
+    @Volatile private var interactiveLoginPending = false
+    @Volatile private var rememberInteractiveLogin = false
 
     private val _availableChannels = MutableLiveData<JSONArray>(JSONArray())
     val availableChannels: LiveData<JSONArray> = _availableChannels
@@ -328,7 +331,8 @@ object WebSocketManager {
         // here: the password is deleted the moment the relay issues one. Asking
         // only about the password would have brought the signed-out-after-a-
         // restart fault straight back, by a different route.
-        hasDeviceToken = !stored.token.isNullOrEmpty()
+        activeDeviceToken = stored.token
+        hasDeviceToken = !activeDeviceToken.isNullOrEmpty()
         isAuthorizedSession = stored.canResume
 
         val lastSavedName = prefs?.getString(
@@ -496,41 +500,7 @@ object WebSocketManager {
             request,
             object : WebSocketListener() {
                 override fun onOpen(socket: WebSocket, response: Response) {
-                    if (!isCurrentSocket(generation)) {
-                        SafeLog.d(
-                            TAG,
-                            "Ignoring stale onOpen generation=$generation current=$socketGeneration"
-                        )
-                        try {
-                            socket.close(1000, "Stale socket")
-                        } catch (_: Exception) {
-                        }
-                        return
-                    }
-
-                    SafeLog.i(TAG, "WebSocket Connected ✅ generation=$generation")
-
-                    webSocket = socket
-                    isConnecting = false
-                    reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS
-                    actualSocketConnected = true
-                    isAuthenticatedOnCurrentSocket = false
-                    reconnectAttempts = 0
-
-                    _connectionStatus.postValue(true)
-
-                    cancelDisconnectDebounce()
-                    cancelReconnect()
-
-                    if (
-                        isAuthorizedSession &&
-                        !savedUsername.isNullOrEmpty() &&
-                        (hasDeviceToken || !savedPassword.isNullOrEmpty())
-                    ) {
-                        executeLogin(savedUsername!!, savedPassword ?: "")
-                    } else {
-                        updateTalkingStatusUI()
-                    }
+                    handleOpen(socket, generation)
                 }
 
                 override fun onMessage(socket: WebSocket, text: String) {
@@ -639,6 +609,43 @@ object WebSocketManager {
         )
 
         webSocket = newSocket
+    }
+
+    @Synchronized
+    private fun handleOpen(socket: WebSocket, generation: Int) {
+        if (!isCurrentSocket(generation)) {
+            SafeLog.d(TAG, "Ignoring stale onOpen generation=$generation current=$socketGeneration")
+            try {
+                socket.close(1000, "Stale socket")
+            } catch (_: Exception) {
+            }
+            return
+        }
+
+        SafeLog.i(TAG, "WebSocket Connected ✅ generation=$generation")
+        webSocket = socket
+        isConnecting = false
+        reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS
+        actualSocketConnected = true
+        isAuthenticatedOnCurrentSocket = false
+        reconnectAttempts = 0
+        _connectionStatus.postValue(true)
+        cancelDisconnectDebounce()
+        cancelReconnect()
+
+        if (
+            isAuthorizedSession &&
+            !savedUsername.isNullOrEmpty() &&
+            (interactiveLoginPending || hasDeviceToken || !savedPassword.isNullOrEmpty())
+        ) {
+            executeLogin(
+                savedUsername!!,
+                savedPassword ?: "",
+                useStoredToken = !interactiveLoginPending,
+            )
+        } else {
+            updateTalkingStatusUI()
+        }
     }
 
     private fun cancelDisconnectDebounce() {
@@ -752,6 +759,8 @@ object WebSocketManager {
             when (type) {
                 "login_success" -> {
                     if (!isCurrentSocket(generation) || !isAuthorizedSession) return
+                    val wasInteractive = interactiveLoginPending
+                    val shouldRemember = rememberInteractiveLogin
                     isAuthorizedSession = true
                     isAuthenticatedOnCurrentSocket = true
                     reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS
@@ -764,16 +773,25 @@ object WebSocketManager {
                     // asks for the password once more next time.
                     val issued = dataObj.optString("device_token", "")
                     if (issued.isNotEmpty()) {
-                        appContext?.let {
+                        activeDeviceToken = issued
+                        if (!wasInteractive || shouldRemember) appContext?.let {
                             CredentialStore.saveToken(
                                 it,
                                 issued,
                                 savedUsername ?: dataObj.optString("username"),
                             )
-                        }
+                        } else appContext?.let { CredentialStore.clear(it) }
                         savedPassword = null
                         hasDeviceToken = true
+                    } else if (wasInteractive && shouldRemember) {
+                        appContext?.let {
+                            CredentialStore.save(it, savedUsername!!, savedPassword!!)
+                        }
+                    } else if (wasInteractive) {
+                        appContext?.let { CredentialStore.clear(it) }
                     }
+                    interactiveLoginPending = false
+                    rememberInteractiveLogin = false
 
                     SafeLog.i(TAG, "LOGIN_SUCCESS user=[REDACTED] id=[REDACTED]")
 
@@ -819,6 +837,8 @@ object WebSocketManager {
                 }
 
                 "login_error" -> {
+                    interactiveLoginPending = false
+                    rememberInteractiveLogin = false
                     val hadAuthenticatedSession = isAuthenticatedOnCurrentSocket
                     isAuthorizedSession = AuthRetryPolicy.keepAuthorizedSession(
                         hadAuthenticatedSession
@@ -834,6 +854,7 @@ object WebSocketManager {
                      */
                     if (dataObj.optString("code") == "token_revoked") {
                         appContext?.let { CredentialStore.clearToken(it) }
+                        activeDeviceToken = null
                         hasDeviceToken = false
                         isAuthorizedSession = false
                         cancelReconnect()
@@ -845,13 +866,20 @@ object WebSocketManager {
                 }
 
                 "force_logout" -> {
-                    appContext?.let { CredentialStore.clear(it) }
+                    interactiveLoginPending = false
+                    rememberInteractiveLogin = false
+                    val cleared = appContext?.let { CredentialStore.clear(it) } ?: false
+                    activeDeviceToken = null
                     savedUsername = null
                     savedPassword = null
                     hasDeviceToken = false
                     isAuthorizedSession = false
-                    _loginEvent.postValue(LoginEvent.ForceLogout)
-                    disconnect()
+                    if (cleared) {
+                        _loginEvent.postValue(LoginEvent.ForceLogout)
+                        disconnect()
+                    } else {
+                        _loginEvent.postValue(LoginEvent.Error("Logout belum tersimpan. Coba lagi."))
+                    }
                 }
 
                 "user_profile_update" -> {
@@ -1469,29 +1497,24 @@ object WebSocketManager {
         }
     }
 
-    fun login(user: String, pass: String) {
+    fun login(user: String, pass: String, remember: Boolean) {
         savedUsername = user.uppercase().trim()
         savedPassword = pass.trim()
         isAuthorizedSession = true
         reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS
-
-        appContext?.let {
-            // An explicit sign-in uses what was typed. Keeping the old token
-            // here would send it instead, and a password entered precisely
-            // because the previous session was revoked would never be tried.
-            CredentialStore.clearToken(it)
-            CredentialStore.save(it, savedUsername!!, savedPassword!!)
-        }
+        interactiveLoginPending = true
+        rememberInteractiveLogin = remember
+        activeDeviceToken = null
         hasDeviceToken = false
 
         if (webSocket == null || !actualSocketConnected) {
             connect()
         } else {
-            executeLogin(savedUsername!!, savedPassword!!)
+            executeLogin(savedUsername!!, savedPassword!!, useStoredToken = false)
         }
     }
 
-    private fun executeLogin(user: String, pass: String) {
+    private fun executeLogin(user: String, pass: String, useStoredToken: Boolean = true) {
         /*
          * The token if this handset has one, the password only until it does.
          *
@@ -1502,7 +1525,7 @@ object WebSocketManager {
          * hands back a device token on the first successful login, and
          * CredentialStore deletes the password the moment one arrives.
          */
-        val token = appContext?.let { CredentialStore.token(it) }
+        val token = if (useStoredToken) activeDeviceToken else null
         hasDeviceToken = !token.isNullOrEmpty()
         val data = JSONObject()
             .put("username", user)
@@ -2060,7 +2083,7 @@ object WebSocketManager {
     }
 
     @Synchronized
-    fun logout() {
+    fun logout(): Boolean {
         // Invalidate callbacks before clearing disk, so a login_success already
         // in flight cannot recreate the token after explicit logout.
         socketGeneration += 1
@@ -2068,9 +2091,13 @@ object WebSocketManager {
         isAuthenticatedOnCurrentSocket = false
         savedUsername = null
         savedPassword = null
+        activeDeviceToken = null
         hasDeviceToken = false
-        appContext?.let { CredentialStore.clear(it) }
+        interactiveLoginPending = false
+        rememberInteractiveLogin = false
+        val cleared = appContext?.let { CredentialStore.clear(it) } ?: false
         disconnect(invalidateGeneration = false)
+        return cleared
     }
 
     @Synchronized
