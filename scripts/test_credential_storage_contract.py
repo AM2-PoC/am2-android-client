@@ -123,5 +123,60 @@ class CredentialStorageContractTest(unittest.TestCase):
             )
 
 
+
+class DeviceTokenContractTest(unittest.TestCase):
+    """The handset keeps a credential the operator can take back.
+
+    Encrypting a stored password helps on the handsets that have a keystore and
+    does nothing on the ones that do not, and in neither case does it make the
+    credential revocable. It is the operator's own password, it works from any
+    device, and a lost handset means changing it for the person.
+
+    A device token is issued to one handset and deleted by an admin. That is
+    the property worth having, and it is the reason the password may go.
+    """
+
+    def setUp(self):
+        self.socket = (JAVA / "WebSocketManager.kt").read_text()
+        self.store = (JAVA / "CredentialStore.kt").read_text()
+
+    def test_a_token_is_sent_when_the_handset_has_one(self):
+        self.assertRegex(
+            code(self.socket), r'put\("token"',
+            "the handset only ever offers a password, so the token it was "
+            "issued does nothing",
+        )
+
+    def test_the_password_is_dropped_once_a_token_arrives(self):
+        # Otherwise the token is an addition rather than a replacement, and
+        # every handset still carries the thing that cannot be revoked.
+        # The body of saveToken, not the file. A bare name match found the
+        # definition of forgetPassword further down and passed against a build
+        # where the call had been deleted -- the seventh assertion in this
+        # session to match a declaration instead of a use.
+        body = code(self.store)
+        body = body[body.index("fun saveToken"):]
+        body = body[:body.index("\n    fun ")]
+        self.assertIn(
+            "forgetPassword(context)", body,
+            "the password survives the token that replaces it",
+        )
+
+    def test_a_stored_token_counts_as_a_session(self):
+        # The password is gone by then. Asking only about the password would
+        # bring back the signed-out-after-a-restart fault by another route.
+        init = self.socket[self.socket.index("fun init(context: Context)"):]
+        init = code(init[:init.index("\n    fun ")])
+        self.assertIn(
+            "hasDeviceToken", init,
+            "a handset holding a valid token is treated as signed out",
+        )
+
+    def test_a_revoked_token_is_discarded_rather_than_retried(self):
+        self.assertRegex(
+            code(self.socket), r'token_revoked[\s\S]{0,300}?clearToken\(',
+            "a revoked token is kept and presented again, which is a loop",
+        )
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
