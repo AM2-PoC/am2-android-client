@@ -60,15 +60,54 @@ class RecorderLifecycleContractTest(unittest.TestCase):
         self.assertIn("voxEnabled", stop)
         self.assertIn("gatewayModeEnabled", stop)
 
+    def test_every_helper_this_file_calls_is_declared_in_it(self):
+        """A text edit can delete a declaration and leave its callers.
+
+        That is exactly what happened: replacing reportVoxLevel wholesale meant
+        slicing from its opening line to handleVoxLogic's, and noteVoxBlock sat
+        between the two. The slice took the declaration; three calls stayed.
+
+        No contract here could see it. They match text, and the text they were
+        asserting on -- the calls -- was still present and still correct. Only a
+        compiler resolves a reference, and there is no JDK on this host, so the
+        first thing that noticed was CI six minutes later.
+
+        This is the cheap half of a compiler: an unqualified call to a name
+        this file never declares. Five such names are real -- two Kotlin
+        builtins and three methods reached inside an `apply` receiver -- and
+        they are named below, so anything new is a genuine unresolved
+        reference.
+        """
+        text = re.sub(r"/\*.*?\*/", "", self.text, flags=re.S)
+        text = re.sub(r"//[^\n]*", "", text)
+        # Strings can hold parentheses and would otherwise read as call sites.
+        text = re.sub(r'"(?:[^"\\]|\\.)*"', '""', text)
+
+        declared = set(re.findall(r"\bfun\s+(\w+)\s*\(", text))
+        called = set(re.findall(r"(?<![.\w])([a-z]\w*)\s*\(", text))
+
+        control_flow = {"if", "while", "for", "when", "catch", "return", "try",
+                        "synchronized", "run", "let", "apply", "also", "require", "check"}
+        # Kotlin's own, and three reached through an `apply`/`?.apply` receiver.
+        elsewhere = {"arrayOf", "thread", "putExtra", "release", "stop"}
+
+        self.assertEqual(
+            set(), called - declared - control_flow - elsewhere,
+            "a name is called here that nothing in this file declares",
+        )
+
     def test_no_new_unpublished_field_crosses_threads(self):
         # By absence: every mutable field in this file is either volatile,
         # atomic, or named here as deliberately confined to one thread.
         confined = {
             # Written and read only by the recording thread, inside handleVoxLogic.
             "voxTriggerCount", "voxSilenceTimer", "lastVoxTriggerAt",
-            # Same thread, inside reportVoxLevel: a diagnostic counter and the
-            # stamp that rate-limits it. Nothing outside the loop reads either.
+            # Same thread, inside reportVoxLevel: diagnostic accumulators and
+            # the stamp that rate-limits them. Nothing outside the loop reads
+            # any of these -- they are summed per frame by the recording thread
+            # and zeroed by the same thread when the window closes.
             "voxLevelPeak", "voxLevelReportedAt",
+            "voxLevelSum", "voxLevelFloor", "voxLevelFrames",
             # Set once during init, before any thread reads it.
             "appContext",
         }
