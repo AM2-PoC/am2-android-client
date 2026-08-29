@@ -1,13 +1,17 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    What must not leave the handset.
+
+    This file carried the Android Studio template with every rule commented
+    out, so auto-backup took everything -- including a cleartext password in
+    the preferences and in filesDir/cred.txt. Credentials are now sealed where
+    the platform can seal them, and excluded here either way: a sealed value
+    restored onto a different device cannot be opened anyway, and the legacy
+    path below API 23 has nothing but cleartext to offer.
+
+    Settings still travel. Identity does not.
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="sharedpref" path="am2_credentials.xml" />
+    <exclude domain="file" path="cred.txt" />
 </full-backup-content>
