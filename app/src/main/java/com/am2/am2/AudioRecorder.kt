@@ -646,6 +646,11 @@ object AudioRecorder {
         voxLevelReportedAt = now
     }
 
+    /** Attributes a refusal, but only for a frame that was loud enough to key. */
+    private fun noteVoxBlock(which: Int, amplitude: Int) {
+        if (amplitude > voxThreshold) voxBlocks[which]++
+    }
+
     private fun handleVoxLogic(amplitude: Int) {
         if (!voxEnabled) return
         val isTalking = WebSocketManager.isTalkingNow()
