@@ -71,4 +71,42 @@ class VoxSensitivityTest {
         val drift = Math.abs(VoxSensitivity.thresholdFor(shown) - VoxSensitivity.DEFAULT_THRESHOLD)
         assertTrue("the default lands $drift away from itself, more than one step of $step", drift <= step)
     }
+
+    @Test
+    fun `most of the bar travels toward the sensitivity an operator asks for`() {
+        // The reported fault is "VOX is not sensitive enough". Under a linear
+        // map from 500 to 12000 the default sat at position 85, so eighty-five
+        // steps made VOX deafer and fifteen made it keener -- the control had
+        // almost no travel in the only direction anybody ever moves it.
+        val default = VoxSensitivity.progressFor(VoxSensitivity.DEFAULT_THRESHOLD)
+        assertTrue(
+            "the default sits at $default, leaving ${VoxSensitivity.MAX_PROGRESS - default} " +
+                "steps toward a quieter voice and $default away from one",
+            default in 40..60,
+        )
+    }
+
+    @Test
+    fun `the steps are proportional, because loudness is`() {
+        // A linear map spends most of its travel between "shout" and "loud
+        // speech", which is a range nobody speaks in. Doubling a quiet sound
+        // and doubling a loud one are the same perceptual step, so the bar has
+        // to move by ratio, not by difference.
+        val loudEnd = VoxSensitivity.thresholdFor(0) - VoxSensitivity.thresholdFor(1)
+        val quietEnd = VoxSensitivity.thresholdFor(VoxSensitivity.MAX_PROGRESS - 1) -
+            VoxSensitivity.thresholdFor(VoxSensitivity.MAX_PROGRESS)
+        assertTrue(
+            "one step is $loudEnd at the loud end and $quietEnd at the quiet end; " +
+                "equal steps mean the bar is still linear",
+            loudEnd > quietEnd * 4,
+        )
+    }
+
+    @Test
+    fun `the floor is where it was, because nothing has measured below it`() {
+        // Moving it is the change that could make VOX key on room noise, and
+        // no amplitude any handset has actually reported has been recorded
+        // anywhere. The curve is fixed here; the floor waits for numbers.
+        assertEquals(500, VoxSensitivity.MIN_THRESHOLD)
+    }
 }
