@@ -28,6 +28,7 @@ class LoginActivity : BaseActivity() {
     private lateinit var binding: ActivityLoginBinding
     private lateinit var sharedPreferences: SharedPreferences
     private lateinit var safeContext: Context
+    private var interactiveLoginPending = false
 
     private val REQUIRED_PERMISSIONS: Array<String>
         get() {
@@ -277,22 +278,22 @@ class LoginActivity : BaseActivity() {
             when (event) {
                 is WebSocketManager.LoginEvent.Success -> {
                     runOnUiThread {
-                        // Simpan kredensial untuk fitur auto-isi manual jika checkbox dicentang
-                        val identity = binding.etUsername.text.toString().trim()
-                        val password = binding.etPassword.text.toString().trim()
-                        
-                        if (binding.cbRememberMe.isChecked) {
-                            saveCredentials(identity, password)
-                        } else {
+                        // WebSocketManager owns the persisted session. This
+                        // event also fires for automatic token reconnects, when
+                        // there was no interactive request to evaluate.
+                        if (interactiveLoginPending && !binding.cbRememberMe.isChecked) {
                             clearCredentials()
+                        } else if (interactiveLoginPending) {
+                            sharedPreferences.edit().putBoolean("remember_me", true).apply()
                         }
-
+                        interactiveLoginPending = false
                         startMainActivity()
                         WebSocketManager.clearLoginEvent()
                     }
                 }
                 is WebSocketManager.LoginEvent.Error -> {
                     runOnUiThread {
+                        interactiveLoginPending = false
                         Toast.makeText(this, event.message, Toast.LENGTH_LONG).show()
                         WebSocketManager.clearLoginEvent()
                     }
@@ -319,15 +320,16 @@ class LoginActivity : BaseActivity() {
     }
 
     private fun sendLoginRequest(identity: String, pass: String) {
+        interactiveLoginPending = true
         WebSocketManager.login(identity, pass)
     }
 
     private fun checkAutoLogin() {
         // One reader, which also migrates a handset that still has its
         // credentials in cleartext and removes them once it has.
-        val stored = CredentialStore.load(safeContext)
-        val savedUser = stored?.first
-        val savedPass = stored?.second
+        val stored = CredentialStore.state(safeContext)
+        val savedUser = stored.username
+        val savedPass = stored.password
         val rememberMe = sharedPreferences.getBoolean("remember_me", false)
 
         if (savedUser != null) {

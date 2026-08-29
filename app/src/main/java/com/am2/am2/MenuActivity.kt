@@ -81,7 +81,7 @@ class MenuActivity : BaseActivity() {
     }
 
     private fun performLogout() {
-        WebSocketManager.disconnect()
+        WebSocketManager.logout()
         val serviceIntent = Intent(this, PTTService::class.java)
         stopService(serviceIntent)
         finishAffinity()

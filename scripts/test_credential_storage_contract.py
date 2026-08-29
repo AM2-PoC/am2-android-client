@@ -121,6 +121,11 @@ class CredentialStorageContractTest(unittest.TestCase):
                 f"{name} excludes nothing, so stored credentials leave the "
                 "device with the backup that is switched on",
             )
+            for domain in ("sharedpref", "device_sharedpref", "file", "device_file"):
+                self.assertIn(
+                    f'domain="{domain}"', uncommented,
+                    f"{name} leaves credential material in {domain} eligible for transfer",
+                )
 
 
 
@@ -153,23 +158,73 @@ class DeviceTokenContractTest(unittest.TestCase):
         # The body of saveToken, not the file. A bare name match found the
         # definition of forgetPassword further down and passed against a build
         # where the call had been deleted -- the seventh assertion in this
-        # session to match a declaration instead of a use.
+        # session to match a declaration rather than a use.
         body = code(self.store)
         body = body[body.index("fun saveToken"):]
         body = body[:body.index("\n    fun ")]
         self.assertIn(
-            "forgetPassword(context)", body,
+            "StoredCredentialState(username, null, token)", body,
+            "the token is persisted without the username needed to present it after restart",
+        )
+        self.assertNotIn(
+            "StoredCredentialState(username, password", body,
             "the password survives the token that replaces it",
         )
 
     def test_a_stored_token_counts_as_a_session(self):
-        # The password is gone by then. Asking only about the password would
-        # bring back the signed-out-after-a-restart fault by another route.
+        # The password is gone by then. Prove that init restores the complete
+        # token-only state rather than merely naming the token flag somewhere.
         init = self.socket[self.socket.index("fun init(context: Context)"):]
         init = code(init[:init.index("\n    fun ")])
         self.assertIn(
-            "hasDeviceToken", init,
-            "a handset holding a valid token is treated as signed out",
+            "CredentialStore.state(context)", init,
+            "process recreation still loads only username+password, so a "
+            "token-only session loses its username and cannot resume",
+        )
+        self.assertIn(
+            "stored.canResume", init,
+            "the restored username+token state never decides authorization",
+        )
+
+    def test_automatic_login_success_does_not_delete_the_token(self):
+        login = (JAVA / "LoginActivity.kt").read_text()
+        observer = login[login.index("WebSocketManager.loginEvent.observe"):]
+        observer = code(observer[:observer.index("\n    }")])
+        success = observer[observer.index("LoginEvent.Success"):observer.index("LoginEvent.Error")]
+        self.assertRegex(
+            success,
+            r"interactiveLoginPending\s*&&[\s\S]{0,120}?clearCredentials\(\)",
+            "credential clearing is not restricted to an explicit login request",
+        )
+        self.assertNotIn(
+            "saveCredentials(", success,
+            "automatic token login rewrites blank UI fields over the stored identity",
+        )
+
+    def test_explicit_logout_clears_the_persisted_session(self):
+        socket = code(self.socket)
+        logout = socket[socket.index("fun logout()"):]
+        logout = logout[:logout.index("\n    fun ")]
+        self.assertIn(
+            "CredentialStore.clear(", logout,
+            "logout leaves the token on disk, so the next launch signs back in",
+        )
+        self.assertRegex(
+            logout,
+            r"socketGeneration\s*\+=\s*1[\s\S]{0,500}?CredentialStore\.clear\(",
+            "logout clears disk before invalidating an in-flight login callback",
+        )
+        store = code(self.store)
+        clear = store[store.index("fun clear(context: Context)"):]
+        clear = clear[:clear.index("\n    private fun ")]
+        self.assertIn(
+            ".commit()", clear,
+            "logout uses asynchronous preference removal before process termination",
+        )
+        menu = code((JAVA / "MenuActivity.kt").read_text())
+        self.assertIn(
+            "WebSocketManager.logout()", menu,
+            "the Logout button only closes the socket and preserves the session",
         )
 
     def test_a_revoked_token_is_discarded_rather_than_retried(self):

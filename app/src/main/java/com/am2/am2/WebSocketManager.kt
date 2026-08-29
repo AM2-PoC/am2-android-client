@@ -300,12 +300,11 @@ object WebSocketManager {
             Settings.Secure.ANDROID_ID
         )
 
-        // Through the store, which reads wherever this handset last put them,
-        // seals it where the platform can, and removes the cleartext copies.
-        CredentialStore.load(context)?.let { (user, pass) ->
-            savedUsername = user
-            savedPassword = pass
-        }
+        // Restore the whole state. Once a token has been issued there is no
+        // password by design, but the username is still required to present it.
+        val stored = CredentialStore.state(context)
+        savedUsername = stored.username
+        savedPassword = stored.password
 
         currentChannelSlug = prefs?.getString("last_channel_slug", null)
 
@@ -329,10 +328,8 @@ object WebSocketManager {
         // here: the password is deleted the moment the relay issues one. Asking
         // only about the password would have brought the signed-out-after-a-
         // restart fault straight back, by a different route.
-        hasDeviceToken = !CredentialStore.token(context).isNullOrEmpty()
-        isAuthorizedSession =
-                !savedUsername.isNullOrEmpty() &&
-                (hasDeviceToken || !savedPassword.isNullOrEmpty())
+        hasDeviceToken = !stored.token.isNullOrEmpty()
+        isAuthorizedSession = stored.canResume
 
         val lastSavedName = prefs?.getString(
             "last_channel_name",
@@ -545,7 +542,7 @@ object WebSocketManager {
                         return
                     }
 
-                    handleMessage(text)
+                    handleMessage(text, generation)
                 }
 
                 override fun onMessage(socket: WebSocket, bytes: ByteString) {
@@ -740,7 +737,11 @@ object WebSocketManager {
         )
     }
 
-    private fun handleMessage(text: String) {
+    @Synchronized
+    private fun handleMessage(text: String, generation: Int) {
+        // Logout may invalidate the socket after onMessage's first check but
+        // before this callback obtains the auth-state lock.
+        if (!isCurrentSocket(generation)) return
         mapListener?.onMessage(text)
 
         try {
@@ -750,6 +751,7 @@ object WebSocketManager {
 
             when (type) {
                 "login_success" -> {
+                    if (!isCurrentSocket(generation) || !isAuthorizedSession) return
                     isAuthorizedSession = true
                     isAuthenticatedOnCurrentSocket = true
                     reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS
@@ -762,7 +764,13 @@ object WebSocketManager {
                     // asks for the password once more next time.
                     val issued = dataObj.optString("device_token", "")
                     if (issued.isNotEmpty()) {
-                        appContext?.let { CredentialStore.saveToken(it, issued) }
+                        appContext?.let {
+                            CredentialStore.saveToken(
+                                it,
+                                issued,
+                                savedUsername ?: dataObj.optString("username"),
+                            )
+                        }
                         savedPassword = null
                         hasDeviceToken = true
                     }
@@ -837,6 +845,10 @@ object WebSocketManager {
                 }
 
                 "force_logout" -> {
+                    appContext?.let { CredentialStore.clear(it) }
+                    savedUsername = null
+                    savedPassword = null
+                    hasDeviceToken = false
                     isAuthorizedSession = false
                     _loginEvent.postValue(LoginEvent.ForceLogout)
                     disconnect()
@@ -2048,16 +2060,28 @@ object WebSocketManager {
     }
 
     @Synchronized
-    fun disconnect() {
+    fun logout() {
+        // Invalidate callbacks before clearing disk, so a login_success already
+        // in flight cannot recreate the token after explicit logout.
+        socketGeneration += 1
+        isAuthorizedSession = false
+        isAuthenticatedOnCurrentSocket = false
+        savedUsername = null
+        savedPassword = null
+        hasDeviceToken = false
+        appContext?.let { CredentialStore.clear(it) }
+        disconnect(invalidateGeneration = false)
+    }
+
+    @Synchronized
+    fun disconnect(invalidateGeneration: Boolean = true) {
         isAuthorizedSession = false
         isAuthenticatedOnCurrentSocket = false
         actualSocketConnected = false
         isConnecting = false
 
-        /*
-         * Invalidate callbacks from current socket.
-         */
-        socketGeneration += 1
+        /* Invalidate callbacks unless logout already did it before disk clear. */
+        if (invalidateGeneration) socketGeneration += 1
 
         cancelReconnect()
         cancelDisconnectDebounce()
