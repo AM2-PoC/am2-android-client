@@ -109,17 +109,21 @@ object CredentialStore {
 
 
     @Synchronized
-    fun save(context: Context, user: String, pass: String) {
-        if (writeCanonical(context, StoredCredentialState(user, pass, null))) {
+    fun save(context: Context, user: String, pass: String): Boolean {
+        val saved = writeCanonical(context, StoredCredentialState(user, pass, null))
+        if (saved) {
             clearObsolete(context)
         }
+        return saved
     }
 
     @Synchronized
-    fun saveToken(context: Context, token: String, username: String) {
-        if (writeCanonical(context, StoredCredentialState(username, null, token))) {
+    fun saveToken(context: Context, token: String, username: String): Boolean {
+        val saved = writeCanonical(context, StoredCredentialState(username, null, token))
+        if (saved) {
             clearObsolete(context)
         }
+        return saved
     }
 
 
