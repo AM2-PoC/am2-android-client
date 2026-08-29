@@ -872,15 +872,13 @@ object WebSocketManager {
                 }
 
                 "login_error" -> {
-                    val failedAutomaticLogin = authenticationWasAutomatic
                     interactiveLoginPending = false
                     rememberInteractiveLogin = false
                     authenticationWasAutomatic = false
-                    isAuthorizedSession = !failedAutomaticLogin
+                    isAuthorizedSession = false
                     isAuthenticatedOnCurrentSocket = false
-                    if (!isAuthorizedSession) {
-                        cancelReconnect()
-                    }
+                    savedPassword = null
+                    cancelReconnect()
                     /*
                      * A revoked token is worthless, and retrying with it would
                      * be a loop. The password is gone by then, so the only
