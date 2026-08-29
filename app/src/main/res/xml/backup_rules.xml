@@ -3,9 +3,9 @@
     What must not leave the handset.
 
     This file carried the Android Studio template with every rule commented
-    out, so auto-backup took everything -- including a cleartext password in
-    the preferences and in filesDir/cred.txt. Credentials are now sealed where
-    the platform can seal them, and excluded here either way: a sealed value
+    out, so auto-backup took everything, including a cleartext password in the
+    preferences and in filesDir/cred.txt. Credentials are now sealed where the
+    platform can seal them, and excluded here either way: a sealed value
     restored onto a different device cannot be opened anyway, and the legacy
     path below API 23 has nothing but cleartext to offer.
 

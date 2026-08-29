@@ -88,6 +88,22 @@ class CredentialStorageContractTest(unittest.TestCase):
             "nothing checks the platform version before using a 23+ API",
         )
 
+    def test_every_resource_xml_is_well_formed(self):
+        """A resource the compiler rejects takes the whole build with it.
+
+        The first version of the backup rules carried a prose double hyphen
+        inside an XML comment, which the specification forbids, and aapt
+        stopped the build on it. Nothing here had parsed the file that was
+        written; CI did it first, several minutes later.
+        """
+        import xml.dom.minidom
+        for path in sorted((ROOT / "app/src/main/res/xml").glob("*.xml")):
+            with self.subTest(resource=path.name):
+                try:
+                    xml.dom.minidom.parse(str(path))
+                except Exception as err:
+                    self.fail(f"{path.name} is not well-formed XML: {err}")
+
     def test_backup_excludes_what_it_must_not_carry(self):
         manifest = MANIFEST.read_text()
         if 'android:allowBackup="true"' not in manifest:
