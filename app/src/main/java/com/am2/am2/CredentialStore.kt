@@ -34,6 +34,7 @@ object CredentialStore {
 
     private const val USER = "username"
     private const val PASS = "password"
+    private const val TOKEN = "device_token"
     private const val LEGACY_FILE = "cred.txt"
 
     /** Only ever consulted through this, so the version check has one home. */
@@ -93,7 +94,46 @@ object CredentialStore {
         return foundUser to foundPass
     }
 
+    /**
+     * The credential this handset keeps once it has one.
+     *
+     * A device token, issued by the relay and revocable there: a lost handset
+     * is a row an admin deletes. The password it replaces was the operator's
+     * own, worked from any device, and could only be withdrawn by changing it
+     * for the person. Sealed on API 23 and above like everything else here, and
+     * on the handsets below that it is still worth having -- unencrypted, but
+     * revocable, which the password never was.
+     */
+    fun saveToken(context: Context, token: String) {
+        val store = secure(context)
+        if (store != null) {
+            store.edit().putString(TOKEN, token).apply()
+        } else {
+            plain(context).edit().putString(TOKEN, token).apply()
+        }
+        // The password has done its one job. Nothing on this handset needs it
+        // again, and keeping it would mean this change had removed nothing.
+        forgetPassword(context)
+    }
+
+    fun token(context: Context): String? =
+        secure(context)?.getString(TOKEN, null)
+            ?: plain(context).getString(TOKEN, null)
+
+    /** After a revocation: the token is worthless and the password is gone. */
+    fun clearToken(context: Context) {
+        secure(context)?.edit()?.remove(TOKEN)?.apply()
+        plain(context).edit().remove(TOKEN).apply()
+    }
+
+    private fun forgetPassword(context: Context) {
+        secure(context)?.edit()?.remove(PASS)?.apply()
+        plain(context).edit().remove(PASS).apply()
+        deleteLegacyFile(context)
+    }
+
     fun clear(context: Context) {
+        clearToken(context)
         secure(context)?.edit()?.remove(USER)?.remove(PASS)?.apply()
         plain(context).edit().remove(USER).remove(PASS).apply()
         deleteLegacyFile(context)

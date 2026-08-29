@@ -125,6 +125,7 @@ object WebSocketManager {
     private var savedPassword: String? = null
 
     @Volatile private var isAuthorizedSession = false
+    @Volatile private var hasDeviceToken = false
     @Volatile private var isAuthenticatedOnCurrentSocket = false
 
     private val _availableChannels = MutableLiveData<JSONArray>(JSONArray())
@@ -323,9 +324,15 @@ object WebSocketManager {
          * start_on_boot's, and it still owns it. Whether there is a session to
          * resume is answered by whether there is anything to resume it with.
          */
+        //
+        // A token counts as much as a password, and soon it is the only thing
+        // here: the password is deleted the moment the relay issues one. Asking
+        // only about the password would have brought the signed-out-after-a-
+        // restart fault straight back, by a different route.
+        hasDeviceToken = !CredentialStore.token(context).isNullOrEmpty()
         isAuthorizedSession =
                 !savedUsername.isNullOrEmpty() &&
-                !savedPassword.isNullOrEmpty()
+                (hasDeviceToken || !savedPassword.isNullOrEmpty())
 
         val lastSavedName = prefs?.getString(
             "last_channel_name",
@@ -521,9 +528,9 @@ object WebSocketManager {
                     if (
                         isAuthorizedSession &&
                         !savedUsername.isNullOrEmpty() &&
-                        !savedPassword.isNullOrEmpty()
+                        (hasDeviceToken || !savedPassword.isNullOrEmpty())
                     ) {
-                        executeLogin(savedUsername!!, savedPassword!!)
+                        executeLogin(savedUsername!!, savedPassword ?: "")
                     } else {
                         updateTalkingStatusUI()
                     }
@@ -750,6 +757,16 @@ object WebSocketManager {
                     myUserId = dataObj.optString("id")
                     myUserName = dataObj.optString("username")
 
+                    // Kept, and the password dropped with it. A relay that
+                    // could not issue one sends null, and this handset simply
+                    // asks for the password once more next time.
+                    val issued = dataObj.optString("device_token", "")
+                    if (issued.isNotEmpty()) {
+                        appContext?.let { CredentialStore.saveToken(it, issued) }
+                        savedPassword = null
+                        hasDeviceToken = true
+                    }
+
                     SafeLog.i(TAG, "LOGIN_SUCCESS user=[REDACTED] id=[REDACTED]")
 
                     cancelDisconnectDebounce()
@@ -802,6 +819,18 @@ object WebSocketManager {
                     if (!isAuthorizedSession) {
                         cancelReconnect()
                     }
+                    /*
+                     * A revoked token is worthless, and retrying with it would
+                     * be a loop. The password is gone by then, so the only
+                     * honest next step is to ask for it.
+                     */
+                    if (dataObj.optString("code") == "token_revoked") {
+                        appContext?.let { CredentialStore.clearToken(it) }
+                        hasDeviceToken = false
+                        isAuthorizedSession = false
+                        cancelReconnect()
+                    }
+
                     val msg = dataObj.optString("message", "Login Gagal")
                     _loginEvent.postValue(LoginEvent.Error(msg))
                     updateTalkingStatusUI()
@@ -1434,7 +1463,14 @@ object WebSocketManager {
         isAuthorizedSession = true
         reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS
 
-        appContext?.let { CredentialStore.save(it, savedUsername!!, savedPassword!!) }
+        appContext?.let {
+            // An explicit sign-in uses what was typed. Keeping the old token
+            // here would send it instead, and a password entered precisely
+            // because the previous session was revoked would never be tried.
+            CredentialStore.clearToken(it)
+            CredentialStore.save(it, savedUsername!!, savedPassword!!)
+        }
+        hasDeviceToken = false
 
         if (webSocket == null || !actualSocketConnected) {
             connect()
@@ -1444,10 +1480,23 @@ object WebSocketManager {
     }
 
     private fun executeLogin(user: String, pass: String) {
+        /*
+         * The token if this handset has one, the password only until it does.
+         *
+         * The password was kept so the app could sign in again after a
+         * restart. It is the operator's own, it works from any device, and it
+         * could only be withdrawn by changing it for the person -- so a lost
+         * handset was a password change rather than a revocation. The relay
+         * hands back a device token on the first successful login, and
+         * CredentialStore deletes the password the moment one arrives.
+         */
+        val token = appContext?.let { CredentialStore.token(it) }
+        hasDeviceToken = !token.isNullOrEmpty()
         val data = JSONObject()
             .put("username", user)
-            .put("password", pass)
             .put("current_device_id", deviceId)
+        if (token.isNullOrEmpty()) data.put("password", pass) else data.put("token", token)
+        data
             // Which build is talking. The relay logged a username and nothing
             // about the software, so "is the unit running the fix" could only be
             // answered by holding the handset -- and was answered wrongly. A
