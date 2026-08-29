@@ -143,6 +143,17 @@ object CredentialStore {
         return cleared
     }
 
+    /** Prevent any rejected persisted credential from resuming after restart. */
+    @Synchronized
+    fun blockSession(context: Context): Boolean {
+        var blocked = true
+        contexts(context).forEach { candidate ->
+            blocked = plain(candidate).edit()
+                .putBoolean(SESSION_BLOCKED, true).commit() && blocked
+        }
+        return blocked
+    }
+
     /** Logout is durable before the caller may terminate the process. */
     @Synchronized
     fun clear(context: Context): Boolean {
