@@ -53,9 +53,10 @@ class SessionPersistenceContractTest(unittest.TestCase):
     def test_the_credentials_themselves_still_decide(self):
         init = section(self.socket, "fun init(context: Context)", "\n    fun ")
         assignment = re.search(r"isAuthorizedSession\s*=\s*([^\n]*(?:\n[^\n]*){0,3})", init)
+        self.assertIsNotNone(assignment, "nothing decides whether a session resumes")
         self.assertIn(
-            "savedUsername", assignment.group(1),
-            "a session is claimed without anything stored to resume it with",
+            "stored.canResume", assignment.group(1),
+            "authorization does not come from the complete persisted credential state",
         )
 
     def test_boot_start_still_decides_starting_on_boot(self):

@@ -13,5 +13,9 @@
 -->
 <full-backup-content>
     <exclude domain="sharedpref" path="am2_credentials.xml" />
+    <exclude domain="sharedpref" path="AM2_PREFS.xml" />
+    <exclude domain="device_sharedpref" path="am2_credentials.xml" />
+    <exclude domain="device_sharedpref" path="AM2_PREFS.xml" />
     <exclude domain="file" path="cred.txt" />
+    <exclude domain="device_file" path="cred.txt" />
 </full-backup-content>
