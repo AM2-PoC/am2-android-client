@@ -320,6 +320,17 @@ class VoxHearsTheBuiltInMicrophoneTest(VoxTestCase):
             "the level is never reported from the frame loop that measures it",
         )
 
+    def test_the_level_leaves_the_handset(self):
+        # logcat is where this number went to die: since Android 4.1 no app may
+        # read another's log, so without a PC and adb the one measurement that
+        # decides the fault is locked on the device that has it. The relay
+        # already receives everything else this client says about itself.
+        self.assertRegex(
+            self.recorder, r'emit\(\s*"vox_level"',
+            "the level is written to the handset's log only, where the person "
+            "diagnosing cannot reach it",
+        )
+
 
 class VoxKeepsTheWordThatTriggeredItTest(VoxTestCase):
     """The word that opens a transmission is the one VOX throws away.

@@ -14,6 +14,7 @@ import android.media.audiofx.NoiseSuppressor
 import android.media.MediaRecorder
 import android.os.Build
 import androidx.core.content.ContextCompat
+import org.json.JSONObject
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.ArrayDeque
@@ -540,11 +541,14 @@ object AudioRecorder {
      * complaint is about -- and only the window's peak, so a line a second says
      * what a hundred would.
      */
+    /** Often enough to see a sentence, rare enough to be free. */
+    private const val VOX_LEVEL_REPORT_MS = 3000L
+
     private var voxLevelPeak = 0
     private var voxLevelReportedAt = 0L
 
     private fun reportVoxLevel(amplitude: Int) {
-        if (!voxEnabled || WebSocketManager.isTalkingNow()) {
+        if (!voxEnabled) {
             voxLevelPeak = 0
             return
         }
@@ -552,10 +556,33 @@ object AudioRecorder {
 
         val now = System.currentTimeMillis()
         if (voxLevelReportedAt == 0L) voxLevelReportedAt = now
-        if (now - voxLevelReportedAt < 1000L) return
+        if (now - voxLevelReportedAt < VOX_LEVEL_REPORT_MS) return
 
+        val talking = WebSocketManager.isTalkingNow()
         SafeLog.i(TAG, "vox_level peak=$voxLevelPeak threshold=$voxThreshold " +
-            "would_trigger=${voxLevelPeak > voxThreshold}")
+            "would_trigger=${voxLevelPeak > voxThreshold} talking=$talking")
+
+        /*
+         * And to the relay, because logcat is where this number went to die.
+         *
+         * Since Android 4.1 no app may read another's log, so without a PC and
+         * adb the one measurement that decides this fault was locked on the
+         * handset that had it. The relay already receives everything else the
+         * client says about itself.
+         *
+         * Reported while transmitting too, deliberately: whether the level
+         * stayed above the threshold *during* a transmission is what says
+         * whether the silence timer should have been refreshed, which is the
+         * whole question.
+         */
+        WebSocketManager.emit(
+            "vox_level",
+            JSONObject()
+                .put("peak", voxLevelPeak)
+                .put("threshold", voxThreshold)
+                .put("talking", talking),
+        )
+
         voxLevelPeak = 0
         voxLevelReportedAt = now
     }
