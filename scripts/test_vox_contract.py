@@ -283,12 +283,33 @@ class VoxHearsTheBuiltInMicrophoneTest(VoxTestCase):
     def setUp(self):
         self.recorder = RECORDER.read_text()
 
-    def test_suppression_is_turned_off_rather_than_left_to_the_platform(self):
+    def test_suppression_is_observed_rather_than_forced(self):
+        """Neither on nor off by us. Attached to be read.
+
+        This was forced on while gain control was attached, then forced off
+        when the built-in microphone stayed deaf. Neither was measured: there
+        is no VOX logic change between the build that was reported bad and the
+        build that was reported better, so the improvement was never mine to
+        claim -- and the field then reported the headset, which had been
+        working, getting worse.
+
+        The state before any of it was the platform's own choice, and the
+        headset worked under it. So: create the effect to read what the
+        platform decided, set nothing, and report it. The one number that can
+        settle this now reaches the relay.
+        """
         block = section(self.recorder, "fun attachCaptureEffects", "private fun releaseCaptureEffects")
-        self.assertRegex(
-            block, r"NoiseSuppressor[\s\S]{0,200}?enabled\s*=\s*false",
-            "noise suppression is enabled or left to the platform, and on the "
-            "built-in microphone it removes the speech VOX is listening for",
+        ns = block[block.index("noiseSuppressor ="):]
+        ns = ns[:ns.index("echoCanceler =")]
+        self.assertNotRegex(
+            ns, r"enabled\s*=",
+            "the suppressor is still being set by us; two rounds of setting it "
+            "produced no evidence either way",
+        )
+        self.assertIn(
+            "NoiseSuppressor.create(", ns,
+            "the effect is not attached at all, so nothing can report what the "
+            "platform chose",
         )
 
     def test_echo_cancellation_and_gain_control_stay(self):

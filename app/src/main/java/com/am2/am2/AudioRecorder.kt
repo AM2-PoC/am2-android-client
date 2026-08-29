@@ -454,25 +454,23 @@ object AudioRecorder {
         } catch (e: Exception) { null }
 
         /*
-         * Attached in order to be turned off.
+         * Attached in order to be read, and set by nothing here.
          *
-         * The platform's suppressor is tuned to keep a near-field voice and
-         * discard the rest. On a headset the microphone is at the mouth and it
-         * has an easy job; on the built-in microphone -- a handset on a desk,
-         * or held at arm's length -- it treats the operator's own speech as
-         * ambient and removes it, and VOX then compares what is left against a
-         * threshold. Reported from the field exactly that way: headset fine,
-         * built-in microphone deaf, and still deaf with the bar at its limit.
+         * This was forced on while gain control was attached, then forced off
+         * when the built-in microphone stayed deaf. Neither was measured. There
+         * is no VOX logic change between the build reported bad and the build
+         * reported better, so the improvement was never mine to claim -- and
+         * the field then reported the headset, which had been working, getting
+         * worse.
          *
-         * Explicitly false rather than simply not asked for, because what the
-         * platform does when nobody says is exactly what differs between the
-         * two routes -- and asking for it, which this did until now, made a
-         * default into a guarantee.
+         * The state before any of it was the platform's own choice, and the
+         * headset worked under it. So the effect is created to read what this
+         * device decided and nothing sets it. vox_level now carries the
+         * amplitude to the relay, which is what should have decided this from
+         * the start.
          */
         noiseSuppressor = try {
-            if (NoiseSuppressor.isAvailable()) {
-                NoiseSuppressor.create(sessionId)?.apply { enabled = false }
-            } else null
+            if (NoiseSuppressor.isAvailable()) NoiseSuppressor.create(sessionId) else null
         } catch (e: Exception) { null }
 
         echoCanceler = try {
@@ -484,9 +482,9 @@ object AudioRecorder {
         SafeLog.i(
             TAG,
             "capture effects: gain_control=" + (gainControl?.enabled == true) +
+                " echo_canceler=" + (echoCanceler?.enabled == true) +
                 " noise_suppressor=" + (noiseSuppressor?.enabled == true) +
-                " (suppression is deliberately off)" +
-                " echo_canceler=" + (echoCanceler?.enabled == true),
+                " (that last one is this device's own default; nothing here sets it)",
         )
     }
 
