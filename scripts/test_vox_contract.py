@@ -27,6 +27,17 @@ SOUNDS = JAVA / "SoundManager.kt"
 DEVICES = JAVA / "AudioDeviceManager.kt"
 
 
+def code(text: str) -> str:
+    """Source with its comments removed.
+
+    Comments explaining a change say the same words the check is looking for,
+    so an assertion that reads them cannot tell a change from an explanation
+    of one. This has produced false greens here before.
+    """
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    return re.sub(r"//[^\n]*", "", text)
+
+
 def section(text: str, start: str, end: str) -> str:
     begin = text.index(start)
     return text[begin:text.index(end, begin)]
@@ -282,6 +293,55 @@ class VoxHearsTheBuiltInMicrophoneTest(VoxTestCase):
 
     def setUp(self):
         self.recorder = RECORDER.read_text()
+
+    def test_every_refusal_of_a_loud_frame_is_counted(self):
+        """Four guards can refuse to key. None of them said so.
+
+        vox_level reports a peak over three seconds, which cannot answer the
+        question actually being asked -- when a frame was loud enough to key
+        and VOX stayed silent, which guard ate it? Twenty-seven idle windows
+        came back with seven where the peak cleared the threshold and nothing
+        transmitted, and that aggregate cannot distinguish "another operator
+        held the channel" from "the roger beep was still playing" from "the
+        half-second re-key interval had not elapsed".
+
+        So each refusal path records itself, and the counts ride along with
+        the level report. One field session then names the guard instead of
+        funding another guess.
+        """
+        block = section(self.recorder, "private fun handleVoxLogic", "private fun requestVoxRestart")
+
+        # Every early return in the not-talking path is a refusal, and each one
+        # must be attributed. Counting `return` keeps this honest as the
+        # function grows: a new exit with no note fails here.
+        returns = len(re.findall(r"\breturn\b", code(block)))
+        notes = len(re.findall(r"noteVoxBlock\(", code(block)))
+        self.assertGreaterEqual(
+            notes, returns - 1,
+            "handleVoxLogic has {} exits but only {} of them say why; a frame "
+            "can still be refused without leaving a trace".format(returns, notes),
+        )
+
+        for reason in ("BLOCK_OTHERS", "BLOCK_PLAYBACK", "BLOCK_TONE", "BLOCK_INTERVAL"):
+            self.assertIn(
+                reason, code(block),
+                "{} is never recorded, so that guard stays invisible".format(reason),
+            )
+
+    def test_the_block_counts_reach_the_relay(self):
+        """A count that only ever reaches logcat is a count nobody reads."""
+        report = section(self.recorder, "private fun reportVoxLevel", "private fun handleVoxLogic")
+        payload = report[report.index("WebSocketManager.emit("):]
+        for reason in ("blocked_others", "blocked_playback", "blocked_tone", "blocked_interval"):
+            self.assertIn(
+                reason, payload,
+                "the {} count never leaves the handset".format(reason),
+            )
+        self.assertIn(
+            "voxBlocks.fill(0)", code(report),
+            "the counts are never cleared, so every report restates the whole "
+            "session instead of the window it covers",
+        )
 
     def test_suppression_is_observed_rather_than_forced(self):
         """Neither on nor off by us. Attached to be read.

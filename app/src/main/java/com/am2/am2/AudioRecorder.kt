@@ -141,6 +141,24 @@ object AudioRecorder {
     private const val VOX_SILENCE_TIMEOUT = 1500L
     private var voxTriggerCount = 0
     private const val VOX_TRIGGER_REQUIRED = 1
+
+    /*
+     * Why a frame loud enough to key did not key.
+     *
+     * Four guards can refuse, and none of them said which. The level report is
+     * a peak over three seconds, so it can show that speech cleared the
+     * threshold while nothing transmitted and still not say whether the channel
+     * was held, a tone was playing, or the re-key interval had not elapsed.
+     * Those have three different fixes and the aggregate picks none of them.
+     *
+     * Counted only for frames above the threshold: a quiet frame being refused
+     * is not a fault, it is silence.
+     */
+    private const val BLOCK_OTHERS = 0
+    private const val BLOCK_PLAYBACK = 1
+    private const val BLOCK_TONE = 2
+    private const val BLOCK_INTERVAL = 3
+    private val voxBlocks = IntArray(4)
     private var lastVoxTriggerAt = 0L
 
     @Volatile
@@ -558,7 +576,11 @@ object AudioRecorder {
 
         val talking = WebSocketManager.isTalkingNow()
         SafeLog.i(TAG, "vox_level peak=$voxLevelPeak threshold=$voxThreshold " +
-            "would_trigger=${voxLevelPeak > voxThreshold} talking=$talking")
+            "would_trigger=${voxLevelPeak > voxThreshold} talking=$talking " +
+            "blocked_others=${voxBlocks[BLOCK_OTHERS]} " +
+            "blocked_playback=${voxBlocks[BLOCK_PLAYBACK]} " +
+            "blocked_tone=${voxBlocks[BLOCK_TONE]} " +
+            "blocked_interval=${voxBlocks[BLOCK_INTERVAL]}")
 
         /*
          * And to the relay, because logcat is where this number went to die.
@@ -578,11 +600,20 @@ object AudioRecorder {
             JSONObject()
                 .put("peak", voxLevelPeak)
                 .put("threshold", voxThreshold)
-                .put("talking", talking),
+                .put("talking", talking)
+                .put("blocked_others", voxBlocks[BLOCK_OTHERS])
+                .put("blocked_playback", voxBlocks[BLOCK_PLAYBACK])
+                .put("blocked_tone", voxBlocks[BLOCK_TONE])
+                .put("blocked_interval", voxBlocks[BLOCK_INTERVAL]),
         )
 
         voxLevelPeak = 0
+        voxBlocks.fill(0)
         voxLevelReportedAt = now
+    }
+
+    private fun noteVoxBlock(which: Int, amplitude: Int) {
+        if (amplitude > voxThreshold) voxBlocks[which]++
     }
 
     private fun handleVoxLogic(amplitude: Int) {
@@ -590,6 +621,7 @@ object AudioRecorder {
         val isTalking = WebSocketManager.isTalkingNow()
         if (WebSocketManager.activeSpeakersList.value?.isNotEmpty() == true) {
             if (isTalking) triggerServiceAction(PTTService.ACTION_STOP_PTT)
+            else noteVoxBlock(BLOCK_OTHERS, amplitude)
             voxTriggerCount = 0
             return
         }
@@ -608,6 +640,10 @@ object AudioRecorder {
          * has to render, and the tone hold-off is the clip's own length.
          */
         if (!isTalking && (AudioPlayer.isActuallyPlaying() || SoundManager.isWithinToneHoldoff())) {
+            noteVoxBlock(
+                if (AudioPlayer.isActuallyPlaying()) BLOCK_PLAYBACK else BLOCK_TONE,
+                amplitude,
+            )
             voxTriggerCount = 0
             return
         }
@@ -625,7 +661,10 @@ object AudioRecorder {
                      * foreground notification, for as long as they spoke.
                      */
                     voxTriggerCount = 0
-                    if (now - lastVoxTriggerAt < VOX_TRIGGER_INTERVAL_MS) return
+                    if (now - lastVoxTriggerAt < VOX_TRIGGER_INTERVAL_MS) {
+                        noteVoxBlock(BLOCK_INTERVAL, amplitude)
+                        return
+                    }
                     lastVoxTriggerAt = now
                     voxSilenceTimer = now
                     triggerServiceAction(PTTService.ACTION_START_PTT, true)
