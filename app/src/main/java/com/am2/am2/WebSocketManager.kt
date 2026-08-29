@@ -872,6 +872,7 @@ object WebSocketManager {
                 }
 
                 "login_error" -> {
+                    val blocked = appContext?.let { CredentialStore.blockSession(it) } ?: false
                     interactiveLoginPending = false
                     rememberInteractiveLogin = false
                     authenticationWasAutomatic = false
@@ -879,6 +880,7 @@ object WebSocketManager {
                     isAuthenticatedOnCurrentSocket = false
                     savedPassword = null
                     cancelReconnect()
+                    if (!blocked) SafeLog.e(TAG, "A rejected credential could not be blocked durably")
                     /*
                      * A revoked token is worthless, and retrying with it would
                      * be a loop. The password is gone by then, so the only
