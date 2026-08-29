@@ -145,6 +145,39 @@ jobs:
           fi
           printf '%s' "${KEYSTORE_BASE64}" | base64 -d > "${RUNNER_TEMP}/staging.jks"
           echo "path=${RUNNER_TEMP}/staging.jks" >> "$GITHUB_OUTPUT"
+      # Which signer a staging build will trust, read off the key that is about
+      # to sign it.
+      #
+      # UpdateVerifier refuses an update unless BuildConfig's approved digest is
+      # 64 hex characters and equals the manifest's. This job never passed one,
+      # so it was the empty string its default provides and every downloaded
+      # update was refused -- on every staging build there has ever been, with
+      # self-update enabled on this flavour, so an operator got all the way
+      # through the download first. No signing key could have fixed it: the
+      # value is a build property that was never sent.
+      #
+      # Derived rather than configured. A repository variable holding this would
+      # be a second copy of a fact the keystore already carries, and the drift
+      # between them would only surface as a handset refusing an update.
+      #
+      # The password goes in on stdin for the same reason the four below are not
+      # -P arguments: a command line is visible in the process list.
+      - name: Read the signer this build will trust
+        id: approved_signer
+        if: steps.staging_key.outputs.path != ''
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.AM2_STAGING_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.AM2_STAGING_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          DIGEST="$(printf '%s\n' "$KEYSTORE_PASSWORD" \
+            | keytool -list -v -keystore "${{ steps.staging_key.outputs.path }}" -alias "$KEY_ALIAS" \
+            | sed -n 's/.*SHA256: *\([0-9A-Fa-f:]*\).*/\1/p' \
+            | head -1 | tr -d ':' | tr 'A-F' 'a-f')"
+          printf '%s' "$DIGEST" | grep -Eq '^[0-9a-f]{64}$' \
+            || { echo "::error::could not read a SHA-256 from the staging keystore"; exit 1; }
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "staging builds will trust $DIGEST"
       # Passed as ORG_GRADLE_PROJECT_* rather than -P: Gradle reads those as
       # project properties, and a password on the command line is visible in
       # the process list to anything else running on the machine.
@@ -158,6 +191,7 @@ jobs:
           ORG_GRADLE_PROJECT_AM2_STAGING_KEYSTORE_PASSWORD: ${{ secrets.AM2_STAGING_KEYSTORE_PASSWORD }}
           ORG_GRADLE_PROJECT_AM2_STAGING_KEY_ALIAS: ${{ secrets.AM2_STAGING_KEY_ALIAS }}
           ORG_GRADLE_PROJECT_AM2_STAGING_KEY_PASSWORD: ${{ secrets.AM2_STAGING_KEY_PASSWORD }}
+          ORG_GRADLE_PROJECT_AM2_APPROVED_SIGNER_SHA256: ${{ steps.approved_signer.outputs.digest }}
         run: ./gradlew --no-daemon -PAM2_VERSION_CODE="$GITHUB_RUN_NUMBER" :app:testStagingDebugUnitTest :app:assembleStagingDebug :app:assembleStagingDebugAndroidTest
       - name: Record immutable staging candidate identity
         shell: bash
@@ -180,6 +214,17 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs staging-candidate/am2-client-staging-debug.apk > staging-candidate/signer-metadata.txt
           stat --printf='byte_size=%s\n' staging-candidate/am2-client-staging-debug.apk > staging-candidate/build-metadata.txt
           printf 'source_commit=%s\nenvironment=staging\nvariant=StagingDebug\nsupported_api=16+\n' "$GITHUB_SHA" >> staging-candidate/build-metadata.txt
+          # keytool read the key; apksigner reads the artifact. If they disagree
+          # the build trusts a signer other than its own, and every update it is
+          # offered will be refused -- silently, on a handset, weeks later.
+          EXPECTED="${{ steps.approved_signer.outputs.digest }}"
+          if [ -n "$EXPECTED" ]; then
+            SIGNED_BY=$(sed -n 's/.*certificate SHA-256 digest: *\([0-9a-fA-F]\{64\}\).*/\1/p' \
+              staging-candidate/signer-metadata.txt | head -1 | tr 'A-F' 'a-f')
+            test "$EXPECTED" = "$SIGNED_BY" \
+              || { echo "::error::build trusts $EXPECTED but was signed by $SIGNED_BY"; exit 1; }
+            printf 'approved_signer=%s\n' "$EXPECTED" >> staging-candidate/build-metadata.txt
+          fi
       - name: Publish the manifest the device parses
         shell: bash
         env:

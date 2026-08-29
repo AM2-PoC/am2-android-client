@@ -124,6 +124,49 @@ class PublishedManifest(unittest.TestCase):
             missing, f"the build never publishes these required fields: {missing}"
         )
 
+    def test_the_staging_lane_bakes_in_the_signer_it_will_be_asked_to_trust(self):
+        """UpdateVerifier refuses an update unless the running build agrees.
+
+            val approved = normalize(BuildConfig.APPROVED_UPDATE_SIGNER_SHA256)
+            if (approved.length != 64 || approved != metadata.signerSha256) return false
+
+        The staging job passes four keystore properties and not this one, so
+        APPROVED_UPDATE_SIGNER_SHA256 is the empty string its default provides,
+        length zero, and every downloaded update is refused with "Identitas atau
+        signature APK tidak valid."
+
+        Confirmed against a shipped APK rather than inferred: the staging
+        signer's digest does not appear anywhere in classes.dex, while the
+        package name does.
+
+        Self-update is enabled on this flavour, so an operator gets all the way
+        through the download before being refused. It has never worked, on any
+        staging build, and no signing key could have made it work.
+        """
+        workflow = WORKFLOW.read_text()
+        start = workflow.index("build-staging-candidate:")
+        # The next job header: a two-space indented key at the start of a line.
+        after = re.search(r"\n  [a-z][a-z0-9-]*:\n", workflow[start:])
+        job = workflow[start:start + after.start()] if after else workflow[start:]
+
+        self.assertIn(
+            "AM2_APPROVED_SIGNER_SHA256", job,
+            "the staging build is never told which signer to trust, so every "
+            "update it downloads is refused before it can be installed",
+        )
+
+    def test_the_trusted_signer_comes_from_the_key_that_actually_signs(self):
+        # A hand-set value is a value that drifts from the keystore it is
+        # supposed to describe, and the drift is invisible until a handset
+        # refuses an update in the field. Derive it from the keystore the job
+        # has already restored, and check it against what apksigner reports for
+        # the APK that was built with it.
+        workflow = WORKFLOW.read_text()
+        self.assertRegex(
+            workflow, r"keytool[^\n]*-list",
+            "the trusted signer is stated rather than read off the signing key",
+        )
+
     def test_release_notes_are_published_in_every_language_the_panel_renders(self):
         # The panel is bilingual and release notes are the one string on it that
         # cannot live in a catalogue -- they are written per release, not per
