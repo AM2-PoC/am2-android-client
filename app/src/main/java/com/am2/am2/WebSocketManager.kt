@@ -34,7 +34,7 @@ import java.util.concurrent.TimeUnit
 object WebSocketManager {
     private const val TAG = "WebSocketManager"
     private val SERVER_URL = BuildConfig.WEBSOCKET_URL
-    private const val PREFS_NAME = "AM2_PREFS"
+    internal const val PREFS_NAME = "AM2_PREFS"
 
     private const val DEBOUNCE_DISCONNECT_MS = 5000L
     private const val MAX_RECONNECT_DELAY = 10000L
@@ -299,22 +299,11 @@ object WebSocketManager {
             Settings.Secure.ANDROID_ID
         )
 
-        savedUsername = prefs?.getString("username", null)
-        savedPassword = prefs?.getString("password", null)
-
-        if (savedUsername.isNullOrEmpty() || savedPassword.isNullOrEmpty()) {
-            try {
-                val file = File(context.filesDir, "cred.txt")
-                if (file.exists()) {
-                    val content = file.readText()
-                    val parts = content.split("|")
-                    if (parts.size >= 2) {
-                        savedUsername = parts[0]
-                        savedPassword = parts[1]
-                    }
-                }
-            } catch (_: Exception) {
-            }
+        // Through the store, which reads wherever this handset last put them,
+        // seals it where the platform can, and removes the cleartext copies.
+        CredentialStore.load(context)?.let { (user, pass) ->
+            savedUsername = user
+            savedPassword = pass
         }
 
         currentChannelSlug = prefs?.getString("last_channel_slug", null)
@@ -1445,10 +1434,7 @@ object WebSocketManager {
         isAuthorizedSession = true
         reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS
 
-        prefs?.edit()
-            ?.putString("username", savedUsername)
-            ?.putString("password", savedPassword)
-            ?.apply()
+        appContext?.let { CredentialStore.save(it, savedUsername!!, savedPassword!!) }
 
         if (webSocket == null || !actualSocketConnected) {
             connect()

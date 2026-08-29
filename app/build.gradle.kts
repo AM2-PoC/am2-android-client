@@ -345,6 +345,16 @@ dependencies {
     implementation(libs.material)
     implementation("androidx.multidex:multidex:2.0.1")
 
+    /*
+     * The platform keystore, for the handsets that have one.
+     *
+     * Declares minSdk 23 against this module's 16, so the manifest carries
+     * tools:overrideLibrary for it. That is sound only because nothing on the
+     * legacy path names these classes -- see CredentialStore, which branches on
+     * the version, and SecureCredentialStore, which holds the imports.
+     */
+    implementation("androidx.security:security-crypto:1.0.0")
+
     // Media library
     implementation("androidx.media:media:1.6.0")
 
