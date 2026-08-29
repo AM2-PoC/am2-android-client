@@ -212,6 +212,22 @@ class DeviceTokenContractTest(unittest.TestCase):
             "a non-persistent session becomes persistent on automatic reconnect",
         )
 
+    def test_failed_login_never_keeps_an_authorized_retry(self):
+        socket = code(self.socket)
+        failure = socket[socket.index('"login_error" ->'):socket.index('"force_logout" ->')]
+        self.assertIn(
+            "isAuthorizedSession = false", failure,
+            "a rejected explicit password remains authorized and reconnects automatically",
+        )
+        self.assertIn(
+            "savedPassword = null", failure,
+            "a rejected password remains in memory for a later automatic retry",
+        )
+        self.assertNotIn(
+            "!failedAutomaticLogin", failure,
+            "an explicit failure is kept authorized while only automatic failure stops",
+        )
+
     def test_explicit_logout_clears_the_persisted_session(self):
         socket = code(self.socket)
         logout = socket[socket.index("fun logout()"):]
