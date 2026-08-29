@@ -141,6 +141,24 @@ object AudioRecorder {
     private const val VOX_SILENCE_TIMEOUT = 1500L
     private var voxTriggerCount = 0
     private const val VOX_TRIGGER_REQUIRED = 1
+
+    /*
+     * Why a frame loud enough to key did not key.
+     *
+     * Four guards can refuse, and none of them said which. The level report is
+     * a peak over three seconds, so it can show that speech cleared the
+     * threshold while nothing transmitted and still not say whether the channel
+     * was held, a tone was playing, or the re-key interval had not elapsed.
+     * Those have three different fixes and the aggregate picks none of them.
+     *
+     * Counted only for frames above the threshold: a quiet frame being refused
+     * is not a fault, it is silence.
+     */
+    private const val BLOCK_OTHERS = 0
+    private const val BLOCK_PLAYBACK = 1
+    private const val BLOCK_TONE = 2
+    private const val BLOCK_INTERVAL = 3
+    private val voxBlocks = IntArray(4)
     private var lastVoxTriggerAt = 0L
 
     @Volatile
@@ -454,25 +472,23 @@ object AudioRecorder {
         } catch (e: Exception) { null }
 
         /*
-         * Attached in order to be turned off.
+         * Attached in order to be read, and set by nothing here.
          *
-         * The platform's suppressor is tuned to keep a near-field voice and
-         * discard the rest. On a headset the microphone is at the mouth and it
-         * has an easy job; on the built-in microphone -- a handset on a desk,
-         * or held at arm's length -- it treats the operator's own speech as
-         * ambient and removes it, and VOX then compares what is left against a
-         * threshold. Reported from the field exactly that way: headset fine,
-         * built-in microphone deaf, and still deaf with the bar at its limit.
+         * This was forced on while gain control was attached, then forced off
+         * when the built-in microphone stayed deaf. Neither was measured. There
+         * is no VOX logic change between the build reported bad and the build
+         * reported better, so the improvement was never mine to claim -- and
+         * the field then reported the headset, which had been working, getting
+         * worse.
          *
-         * Explicitly false rather than simply not asked for, because what the
-         * platform does when nobody says is exactly what differs between the
-         * two routes -- and asking for it, which this did until now, made a
-         * default into a guarantee.
+         * The state before any of it was the platform's own choice, and the
+         * headset worked under it. So the effect is created to read what this
+         * device decided and nothing sets it. vox_level now carries the
+         * amplitude to the relay, which is what should have decided this from
+         * the start.
          */
         noiseSuppressor = try {
-            if (NoiseSuppressor.isAvailable()) {
-                NoiseSuppressor.create(sessionId)?.apply { enabled = false }
-            } else null
+            if (NoiseSuppressor.isAvailable()) NoiseSuppressor.create(sessionId) else null
         } catch (e: Exception) { null }
 
         echoCanceler = try {
@@ -484,9 +500,9 @@ object AudioRecorder {
         SafeLog.i(
             TAG,
             "capture effects: gain_control=" + (gainControl?.enabled == true) +
+                " echo_canceler=" + (echoCanceler?.enabled == true) +
                 " noise_suppressor=" + (noiseSuppressor?.enabled == true) +
-                " (suppression is deliberately off)" +
-                " echo_canceler=" + (echoCanceler?.enabled == true),
+                " (that last one is this device's own default; nothing here sets it)",
         )
     }
 
@@ -547,20 +563,53 @@ object AudioRecorder {
     private var voxLevelPeak = 0
     private var voxLevelReportedAt = 0L
 
+    /*
+     * The sustained level, not only the loudest instant.
+     *
+     * Every sample the field has returned carries threshold=500, which is
+     * MIN_THRESHOLD -- the slider at 100 of 100. The operator has run out of
+     * travel and the radio is still deaf, so the floor itself is what has to
+     * move, and the only argument against moving it was that no handset had
+     * ever reported an amplitude.
+     *
+     * A peak is the wrong number to move it on. A quiet room returned a peak
+     * of 427 against a threshold of 500, which reads as no headroom at all --
+     * but one transient in three seconds is a door or a chair, not a floor.
+     * The mean and the minimum separate a room that is genuinely quiet from
+     * one that is not, and two accumulators cost nothing.
+     */
+    private var voxLevelSum = 0L
+    private var voxLevelFloor = Int.MAX_VALUE
+    private var voxLevelFrames = 0
+
     private fun reportVoxLevel(amplitude: Int) {
         if (!voxEnabled) {
             voxLevelPeak = 0
+            voxLevelSum = 0
+            voxLevelFloor = Int.MAX_VALUE
+            voxLevelFrames = 0
             return
         }
         if (amplitude > voxLevelPeak) voxLevelPeak = amplitude
+        if (amplitude < voxLevelFloor) voxLevelFloor = amplitude
+        voxLevelSum += amplitude
+        voxLevelFrames++
 
         val now = System.currentTimeMillis()
         if (voxLevelReportedAt == 0L) voxLevelReportedAt = now
         if (now - voxLevelReportedAt < VOX_LEVEL_REPORT_MS) return
 
         val talking = WebSocketManager.isTalkingNow()
+        val mean = if (voxLevelFrames > 0) (voxLevelSum / voxLevelFrames).toInt() else 0
+        val floor = if (voxLevelFrames > 0) voxLevelFloor else 0
+
         SafeLog.i(TAG, "vox_level peak=$voxLevelPeak threshold=$voxThreshold " +
-            "would_trigger=${voxLevelPeak > voxThreshold} talking=$talking")
+            "would_trigger=${voxLevelPeak > voxThreshold} talking=$talking " +
+            "blocked_others=${voxBlocks[BLOCK_OTHERS]} " +
+            "blocked_playback=${voxBlocks[BLOCK_PLAYBACK]} " +
+            "blocked_tone=${voxBlocks[BLOCK_TONE]} " +
+            "blocked_interval=${voxBlocks[BLOCK_INTERVAL]} " +
+            "mean=$mean floor=$floor frames=$voxLevelFrames")
 
         /*
          * And to the relay, because logcat is where this number went to die.
@@ -580,11 +629,26 @@ object AudioRecorder {
             JSONObject()
                 .put("peak", voxLevelPeak)
                 .put("threshold", voxThreshold)
-                .put("talking", talking),
+                .put("talking", talking)
+                .put("blocked_others", voxBlocks[BLOCK_OTHERS])
+                .put("blocked_playback", voxBlocks[BLOCK_PLAYBACK])
+                .put("blocked_tone", voxBlocks[BLOCK_TONE])
+                .put("blocked_interval", voxBlocks[BLOCK_INTERVAL])
+                .put("mean", mean)
+                .put("floor", floor),
         )
 
         voxLevelPeak = 0
+        voxLevelSum = 0
+        voxLevelFloor = Int.MAX_VALUE
+        voxLevelFrames = 0
+        voxBlocks.fill(0)
         voxLevelReportedAt = now
+    }
+
+    /** Attributes a refusal, but only for a frame that was loud enough to key. */
+    private fun noteVoxBlock(which: Int, amplitude: Int) {
+        if (amplitude > voxThreshold) voxBlocks[which]++
     }
 
     private fun handleVoxLogic(amplitude: Int) {
@@ -592,6 +656,7 @@ object AudioRecorder {
         val isTalking = WebSocketManager.isTalkingNow()
         if (WebSocketManager.activeSpeakersList.value?.isNotEmpty() == true) {
             if (isTalking) triggerServiceAction(PTTService.ACTION_STOP_PTT)
+            else noteVoxBlock(BLOCK_OTHERS, amplitude)
             voxTriggerCount = 0
             return
         }
@@ -610,6 +675,10 @@ object AudioRecorder {
          * has to render, and the tone hold-off is the clip's own length.
          */
         if (!isTalking && (AudioPlayer.isActuallyPlaying() || SoundManager.isWithinToneHoldoff())) {
+            noteVoxBlock(
+                if (AudioPlayer.isActuallyPlaying()) BLOCK_PLAYBACK else BLOCK_TONE,
+                amplitude,
+            )
             voxTriggerCount = 0
             return
         }
@@ -627,7 +696,10 @@ object AudioRecorder {
                      * foreground notification, for as long as they spoke.
                      */
                     voxTriggerCount = 0
-                    if (now - lastVoxTriggerAt < VOX_TRIGGER_INTERVAL_MS) return
+                    if (now - lastVoxTriggerAt < VOX_TRIGGER_INTERVAL_MS) {
+                        noteVoxBlock(BLOCK_INTERVAL, amplitude)
+                        return
+                    }
                     lastVoxTriggerAt = now
                     voxSilenceTimer = now
                     triggerServiceAction(PTTService.ACTION_START_PTT, true)
