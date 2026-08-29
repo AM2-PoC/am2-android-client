@@ -71,6 +71,32 @@ class ReleaseSigningContractTest(unittest.TestCase):
             "the release build type never attaches the signing config",
         )
 
+    def test_the_release_lane_proves_the_signer_it_declares(self):
+        """A hand-set digest is a second copy of a fact the key already carries.
+
+        The release lane takes AM2_APPROVED_SIGNER_SHA256 from a repository
+        variable and checks it is sixty-four hex characters. Shape, not truth:
+        a value of the right shape and the wrong content passes, is compiled
+        into the APK, and every handset carrying that build refuses every update
+        it will ever be offered -- repairable only by a manual install on each
+        unit, which is the cost the update channel exists to avoid.
+
+        Not hypothetical. The staging lane spent every build it ever produced
+        trusting an empty digest, and the only reason it was found is that
+        somebody tried to update a handset and read the error.
+
+        apksigner already reads what actually signed the artifact. Comparing
+        the two is the whole check.
+        """
+        workflow = (ROOT / ".github/workflows/android-ci.yml").read_text()
+        block = workflow[workflow.index("  release-artifact:"):]
+        self.assertIn("signer-metadata.txt", block)
+        self.assertRegex(
+            block, r"AM2_APPROVED_SIGNER_SHA256[\s\S]{0,3000}?SIGNED_BY",
+            "the declared signer is never compared with the one that signed, so "
+            "a wrong variable ships and is only discovered on a handset",
+        )
+
     def test_no_key_material_can_be_committed(self):
         ignored = GITIGNORE.read_text()
         for pattern in ("*.jks", "*.keystore", "keystore.properties"):
