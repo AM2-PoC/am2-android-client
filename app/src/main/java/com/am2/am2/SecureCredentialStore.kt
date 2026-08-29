@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
 import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
+import androidx.security.crypto.MasterKeys
 
 /**
  * The credential store the platform's keystore backs, for handsets that have one.
@@ -33,13 +33,15 @@ internal object SecureCredentialStore {
      * handset that must crash, and the caller decides which.
      */
     fun open(context: Context): SharedPreferences? = try {
-        val key = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
+        // security-crypto 1.0.0, which is the stable release and the version
+        // this module pins. MasterKey.Builder and the (context, file, key, ...)
+        // overload belong to 1.1.0-alpha; taking an alpha into a fleet of
+        // radios to save one line is not a trade worth making.
+        val alias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
         EncryptedSharedPreferences.create(
-            context,
             FILE,
-            key,
+            alias,
+            context,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
         )
