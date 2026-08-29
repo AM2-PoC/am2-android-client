@@ -227,6 +227,10 @@ class DeviceTokenContractTest(unittest.TestCase):
             "!failedAutomaticLogin", failure,
             "an explicit failure is kept authorized while only automatic failure stops",
         )
+        self.assertIn(
+            "CredentialStore.blockSession", failure,
+            "a rejected persisted credential remains resumable after process recreation",
+        )
 
     def test_explicit_logout_clears_the_persisted_session(self):
         socket = code(self.socket)
