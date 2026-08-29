@@ -312,6 +312,7 @@ object AudioRecorder {
                                     if (abs > maxAmplitude) maxAmplitude = abs
                                 }
                                 handleVoxLogic(maxAmplitude)
+                                reportVoxLevel(maxAmplitude)
 
                                 // Gunakan isTalkingNow() untuk respons yang lebih cepat (tanpa delay LiveData)
                                 val talking = WebSocketManager.isTalkingNow()
@@ -451,9 +452,25 @@ object AudioRecorder {
             } else null
         } catch (e: Exception) { null }
 
+        /*
+         * Attached in order to be turned off.
+         *
+         * The platform's suppressor is tuned to keep a near-field voice and
+         * discard the rest. On a headset the microphone is at the mouth and it
+         * has an easy job; on the built-in microphone -- a handset on a desk,
+         * or held at arm's length -- it treats the operator's own speech as
+         * ambient and removes it, and VOX then compares what is left against a
+         * threshold. Reported from the field exactly that way: headset fine,
+         * built-in microphone deaf, and still deaf with the bar at its limit.
+         *
+         * Explicitly false rather than simply not asked for, because what the
+         * platform does when nobody says is exactly what differs between the
+         * two routes -- and asking for it, which this did until now, made a
+         * default into a guarantee.
+         */
         noiseSuppressor = try {
             if (NoiseSuppressor.isAvailable()) {
-                NoiseSuppressor.create(sessionId)?.apply { enabled = true }
+                NoiseSuppressor.create(sessionId)?.apply { enabled = false }
             } else null
         } catch (e: Exception) { null }
 
@@ -467,6 +484,7 @@ object AudioRecorder {
             TAG,
             "capture effects: gain_control=" + (gainControl?.enabled == true) +
                 " noise_suppressor=" + (noiseSuppressor?.enabled == true) +
+                " (suppression is deliberately off)" +
                 " echo_canceler=" + (echoCanceler?.enabled == true),
         )
     }
@@ -507,6 +525,39 @@ object AudioRecorder {
         while (preRoll.isNotEmpty()) {
             WebSocketManager.sendBinary(preRoll.removeFirst())
         }
+    }
+
+    /*
+     * What VOX actually measured, once a second, while it is listening.
+     *
+     * Three rounds of this were argued from source because nothing ever
+     * recorded the one number that decides it: the amplitude seen, against the
+     * threshold it was compared with. A field report of "not sensitive" and a
+     * microphone returning near-silence look identical from here, and only this
+     * line tells them apart.
+     *
+     * Only while VOX is armed and not transmitting -- that is the window the
+     * complaint is about -- and only the window's peak, so a line a second says
+     * what a hundred would.
+     */
+    private var voxLevelPeak = 0
+    private var voxLevelReportedAt = 0L
+
+    private fun reportVoxLevel(amplitude: Int) {
+        if (!voxEnabled || WebSocketManager.isTalkingNow()) {
+            voxLevelPeak = 0
+            return
+        }
+        if (amplitude > voxLevelPeak) voxLevelPeak = amplitude
+
+        val now = System.currentTimeMillis()
+        if (voxLevelReportedAt == 0L) voxLevelReportedAt = now
+        if (now - voxLevelReportedAt < 1000L) return
+
+        SafeLog.i(TAG, "vox_level peak=$voxLevelPeak threshold=$voxThreshold " +
+            "would_trigger=${voxLevelPeak > voxThreshold}")
+        voxLevelPeak = 0
+        voxLevelReportedAt = now
     }
 
     private fun handleVoxLogic(amplitude: Int) {
