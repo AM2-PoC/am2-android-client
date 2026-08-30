@@ -212,24 +212,111 @@ class DeviceTokenContractTest(unittest.TestCase):
             "a non-persistent session becomes persistent on automatic reconnect",
         )
 
-    def test_failed_login_never_keeps_an_authorized_retry(self):
+    def _refusal(self):
+        """The login_error handler, split into one branch per failure class."""
         socket = code(self.socket)
-        failure = socket[socket.index('"login_error" ->'):socket.index('"force_logout" ->')]
+        body = socket[socket.index('"login_error" ->'):socket.index('"force_logout" ->')]
+        marks = ['"server_unavailable" ->', '"not_permitted" ->', "else ->"]
+        for mark in marks:
+            self.assertIn(
+                mark, body,
+                "the login_error handler has no %s branch, so every refusal is "
+                "treated as a verdict on the credential" % mark,
+            )
+        at = [body.index(mark) for mark in marks]
+        self.assertEqual(
+            at, sorted(at),
+            "the login_error branches do not appear in the order this test slices them",
+        )
+        return {
+            "server_unavailable": body[at[0]:at[1]],
+            "not_permitted": body[at[1]:at[2]],
+            "else": body[at[2]:],
+            "all": body,
+        }
+
+    def test_failed_login_never_keeps_an_authorized_retry(self):
+        refusal = self._refusal()["else"]
         self.assertIn(
-            "isAuthorizedSession = false", failure,
+            "isAuthorizedSession = false", refusal,
             "a rejected explicit password remains authorized and reconnects automatically",
         )
         self.assertIn(
-            "savedPassword = null", failure,
+            "savedPassword = null", refusal,
             "a rejected password remains in memory for a later automatic retry",
         )
         self.assertNotIn(
-            "!failedAutomaticLogin", failure,
+            "!failedAutomaticLogin", self._refusal()["all"],
             "an explicit failure is kept authorized while only automatic failure stops",
         )
         self.assertIn(
-            "CredentialStore.blockSession", failure,
+            "CredentialStore.blockSession", refusal,
             "a rejected persisted credential remains resumable after process recreation",
+        )
+
+    def test_an_unreachable_relay_is_not_a_verdict_on_the_credential(self):
+        # protocol.js answers a database timeout with login_error too. Erasing
+        # the token over it signs the handset out until someone reaches it.
+        branch = self._refusal()["server_unavailable"]
+        for destructive in ("CredentialStore.blockSession", "CredentialStore.clear",
+                            "savedPassword = null", "isAuthorizedSession = false"):
+            self.assertNotIn(
+                destructive, branch,
+                "a relay that could not answer costs the handset its credential: %s" % destructive,
+            )
+
+    def test_an_unreachable_relay_is_retried_rather_than_abandoned(self):
+        branch = self._refusal()["server_unavailable"]
+        self.assertNotIn(
+            "cancelReconnect()", branch,
+            "a transient relay failure stops the handset reconnecting at all",
+        )
+        self.assertIn(
+            "retryLoginAfterRelayFailure()", branch,
+            "nothing brings the socket back after a transient login failure",
+        )
+
+    def test_a_forbidden_account_keeps_what_it_was_issued(self):
+        # An expired subscription is the agency's problem. If the handset
+        # erases its token over it, every unit needs a manual login after the
+        # admin pays -- which is a truck roll, not a renewal.
+        branch = self._refusal()["not_permitted"]
+        for destructive in ("CredentialStore.blockSession", "CredentialStore.clear",
+                            "savedPassword = null"):
+            self.assertNotIn(
+                destructive, branch,
+                "a permission refusal destroys a credential that is still valid: %s" % destructive,
+            )
+        self.assertIn(
+            "cancelReconnect()", branch,
+            "a refused account keeps hammering the relay",
+        )
+
+    def test_an_unrecognised_class_still_fails_closed(self):
+        branch = self._refusal()["else"]
+        self.assertIn(
+            "CredentialStore.blockSession", branch,
+            "a code this build does not know is treated as harmless",
+        )
+
+    def test_backoff_survives_a_socket_that_never_authenticates(self):
+        # A socket that opens, fails to authenticate and closes would reset the
+        # delay on every open, so a relay refusing logins is retried in a hot
+        # loop. Only a login that succeeded proves the wait was long enough.
+        socket = code(self.socket)
+        # Anchored on the function, not on a line inside it: the reset this
+        # test exists to forbid sat ABOVE actualSocketConnected, so slicing
+        # from there passed with the defect still in place.
+        opened = socket[socket.index("private fun handleOpen("):]
+        opened = opened[:opened.index("executeLogin(")]
+        self.assertNotIn(
+            "reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS", opened,
+            "an open socket resets the backoff before anything has been authenticated",
+        )
+        success = socket[socket.index('"login_success" ->'):socket.index('"login_error" ->')]
+        self.assertIn(
+            "reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS", success,
+            "nothing resets the backoff once a login finally succeeds",
         )
 
     def test_explicit_logout_clears_the_persisted_session(self):

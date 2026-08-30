@@ -628,7 +628,13 @@ object WebSocketManager {
         SafeLog.i(TAG, "WebSocket Connected ✅ generation=$generation")
         webSocket = socket
         isConnecting = false
-        reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS
+        /*
+         * The backoff is NOT reset here. A socket that opens, fails to
+         * authenticate and closes would reset it on every open, so a relay
+         * refusing logins is retried in a hot loop. Only a login that
+         * succeeded proves the wait was long enough, and that is where it
+         * resets.
+         */
         actualSocketConnected = true
         isAuthenticatedOnCurrentSocket = false
         reconnectAttempts = 0
@@ -716,6 +722,25 @@ object WebSocketManager {
         val spread = (base * RECONNECT_JITTER_FRACTION).toLong().coerceAtLeast(1L)
         val offset = reconnectJitter.nextInt((spread * 2).toInt() + 1) - spread
         return (base + offset).coerceIn(0L, MAX_RECONNECT_DELAY)
+    }
+
+    /**
+     * The relay refused a login for its own reasons, not this handset's.
+     *
+     * The socket is still open and unauthenticated, so nothing would happen
+     * on its own. Closing it hands the retry to the ordinary reconnect path,
+     * which already backs off and jitters -- and the backoff is only reset by
+     * a login that succeeded, so a relay that keeps refusing is retried more
+     * and more slowly instead of in a loop.
+     */
+    private fun retryLoginAfterRelayFailure() {
+        actualSocketConnected = false
+        try {
+            webSocket?.close(1000, "relay unavailable")
+        } catch (e: Exception) {
+            SafeLog.w(TAG, "Failed to close a socket that could not authenticate", e)
+        }
+        webSocket = null
     }
 
     private fun attemptReconnect() {
@@ -872,31 +897,90 @@ object WebSocketManager {
                 }
 
                 "login_error" -> {
-                    val blocked = appContext?.let { CredentialStore.blockSession(it) } ?: false
+                    /*
+                     * Three unrelated things arrive on this one message type,
+                     * and only one of them is about the credential.
+                     *
+                     * This handler used to treat all of them alike: erase the
+                     * stored token, stop reconnecting, block the session on
+                     * disk. But protocol.js answers a database timeout with
+                     * login_error too, from the catch-all around the whole
+                     * login block. A Postgres restart would therefore sign out
+                     * every handset that happened to be re-authenticating --
+                     * permanently, because the block outlives the process --
+                     * and each one would have to be reached by hand to type a
+                     * password that, by design, it no longer stores.
+                     *
+                     * So the relay classifies now, the way RFC 6749 separates
+                     * invalid_grant from temporarily_unavailable, and the three
+                     * things this handler can do are kept apart:
+                     *
+                     *   stop retrying now       -- backoff, cheap, reversible
+                     *   stop retrying at all    -- needs the account refused
+                     *   destroy the credential  -- needs the credential refused
+                     *
+                     * A code this build does not recognise falls to else, which
+                     * is what every refusal did before. Nothing gets weaker.
+                     */
+                    val reason = dataObj.optString("code")
+                    val wasAutomatic = authenticationWasAutomatic
                     interactiveLoginPending = false
                     rememberInteractiveLogin = false
                     authenticationWasAutomatic = false
-                    isAuthorizedSession = false
                     isAuthenticatedOnCurrentSocket = false
-                    savedPassword = null
-                    cancelReconnect()
-                    if (!blocked) SafeLog.e(TAG, "A rejected credential could not be blocked durably")
-                    /*
-                     * A revoked token is worthless, and retrying with it would
-                     * be a loop. The password is gone by then, so the only
-                     * honest next step is to ask for it.
-                     */
-                    if (dataObj.optString("code") == "token_revoked") {
-                        val cleared = appContext?.let { CredentialStore.clearToken(it) } ?: false
-                        activeDeviceToken = null
-                        hasDeviceToken = false
-                        isAuthorizedSession = false
-                        cancelReconnect()
-                        if (!cleared) SafeLog.e(TAG, "A revoked credential could not be cleared durably")
+
+                    when (reason) {
+                        "server_unavailable" -> {
+                            // The relay could not answer. It said nothing about
+                            // this handset, so nothing here may act as if it had.
+                            SafeLog.w(TAG, "Relay could not complete a login; the credential stands")
+                            // An interactive attempt is left to the operator,
+                            // who is watching the screen and can try again. Any
+                            // session already authorized keeps its own reconnect
+                            // running: an unreachable relay is a reason to keep
+                            // trying, not a reason to stop.
+                            if (wasAutomatic) retryLoginAfterRelayFailure()
+                        }
+
+                        "not_permitted" -> {
+                            /*
+                             * The account is not allowed on right now: the
+                             * subscription lapsed, no default channel is set,
+                             * it is signed in elsewhere. The credential is
+                             * untouched by all of that, and erasing it would
+                             * turn an admin fixing the account into a visit to
+                             * every handset in the field.
+                             */
+                            isAuthorizedSession = false
+                            cancelReconnect()
+                        }
+
+                        else -> {
+                            val blocked = appContext?.let { CredentialStore.blockSession(it) } ?: false
+                            isAuthorizedSession = false
+                            savedPassword = null
+                            cancelReconnect()
+                            if (!blocked) SafeLog.e(TAG, "A rejected credential could not be blocked durably")
+                            /*
+                             * A revoked token is worthless, and retrying with it
+                             * would be a loop. The password is gone by then, so
+                             * the only honest next step is to ask for it.
+                             */
+                            if (reason == "token_revoked") {
+                                val cleared = appContext?.let { CredentialStore.clearToken(it) } ?: false
+                                activeDeviceToken = null
+                                hasDeviceToken = false
+                                if (!cleared) SafeLog.e(TAG, "A revoked credential could not be cleared durably")
+                            }
+                        }
                     }
 
-                    val msg = dataObj.optString("message", "Login Gagal")
-                    _loginEvent.postValue(LoginEvent.Error(msg))
+                    // An automatic retry is not something the operator asked
+                    // for, and a toast on every backoff cycle is only noise.
+                    if (reason != "server_unavailable" || !wasAutomatic) {
+                        val msg = dataObj.optString("message", "Login Gagal")
+                        _loginEvent.postValue(LoginEvent.Error(msg))
+                    }
                     updateTalkingStatusUI()
                 }
 
