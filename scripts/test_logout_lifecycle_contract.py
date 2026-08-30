@@ -64,7 +64,9 @@ class LogoutLifecycleContractTest(unittest.TestCase):
         forced = section(self.service, "private fun handleForceLogout()", "\n    }")
         self.assertIn("stopForeground", forced)
         self.assertIn("stopSelf()", forced)
-        self.assertLess(forced.index("stopSelf()"), forced.index("startActivity"))
+        self.assertLess(forced.index("startActivity"), forced.index("stopForeground"),
+            "foreground privilege is dropped before force-logout navigation")
+        self.assertLess(forced.index("startActivity"), forced.index("stopSelf()"))
 
     def test_socket_exposes_authorized_state_without_exposing_credentials(self):
         self.assertRegex(self.socket, r"fun hasAuthorizedSession\(\): Boolean\s*=\s*isAuthorizedSession")
