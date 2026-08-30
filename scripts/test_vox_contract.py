@@ -191,80 +191,22 @@ class VoxWaitsForTheRelayTest(VoxTestCase):
         )
 
 
-class CaptureAsksForTheProcessingItNeedsTest(VoxTestCase):
-    """Asking for VOICE_COMMUNICATION is a request, not a guarantee.
-
-    The source is chosen for echo cancellation, and on many handsets the
-    platform obliges with gain control and noise suppression too. On many
-    others it does not, and nothing here ever asked: no AutomaticGainControl,
-    no NoiseSuppressor, no AcousticEchoCanceler is attached to the session
-    anywhere in this module.
-
-    What the operator reports is exactly the shape of that: audio arriving
-    quiet on *some* devices, and VOX deaf on *some* devices. Both follow from a
-    capture level nobody set.
-
-    The app's own gain stage cannot fix it. AudioFilter multiplies by 1.0, 1.0
-    and 0.8 -- unity, with the treble pulled down -- and its comment records
-    why: a fixed boost was there and was taken out because it clipped. A fixed
-    boost is exactly what cannot serve a loud handset and a quiet one at once.
-    Gain that follows the signal can, and that is the effect that was never
-    attached.
-
-    Availability is per device, so what matters as much as asking is recording
-    which ones answered.
-    """
-
-    def setUp(self):
-        self.recorder = RECORDER.read_text()
-
-    def test_gain_control_is_asked_for(self):
-        # create(), not the import: naming the class proves nothing, and an
-        # earlier version of this assertion passed against a build where the
-        # effect was never attached to any session.
-        self.assertHas(
-            self.recorder, r"AutomaticGainControl\.create\(",
-            "capture takes whatever level the device happens to give, so a "
-            "handset with no platform gain control transmits quietly and "
-            "hears nothing on VOX",
-        )
-
-    def test_availability_is_checked_rather_than_assumed(self):
-        # create() on a device without the effect returns null or throws, and
-        # either one taken as success is a silent no-op.
-        for effect in ("AutomaticGainControl", "NoiseSuppressor", "AcousticEchoCanceler"):
-            self.assertHas(
-                self.recorder, effect + r"\.isAvailable\(\)",
-                f"{effect} is created without asking whether the device has it",
-            )
-
-    def test_the_effects_reach_the_session_that_is_recording(self):
-        # Everything above can be true of code nothing calls. The session id
-        # comes from the AudioRecord that just started, and this is the only
-        # line that ties the two together.
-        self.assertHas(
-            self.recorder, r"attachCaptureEffects\(recorder\.audioSessionId\)",
-            "the effects are configured for no session, so capture is "
-            "processed exactly as it was before",
-        )
-
-    def test_which_effects_were_obtained_is_recorded(self):
-        # The whole complaint is "sebagian device". Which half a handset is in
-        # cannot be answered by reading this file.
-        self.assertHas(
-            self.recorder, r"(SafeLog|PttTrace)[\s\S]{0,400}?(agc|effects|gain_control)",
-            "nothing says which effects a device actually granted, so the "
-            "device-dependent half of the report stays unanswerable",
-        )
-
-    def test_the_effects_are_released_with_the_recorder(self):
-        # They hold a native session. Leaking one per restart is a leak per
-        # VOX dropout, and VOX drops out on every phone call.
-        self.assertHas(
-            self.recorder, r"(agc|noiseSuppressor|echoCanceler)[\s\S]{0,200}?release\(\)",
-            "the effects outlive the AudioRecord they were attached to",
-        )
-
+# CaptureAsksForTheProcessingItNeedsTest was here, and it enforced the very
+# thing that broke the radio.
+#
+# 523db03 attached AutomaticGainControl, NoiseSuppressor and AcousticEchoCanceler
+# to the capture session because VOX could not hear quiet speech, and this class
+# then held them in place. None of the three had ever been measured against the
+# state it replaced -- before that commit the capture path attached nothing at
+# all, and the radio worked.
+#
+# The field reported audio arriving as fragments, on the button as well as on
+# VOX. The button is what rules the VOX logic out: this is the capture path and
+# every transmission goes through it.
+#
+# The effects are gone and scripts/test_capture_effects_contract.py now holds
+# that. Putting any of them back needs a measurement first, which is what this
+# class should have demanded and never did.
 
 class VoxHearsTheBuiltInMicrophoneTest(VoxTestCase):
     """Noise suppression is tuned for a telephone call, not for a radio.
@@ -396,45 +338,6 @@ class VoxHearsTheBuiltInMicrophoneTest(VoxTestCase):
             "the counts are never cleared, so every report restates the whole "
             "session instead of the window it covers",
         )
-
-    def test_suppression_is_observed_rather_than_forced(self):
-        """Neither on nor off by us. Attached to be read.
-
-        This was forced on while gain control was attached, then forced off
-        when the built-in microphone stayed deaf. Neither was measured: there
-        is no VOX logic change between the build that was reported bad and the
-        build that was reported better, so the improvement was never mine to
-        claim -- and the field then reported the headset, which had been
-        working, getting worse.
-
-        The state before any of it was the platform's own choice, and the
-        headset worked under it. So: create the effect to read what the
-        platform decided, set nothing, and report it. The one number that can
-        settle this now reaches the relay.
-        """
-        block = section(self.recorder, "fun attachCaptureEffects", "private fun releaseCaptureEffects")
-        ns = block[block.index("noiseSuppressor ="):]
-        ns = ns[:ns.index("echoCanceler =")]
-        self.assertNotRegex(
-            ns, r"enabled\s*=",
-            "the suppressor is still being set by us; two rounds of setting it "
-            "produced no evidence either way",
-        )
-        self.assertIn(
-            "NoiseSuppressor.create(", ns,
-            "the effect is not attached at all, so nothing can report what the "
-            "platform chose",
-        )
-
-    def test_echo_cancellation_and_gain_control_stay(self):
-        block = section(self.recorder, "fun attachCaptureEffects", "private fun releaseCaptureEffects")
-        for effect in ("AcousticEchoCanceler", "AutomaticGainControl"):
-            self.assertRegex(
-                block, effect + r"[\s\S]{0,200}?enabled\s*=\s*true",
-                f"{effect} was turned off with the suppressor; the first is why "
-                "the source is unconditional and the second is what raises a "
-                "quiet capture",
-            )
 
     def test_the_amplitude_vox_compares_is_observable(self):
         # Three rounds of this were argued from source because nothing ever
