@@ -72,5 +72,66 @@ class ReconnectContractTest(unittest.TestCase):
         self.assertRegex(jitter, r"<=\s*0L|== 0L")
 
 
+
+class TransportBeforeLoginTest(unittest.TestCase):
+    """A login screen needs the socket precisely when it is not authorised.
+
+    Reconnecting was gated on isAuthorizedSession alone. On the login screen
+    there is no session yet, so the first time the socket dropped -- the phone
+    sleeping is enough -- nothing brought it back. The screen went on saying
+    "Server Offline" against a relay that was up, and it only recovered
+    because logging in calls connect() directly.
+
+    Whether to resume a session and whether the transport should be up are two
+    questions. The second one has an answer before anybody has logged in.
+    """
+
+    def setUp(self):
+        self.ws = WS.read_text(encoding="utf-8")
+        self.policy = (ROOT / "app/src/main/java/com/am2/am2/ReconnectPolicy.kt").read_text(
+            encoding="utf-8")
+        self.login = (ROOT / "app/src/main/java/com/am2/am2/LoginActivity.kt").read_text(
+            encoding="utf-8")
+
+    def test_the_policy_has_a_reason_to_reconnect_other_than_a_session(self):
+        self.assertIn(
+            "transportWanted", self.policy,
+            "reconnecting is decided by authorisation alone, so a login screen "
+            "whose socket drops never gets it back",
+        )
+
+    def test_every_reconnect_decision_goes_through_the_policy(self):
+        # onFailure used to test isAuthorizedSession inline, so a rule added to
+        # the policy would apply to half the ways a socket can end.
+        body = re.sub(r"//[^\n]*", "", self.ws)
+        for call in re.finditer(r"attemptReconnect\(\)", body):
+            before = body[max(0, call.start() - 400):call.start()]
+            self.assertNotIn(
+                "if (isAuthorizedSession) {", before[-60:],
+                "a reconnect is decided inline instead of by ReconnectPolicy",
+            )
+
+    def test_the_login_screen_asks_for_the_transport_and_gives_it_back(self):
+        self.assertIn(
+            "wantTransport(true)", self.login,
+            "the login screen never asks for a socket it depends on",
+        )
+        self.assertIn(
+            "wantTransport(false)", self.login,
+            "the login screen never releases the socket, so it is held open behind "
+            "every other screen",
+        )
+
+    def test_leaving_the_login_screen_does_not_end_an_authorised_session(self):
+        # wantTransport(false) must not be disconnect(): by the time the screen
+        # goes away the operator may have just signed in.
+        stop = self.login[self.login.index("wantTransport(false)") - 400:]
+        stop = stop[:stop.index("wantTransport(false)") + 200]
+        self.assertNotIn(
+            "WebSocketManager.disconnect(", stop,
+            "leaving the login screen tears down the session it just established",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
