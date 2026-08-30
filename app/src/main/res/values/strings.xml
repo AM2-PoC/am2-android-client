@@ -2,4 +2,12 @@
     <string name="app_name">am\u00B2</string>
     <string name="video_live_from">LIVE: %1$s</string>
     <string name="video_private_with">PRIVATE %1$s</string>
+    <!--
+        Not "remember me". What is kept is a device token the relay issued to
+        this handset, which an admin can revoke on its own -- so a lost radio
+        is a revocation rather than a password change for the person. The label
+        says what it buys the operator: the unit signs itself back in after a
+        restart instead of waiting for somebody to hold it.
+    -->
+    <string name="login_stay_signed_in">Tetap masuk di perangkat ini</string>
 </resources>

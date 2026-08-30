@@ -102,8 +102,13 @@ class LoginActivity : BaseActivity() {
             performLogin()
         }
 
+        /*
+         * Ticking this does not lock the fields. The lock belongs to having
+         * credentials already -- checkAutoLogin applies it when there are some
+         * -- and applying it on any tick meant an operator on a fresh handset
+         * who ticked the box first could no longer type at all.
+         */
         binding.cbRememberMe.setOnCheckedChangeListener { _, isChecked ->
-            updateInputStates(isChecked)
             if (isChecked) {
                 binding.btnLogin.requestFocus()
                 // Hide keyboard if visible
@@ -205,6 +210,24 @@ class LoginActivity : BaseActivity() {
             }
             .setNegativeButton("Nanti", null)
             .show()
+    }
+
+    /*
+     * This screen needs the relay reachable before anybody has signed in, and
+     * reconnecting used to be gated on having a session. The first drop -- the
+     * phone sleeping is enough -- left it reporting "Server Offline" against a
+     * relay that was up, until a login called connect() directly.
+     */
+    override fun onStart() {
+        super.onStart()
+        WebSocketManager.wantTransport(true)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Released, not disconnected. The operator may have just signed in
+        // through this screen, and that session is not ours to end.
+        WebSocketManager.wantTransport(false)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
@@ -311,7 +334,6 @@ class LoginActivity : BaseActivity() {
         // credentials in cleartext and removes them once it has.
         val stored = CredentialStore.state(safeContext)
         val savedUser = stored.username
-        val savedPass = stored.password
         val rememberMe = sharedPreferences.getBoolean("remember_me", false)
 
         if (savedUser != null) {
@@ -322,6 +344,12 @@ class LoginActivity : BaseActivity() {
                 binding.btnLogin.requestFocus()
             }
         }
-        if (savedPass != null) binding.etPassword.setText(savedPass)
+        /*
+         * The password is not filled in. The relay issues a device token and
+         * CredentialStore deletes the password the moment one arrives, so
+         * there is normally nothing to fill -- and on a handset that has not
+         * migrated yet this was the last place that would put one back on a
+         * visible field.
+         */
     }
 }

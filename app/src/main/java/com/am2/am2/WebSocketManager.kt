@@ -133,6 +133,14 @@ object WebSocketManager {
     @Volatile private var persistAuthorizedSession = false
     @Volatile private var authenticationWasAutomatic = false
 
+    /*
+     * Something on screen is waiting for the relay even though nothing has
+     * signed in yet. The login screen sets this while it is in front, so a
+     * socket lost to the phone sleeping is brought back instead of leaving the
+     * screen reporting "Server Offline" against a relay that is up.
+     */
+    @Volatile private var transportWanted = false
+
     private val _availableChannels = MutableLiveData<JSONArray>(JSONArray())
     val availableChannels: LiveData<JSONArray> = _availableChannels
 
@@ -573,7 +581,7 @@ object WebSocketManager {
 
                     handleDisconnectCleanup(immediate = (code == 1000))
 
-                    if (ReconnectPolicy.shouldReconnect(isAuthorizedSession, code)) {
+                    if (ReconnectPolicy.shouldReconnect(isAuthorizedSession, transportWanted, code)) {
                         attemptReconnect()
                     }
                 }
@@ -604,7 +612,10 @@ object WebSocketManager {
 
                     handleDisconnectCleanup(immediate = false)
 
-                    if (isAuthorizedSession) {
+                    // Through the policy, not inline: a failure is one of the ways
+                    // a socket ends, and a rule that applies to only some of them
+                    // is not a rule.
+                    if (ReconnectPolicy.shouldReconnect(isAuthorizedSession, transportWanted, 1006)) {
                         attemptReconnect()
                     }
                 }
@@ -744,7 +755,7 @@ object WebSocketManager {
     }
 
     private fun attemptReconnect() {
-        if (!isAuthorizedSession) return
+        if (!isAuthorizedSession && !transportWanted) return
 
         cancelReconnect()
 
@@ -752,7 +763,7 @@ object WebSocketManager {
 
         val runnable = Runnable {
             if (
-                isAuthorizedSession &&
+                (isAuthorizedSession || transportWanted) &&
                 (!actualSocketConnected || webSocket == null)
             ) {
                 SafeLog.d(TAG, "Attempting automatic reconnect. Delay was $delay ms")
@@ -2181,6 +2192,18 @@ object WebSocketManager {
                 }
             }
         }
+    }
+
+    /**
+     * A screen declares that it needs the relay reachable before any login.
+     *
+     * Released again when that screen goes away, so nothing holds the socket
+     * open behind the rest of the app. It never ends a session: by the time
+     * the login screen leaves, the operator may have just signed in through it.
+     */
+    fun wantTransport(wanted: Boolean) {
+        transportWanted = wanted
+        if (wanted) connect()
     }
 
     fun isConnected(): Boolean {
