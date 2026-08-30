@@ -176,6 +176,9 @@ class PTTService : Service() {
     }
 
     private fun handleForceLogout() {
+        stopForeground(true)
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID)
+        stopSelf()
         val intent = Intent(this, LoginActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             putExtra("FORCE_LOGOUT", true)
@@ -532,10 +535,18 @@ class PTTService : Service() {
         if (wakeLock?.isHeld == true) try { wakeLock?.release() } catch (e: Exception) {}
         if (screenWakeLock?.isHeld == true) try { screenWakeLock?.release() } catch (e: Exception) {}
         WebSocketManager.disconnect()
+        stopForeground(true)
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID)
         super.onDestroy()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!WebSocketManager.hasAuthorizedSession()) {
+            stopForeground(true)
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val notification = createNotification("PTT Aktif", if (WebSocketManager.isConnected()) "Terhubung ke Server" else "Aplikasi berjalan di latar belakang")
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
