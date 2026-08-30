@@ -92,6 +92,6 @@ class MenuActivity : BaseActivity() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         }
         startActivity(loginIntent)
-        finishAffinity()
+        finish()
     }
 }
