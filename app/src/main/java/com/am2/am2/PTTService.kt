@@ -534,7 +534,11 @@ class PTTService : Service() {
         } catch (e: Exception) {}
         if (wakeLock?.isHeld == true) try { wakeLock?.release() } catch (e: Exception) {}
         if (screenWakeLock?.isHeld == true) try { screenWakeLock?.release() } catch (e: Exception) {}
-        WebSocketManager.disconnect()
+        // Logout already disconnected and the Login screen may now own a new
+        // pre-auth transport. A late service teardown must not close that socket.
+        if (WebSocketManager.hasAuthorizedSession()) {
+            WebSocketManager.disconnect()
+        }
         stopForeground(true)
         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID)
         super.onDestroy()
