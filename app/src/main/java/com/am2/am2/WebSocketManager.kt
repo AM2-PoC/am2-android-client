@@ -840,13 +840,15 @@ object WebSocketManager {
                         savedPassword = null
                         hasDeviceToken = true
                     } else if (wasInteractive && shouldRemember) {
-                        val persisted = appContext?.let {
-                            CredentialStore.save(it, savedUsername!!, savedPassword!!)
-                        } ?: false
-                        if (!persisted) {
+                        // A relay with no token leaves this session ephemeral.
+                        // The operator password is never a durable credential.
+                        persistAuthorizedSession = false
+                        val cleared = appContext?.let { CredentialStore.clear(it) } ?: false
+                        savedPassword = null
+                        if (!cleared) {
                             isAuthorizedSession = false
                             isAuthenticatedOnCurrentSocket = false
-                            _loginEvent.postValue(LoginEvent.Error("Sesi tidak dapat disimpan dengan aman."))
+                            _loginEvent.postValue(LoginEvent.Error("Sesi lama tidak dapat dihapus dengan aman."))
                             disconnect()
                             return
                         }

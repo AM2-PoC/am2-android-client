@@ -106,26 +106,27 @@ class CredentialStorageContractTest(unittest.TestCase):
 
     def test_backup_excludes_what_it_must_not_carry(self):
         manifest = MANIFEST.read_text()
-        if 'android:allowBackup="true"' not in manifest:
-            return
+        self.assertIn(
+            'android:allowBackup="false"', manifest,
+            "legacy Android can export reusable credentials because app backup is enabled",
+        )
 
-        # Each file on its own. Checking them together let an empty one pass on
-        # the strength of the other, which is exactly what happened once here:
-        # data_extraction_rules.xml was reverted to the template and the
-        # assertion stayed green because backup_rules.xml was still correct.
-        for name in ("backup_rules.xml", "data_extraction_rules.xml"):
-            text = (ROOT / "app/src/main/res/xml" / name).read_text()
-            uncommented = re.sub(r"<!--.*?-->", "", text, flags=re.S)
-            self.assertIn(
-                "exclude", uncommented,
-                f"{name} excludes nothing, so stored credentials leave the "
-                "device with the backup that is switched on",
-            )
-            for domain in ("sharedpref", "device_sharedpref", "file", "device_file"):
-                self.assertIn(
-                    f'domain="{domain}"', uncommented,
-                    f"{name} leaves credential material in {domain} eligible for transfer",
-                )
+    def test_no_login_success_path_persists_a_password(self):
+        socket = code((JAVA / "WebSocketManager.kt").read_text())
+        success = socket[socket.index('"login_success" ->'):socket.index('"login_error" ->')]
+        self.assertNotIn(
+            "CredentialStore.save(", success,
+            "a relay that issues no token causes the operator password to be written to disk",
+        )
+
+    def test_modern_secure_store_failure_never_downgrades_to_plaintext(self):
+        store = code((JAVA / "CredentialStore.kt").read_text())
+        write = store[store.index("private fun writeCanonicalBlocked"):]
+        self.assertRegex(
+            write,
+            r"SDK_INT\s*>=\s*Build\.VERSION_CODES\.M[\s\S]{0,300}?return false",
+            "API 23+ treats a keystore failure as permission to write plaintext",
+        )
 
 
 

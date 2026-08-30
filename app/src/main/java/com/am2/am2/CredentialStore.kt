@@ -12,8 +12,7 @@ data class StoredCredentialState(
     val token: String?,
 ) {
     val canResume: Boolean
-        get() = !username.isNullOrEmpty() &&
-            (!token.isNullOrEmpty() || !password.isNullOrEmpty())
+        get() = !username.isNullOrEmpty() && !token.isNullOrEmpty()
 }
 
 /**
@@ -61,11 +60,15 @@ object CredentialStore {
     private fun readRecord(context: Context): StoredCredentialState {
         val encrypted = secure(context)
         encrypted?.let { store ->
-            val state = StoredCredentialState(
-                username = store.getString(USER, null),
-                password = store.getString(PASS, null),
-                token = store.getString(TOKEN, null),
-            )
+            val state = try {
+                StoredCredentialState(
+                    username = store.getString(USER, null),
+                    password = null,
+                    token = store.getString(TOKEN, null),
+                )
+            } catch (_: Exception) {
+                return StoredCredentialState(null, null, null)
+            }
             if (state.canResume) return state
         }
         if (encrypted == null && secureUnavailable(context)) {
@@ -73,15 +76,21 @@ object CredentialStore {
         }
 
         val fallback = plain(context)
-        val plainState = StoredCredentialState(
-            username = fallback.getString(USER, null),
-            password = fallback.getString(PASS, null),
-            token = fallback.getString(TOKEN, null),
-        )
+        val plainState = try {
+            StoredCredentialState(
+                username = fallback.getString(USER, null),
+                password = null,
+                token = fallback.getString(TOKEN, null),
+            )
+        } catch (_: Exception) {
+            return StoredCredentialState(null, null, null)
+        }
         if (plainState.canResume) return plainState
 
-        readLegacyFile(context)?.let { (user, pass) ->
-            return StoredCredentialState(user, pass, null)
+        readLegacyFile(context)?.let { (user, _) ->
+            // Legacy password material is removed below; it is never a
+            // resumable credential. Keep only the identity for the login UI.
+            return StoredCredentialState(user, null, null)
         }
         return StoredCredentialState(null, null, null)
     }
@@ -92,7 +101,12 @@ object CredentialStore {
         if (contexts(context).any { plain(it).getBoolean(SESSION_BLOCKED, false) }) {
             return StoredCredentialState(null, null, null)
         }
-        if (secureUnavailable(canonical(context))) {
+        val target = canonical(context)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && secure(target) == null) {
+            // Modern Android has no plaintext credential mode. This also
+            // blocks a fresh install whose keystore failed before an encrypted
+            // preference file could be created.
+            blockSession(context)
             return StoredCredentialState(null, null, null)
         }
         val source = contexts(context)
@@ -100,30 +114,27 @@ object CredentialStore {
             .map(::readRecord)
             .firstOrNull { it.canResume }
             ?: StoredCredentialState(null, null, null)
+        val hasPasswordMaterial = contexts(context).any(::hasPasswordMaterial)
+        if (!source.canResume && hasPasswordMaterial) {
+            clear(context)
+            return StoredCredentialState(null, null, null)
+        }
 
-        if (source.canResume && needsMigration(context, source)) {
-            if (writeCanonical(context, source)) clearObsolete(context)
+        if (source.canResume && (hasPasswordMaterial || needsMigration(context, source))) {
+            return if (saveToken(context, source.token!!, source.username!!)) {
+                source
+            } else {
+                StoredCredentialState(null, null, null)
+            }
         }
         return source
     }
 
 
     @Synchronized
-    fun save(context: Context, user: String, pass: String): Boolean {
-        val saved = writeCanonical(context, StoredCredentialState(user, pass, null))
-        if (saved) {
-            clearObsolete(context)
-        }
-        return saved
-    }
-
-    @Synchronized
     fun saveToken(context: Context, token: String, username: String): Boolean {
-        val saved = writeCanonical(context, StoredCredentialState(username, null, token))
-        if (saved) {
-            clearObsolete(context)
-        }
-        return saved
+        val record = StoredCredentialState(username, null, token)
+        return persistRememberedToken(AndroidPersistenceBackend(context), record)
     }
 
 
@@ -174,46 +185,122 @@ object CredentialStore {
         return cleared
     }
 
-    private fun writeCanonical(context: Context, state: StoredCredentialState): Boolean {
-        val target = canonical(context)
-        val store = secure(target)
-        if (store != null) {
-            val edit = store.edit()
-                .putString(USER, state.username)
-                .remove(PASS)
-                .remove(TOKEN)
-            state.password?.let { edit.putString(PASS, it) }
-            state.token?.let { edit.putString(TOKEN, it) }
-            if (!edit.commit()) return false
-            return plain(target).edit()
-                .remove(USER).remove(PASS).remove(TOKEN).remove(SESSION_BLOCKED).commit()
-        } else {
-            val edit = plain(target).edit()
-                .putString(USER, state.username)
-                .remove(PASS)
-                .remove(TOKEN)
-                .remove(SESSION_BLOCKED)
-            state.password?.let { edit.putString(PASS, it) }
-            state.token?.let { edit.putString(TOKEN, it) }
-            return edit.commit()
+    private class AndroidPersistenceBackend(private val context: Context) :
+        CredentialPersistenceBackend {
+        private val target = canonical(context)
+
+        override fun setBlocked(): Boolean = blockSession(context)
+
+        override fun writeToken(record: StoredCredentialState): Boolean =
+            writeCanonicalBlocked(target, record)
+
+        override fun clearPlaintextCredential(): Boolean = contexts(context).all { candidate ->
+            val edit = plain(candidate).edit().remove(PASS)
+            if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ||
+                candidate.filesDir.absolutePath != target.filesDir.absolutePath
+            ) {
+                edit.remove(USER).remove(TOKEN)
+            }
+            edit.commit()
+        }
+
+        override fun clearObsoleteCredentials(): Boolean {
+            var cleared = true
+            contexts(context).drop(1).forEach { old ->
+                secure(old)?.let { store ->
+                    cleared = store.edit().remove(USER).remove(PASS).remove(TOKEN).commit() && cleared
+                }
+                cleared = deleteSecureFiles(old) && cleared
+            }
+            contexts(context).forEach { candidate ->
+                cleared = deleteLegacyFile(candidate) && cleared
+            }
+            return cleared
+        }
+
+        override fun verifyToken(record: StoredCredentialState): Boolean = try {
+            readCanonicalToken(target) == record
+        } catch (_: Exception) {
+            false
+        }
+
+        override fun unblock(): Boolean = contexts(context).all { candidate ->
+            plain(candidate).edit().remove(SESSION_BLOCKED).commit()
         }
     }
 
-    private fun clearObsolete(context: Context) {
-        contexts(context).drop(1).forEach { old ->
-            secure(old)?.edit()?.remove(USER)?.remove(PASS)?.remove(TOKEN)?.commit()
-            plain(old).edit()
-                .remove(USER).remove(PASS).remove(TOKEN).remove(SESSION_BLOCKED).commit()
+    private fun writeCanonicalBlocked(
+        target: Context,
+        state: StoredCredentialState,
+    ): Boolean {
+        val store = secure(target)
+        if (store != null) {
+            return store.edit()
+                .putString(USER, state.username)
+                .remove(PASS)
+                .putString(TOKEN, state.token)
+                .commit()
         }
-        contexts(context).forEach(::deleteLegacyFile)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) return false
+        return plain(target).edit()
+            .putString(USER, state.username)
+            .remove(PASS)
+            .putString(TOKEN, state.token)
+            .commit()
+    }
+
+    private fun readCanonicalToken(target: Context): StoredCredentialState? = try {
+        val store = secure(target)
+        if (store != null) {
+            StoredCredentialState(
+                store.getString(USER, null),
+                null,
+                store.getString(TOKEN, null),
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            null
+        } else {
+            StoredCredentialState(
+                plain(target).getString(USER, null),
+                null,
+                plain(target).getString(TOKEN, null),
+            )
+        }
+    } catch (_: Exception) {
+        null
     }
 
     private fun needsMigration(context: Context, state: StoredCredentialState): Boolean {
         val target = canonical(context)
-        if (readRecord(target) != state) return true
+        if (readCanonicalToken(target) != state) return true
         return contexts(context).drop(1).any { old ->
             readRecord(old).canResume || readLegacyFile(old) != null
         } || readLegacyFile(target) != null
+    }
+
+    private fun hasPasswordMaterial(context: Context): Boolean {
+        val plainHasPassword = try {
+            plain(context).contains(PASS)
+        } catch (_: Exception) {
+            true
+        }
+        val encryptedHasPassword = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val store = secure(context)
+            if (store != null) {
+                try {
+                    store.contains(PASS)
+                } catch (_: Exception) {
+                    true
+                }
+            } else {
+                secureFile(context).exists() || secureBackupFile(context).exists()
+            }
+        } else {
+            false
+        }
+        return plainHasPassword || encryptedHasPassword ||
+            File(context.filesDir, LEGACY_FILE).exists()
     }
 
     private fun deleteSecureFiles(context: Context): Boolean {
