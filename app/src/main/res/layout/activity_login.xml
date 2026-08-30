@@ -132,6 +132,10 @@
             android:layout_toEndOf="@id/btnLogin"
             android:layout_centerVertical="true"
             android:layout_marginStart="@dimen/login_remember_me_margin_start"
+            android:text="@string/login_stay_signed_in"
+            android:contentDescription="@string/login_stay_signed_in"
+            android:textColor="@android:color/black"
+            android:textSize="@dimen/text_size_small"
             android:buttonTint="#808080" />
     </RelativeLayout>
 
