@@ -16,6 +16,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
 import com.am2.am2.databinding.ActivityAboutBinding
 import com.am2.am2.update.UpdateMetadata
+import com.am2.am2.update.UpdateCheck
 import com.am2.am2.update.UpdateVerifier
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -177,10 +178,10 @@ class AboutActivity : BaseActivity() {
             .setTitle("Pasang Pembaruan")
             .setMessage("Update v${metadata.versionName} sudah diverifikasi. Pasang sekarang?")
             .setPositiveButton("PASANG") { _, _ ->
-                if (UpdateVerifier.verify(file, metadata, installedVersionCode, packageManager)) {
-                    installApk(file)
-                } else {
-                    Toast.makeText(this, "APK berubah atau tidak valid", Toast.LENGTH_LONG).show()
+                when (val outcome = UpdateVerifier.check(file, metadata, installedVersionCode, packageManager)) {
+                    is UpdateCheck.Ok -> installApk(file)
+                    is UpdateCheck.Refused ->
+                        Toast.makeText(this, "Update ditolak: ${outcome.reason}", Toast.LENGTH_LONG).show()
                 }
             }
             .setNegativeButton("NANTI", null)
@@ -217,11 +218,20 @@ class AboutActivity : BaseActivity() {
                         body.byteStream().copyTo(output)
                     }
 
-                    if (UpdateVerifier.verify(destination, metadata, installedVersionCode, packageManager)) {
-                        runOnUiThread { showVerifiedInstallDialog(destination, metadata, installedVersionCode) }
-                    } else {
-                        destination.delete()
-                        throw Exception("Identitas atau signature APK tidak valid.")
+                    /*
+                     * The reason, not a verdict. Eight checks used to arrive
+                     * here as one sentence about signatures, and a handset
+                     * refused an update whose certificate was afterwards proven
+                     * identical to the build already installed -- with nothing
+                     * on the device or off it able to say which check fired.
+                     */
+                    when (val outcome = UpdateVerifier.check(destination, metadata, installedVersionCode, packageManager)) {
+                        is UpdateCheck.Ok ->
+                            runOnUiThread { showVerifiedInstallDialog(destination, metadata, installedVersionCode) }
+                        is UpdateCheck.Refused -> {
+                            destination.delete()
+                            throw Exception("Update ditolak: ${outcome.reason}")
+                        }
                     }
                 }
             } catch (e: Exception) {
