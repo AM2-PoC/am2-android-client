@@ -32,6 +32,10 @@ class AboutActivity : BaseActivity() {
 
     private val VERSION_JSON_URL = BuildConfig.UPDATE_MANIFEST_URL
 
+    /** A dropped link is worth another try; a broken channel is not. */
+    private val DOWNLOAD_ATTEMPTS = 3
+    private val DOWNLOAD_RETRY_DELAY_MS = 1500L
+
     private val okClient: OkHttpClient by lazy {
         val builder = OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
@@ -233,42 +237,94 @@ class AboutActivity : BaseActivity() {
         Toast.makeText(this, "Mengunduh pembaruan...", Toast.LENGTH_SHORT).show()
         thread {
             try {
-                if (destination.exists()) destination.delete()
-
-                val request = Request.Builder()
-                    .url(metadata.updateUrl)
-                    .header("User-Agent", "Mozilla/5.0")
-                    .build()
-
-                okClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) throw Exception("Gagal unduh APK (${response.code()})")
-
-                    val body = response.body() ?: throw Exception("File kosong")
-                    FileOutputStream(destination).use { output ->
-                        body.byteStream().copyTo(output)
-                    }
-
-                    /*
-                     * The reason, not a verdict. Eight checks used to arrive
-                     * here as one sentence about signatures, and a handset
-                     * refused an update whose certificate was afterwards proven
-                     * identical to the build already installed -- with nothing
-                     * on the device or off it able to say which check fired.
-                     */
-                    when (val outcome = UpdateVerifier.check(destination, metadata, installedVersionCode, packageManager)) {
-                        is UpdateCheck.Ok ->
-                            runOnUiThread { showVerifiedInstallDialog(destination, metadata, installedVersionCode) }
-                        is UpdateCheck.Refused -> {
-                            destination.delete()
-                            reportRefusal(outcome.reason, metadata.versionCode, installedVersionCode)
-                            throw Exception("Update ditolak: ${outcome.reason}")
+                /*
+                 * The link this runs over drops. The handset's own diagnostics
+                 * report "Software caused connection abort", and the relay
+                 * measured its uplink stalling on six to twelve per cent of
+                 * frames with gaps up to 3.4 seconds. A nine megabyte APK does
+                 * not always arrive whole over that.
+                 *
+                 * Nothing used to check that it had: copyTo wrote whatever
+                 * arrived, the digest then disagreed, and the operator was told
+                 * the identity or signature of the APK was invalid -- about a
+                 * file that was merely incomplete. The same build had installed
+                 * the day before, when the link was better, which is exactly
+                 * why this looked like a property of the build.
+                 */
+                var lastFailure: Exception? = null
+                var attempt = 1
+                while (attempt <= DOWNLOAD_ATTEMPTS) {
+                    try {
+                        downloadOnce(metadata, destination)
+                        lastFailure = null
+                        break
+                    } catch (e: Exception) {
+                        lastFailure = e
+                        destination.delete()
+                        if (attempt < DOWNLOAD_ATTEMPTS) {
+                            runOnUiThread {
+                                Toast.makeText(
+                                    this,
+                                    "Unduhan terputus, mencoba lagi (${attempt + 1}/$DOWNLOAD_ATTEMPTS)",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                            Thread.sleep(DOWNLOAD_RETRY_DELAY_MS * attempt)
                         }
+                    }
+                    attempt += 1
+                }
+                lastFailure?.let { throw it }
+
+                /*
+                 * The reason, not a verdict. Eight checks used to arrive
+                 * here as one sentence about signatures, and a handset
+                 * refused an update whose certificate was afterwards proven
+                 * identical to the build already installed -- with nothing
+                 * on the device or off it able to say which check fired.
+                 */
+                when (val outcome = UpdateVerifier.check(destination, metadata, installedVersionCode, packageManager)) {
+                    is UpdateCheck.Ok ->
+                        runOnUiThread { showVerifiedInstallDialog(destination, metadata, installedVersionCode) }
+                    is UpdateCheck.Refused -> {
+                        destination.delete()
+                        reportRefusal(outcome.reason, metadata.versionCode, installedVersionCode)
+                        throw Exception("Update ditolak: ${outcome.reason}")
                     }
                 }
             } catch (e: Exception) {
                 runOnUiThread {
                     Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
                 }
+            }
+        }
+    }
+
+    /**
+     * One attempt at the APK, which either arrives whole or raises.
+     *
+     * The count is compared with the length the server promised. Without that
+     * the only thing that noticed a short file was the digest, and a digest
+     * mismatch was reported as an identity or signature failure -- which is a
+     * statement about the APK, not about the link that cut it in half.
+     */
+    private fun downloadOnce(metadata: UpdateMetadata, destination: File) {
+        if (destination.exists()) destination.delete()
+
+        val request = Request.Builder()
+            .url(metadata.updateUrl)
+            .header("User-Agent", "Mozilla/5.0")
+            .build()
+
+        okClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw Exception("Gagal unduh APK (${response.code()})")
+            val body = response.body() ?: throw Exception("File kosong")
+            val promised = body.contentLength()
+            val written = FileOutputStream(destination).use { output ->
+                body.byteStream().copyTo(output)
+            }
+            if (promised >= 0 && written != promised) {
+                throw Exception("Unduhan terputus: $written dari $promised byte")
             }
         }
     }

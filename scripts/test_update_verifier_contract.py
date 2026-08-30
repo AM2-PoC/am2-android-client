@@ -153,5 +153,75 @@ class ARefusalReachesTheRelayTest(unittest.TestCase):
             )
 
 
+
+class ATruncatedDownloadIsNotASignatureFailureTest(unittest.TestCase):
+    """A link that drops mid-download must say so, and be tried again.
+
+    The handset reports `SocketException: Software caused connection abort`,
+    and the relay independently measured its uplink stalling on 6 to 12 per
+    cent of frames with gaps up to 3.4 seconds. A nine megabyte APK over that
+    link does not always arrive whole.
+
+    Nothing checked that it had. copyTo() wrote whatever arrived, the digest
+    then disagreed, and the operator was told the identity or signature of the
+    APK was invalid -- about a file that was simply incomplete. The same build
+    had installed the day before, when the link was better, which is why this
+    looked like a property of the build.
+    """
+
+    def setUp(self):
+        self.about = code(
+            (ROOT / "app/src/main/java/com/am2/am2/AboutActivity.kt")
+            .read_text(encoding="utf-8"))
+        # startManualDownload and the single attempt it repeats: the retry
+        # lives in one and the completeness check in the other, and the
+        # contract is about the pair.
+        self.download = self.about[self.about.index("fun startManualDownload"):]
+        self.download = self.download[:self.download.index("fun getInstalledVersionCode")]
+
+    def test_a_short_download_raises_rather_than_being_written_and_forgotten(self):
+        # Bound to the comparison and the throw it guards, not to the presence
+        # of the words. An earlier pair of assertions here passed with the
+        # condition replaced by `if (false)`.
+        self.assertRegex(
+            self.download,
+            r"written\s*!=\s*promised[\s\S]{0,200}?throw",
+            "the count that arrived is not compared with the length promised, "
+            "or the mismatch does not stop the update: a truncated file reaches "
+            "the signature check and is reported as an invalid APK",
+        )
+        self.assertRegex(
+            self.download, r"(?i)throw[^\n]*(unduhan terputus|download incomplete)",
+            "a short download is still reported as an identity or signature problem",
+        )
+        self.assertRegex(
+            self.download, r"contentLength\(\)[\s\S]{0,400}?written\s*!=\s*promised",
+            "the promised length is read but never the thing compared against",
+        )
+
+    def test_a_dropped_link_is_tried_again_before_giving_up(self):
+        self.assertRegex(
+            self.download,
+            r"while\s*\(\s*attempt\s*<=\s*DOWNLOAD_ATTEMPTS\s*\)",
+            "the download is not retried against a link known to drop",
+        )
+        self.assertRegex(
+            self.about, r"DOWNLOAD_ATTEMPTS\s*=\s*([2-9]|[1-9][0-9])\b",
+            "DOWNLOAD_ATTEMPTS is not a number greater than one, so nothing is "
+            "actually retried",
+        )
+
+    def test_the_retry_is_bounded_and_waits_between_tries(self):
+        self.assertRegex(
+            self.about, r"DOWNLOAD_ATTEMPTS\s*=\s*[0-9]{1,2}\b",
+            "the retry ceiling is not a small literal",
+        )
+        self.assertRegex(
+            self.download, r"Thread\.sleep\(\s*DOWNLOAD_RETRY_DELAY_MS",
+            "the retries are immediate, which on a congested link is the worst "
+            "moment to try again",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
