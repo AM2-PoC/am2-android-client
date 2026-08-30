@@ -176,14 +176,16 @@ class PTTService : Service() {
     }
 
     private fun handleForceLogout() {
-        stopForeground(true)
-        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID)
-        stopSelf()
         val intent = Intent(this, LoginActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             putExtra("FORCE_LOGOUT", true)
         }
+        // Navigate while this is still a foreground service. Dropping foreground
+        // privilege first can make a background activity launch disappear.
         startActivity(intent)
+        stopForeground(true)
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID)
+        stopSelf()
         handler.post { Toast.makeText(applicationContext, "Sesi Anda telah diakhiri oleh admin.", Toast.LENGTH_LONG).show() }
     }
 
