@@ -21,6 +21,25 @@ data class UpdateMetadata(
          * cross-environment hand-off that separate channels exist to prevent.
          */
         val approvedUrl: String get() = BuildConfig.UPDATE_APK_URL
+
+        /**
+         * Scheme and host, which is what "may this APK come from here" means.
+         *
+         * The whole URL used to have to match the compiled literal character
+         * for character. Every handset already installed therefore accepted
+         * exactly one path forever: change it and those units could never be
+         * updated again by anything the operator has. They are not broken and
+         * not reachable, which is the definition of stranded, and it is not a
+         * thing a later release can undo.
+         *
+         * The origin still cannot move. An APK is fetched over https from the
+         * one host this build trusts, and the path is the channel's to choose.
+         */
+        private fun origin(url: String): String {
+            val end = url.indexOf('/', url.indexOf("//").let { if (it < 0) 0 else it + 2 })
+            return (if (end < 0) url else url.substring(0, end)).trim().lowercase()
+        }
+
         private val DIGEST = Regex("^[0-9a-f]{64}$")
         private val INTEGER = Regex("^-?[0-9]+$")
 
@@ -35,7 +54,8 @@ data class UpdateMetadata(
             val signer = normalize(json.getString("signer_sha256"))
             require(code > 0) { "version_code invalid" }
             require(name.isNotEmpty()) { "version_name invalid" }
-            require(url == approvedUrl) { "update_url not approved" }
+            require(origin(url) == origin(approvedUrl)) { "update_url origin not approved" }
+            require(url.startsWith("https://")) { "update_url not https" }
             require(DIGEST.matches(sha)) { "sha256 invalid" }
             require(DIGEST.matches(signer)) { "signer_sha256 invalid" }
             return UpdateMetadata(code, name, url, sha, signer, json.optString("changelog", ""))
