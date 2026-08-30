@@ -8,9 +8,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
-import android.media.audiofx.AcousticEchoCanceler
-import android.media.audiofx.AutomaticGainControl
-import android.media.audiofx.NoiseSuppressor
 import android.media.MediaRecorder
 import android.os.Build
 import androidx.core.content.ContextCompat
@@ -107,12 +104,6 @@ object AudioRecorder {
      * Held so they can be released with the recorder: each holds a native
      * session, and VOX restarts every time a phone call takes the microphone.
      */
-    @Volatile
-    private var gainControl: AutomaticGainControl? = null
-    @Volatile
-    private var noiseSuppressor: NoiseSuppressor? = null
-    @Volatile
-    private var echoCanceler: AcousticEchoCanceler? = null
 
     /*
      * Held so a restart can wait for it.
@@ -284,7 +275,6 @@ object AudioRecorder {
                                 recorder.startRecording()
                                 if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                                     audioRecord = recorder
-                                    attachCaptureEffects(recorder.audioSessionId)
                                     success = true
                                     WebSocketManager.currentTransmitTraceId()?.let {
                                         PttTrace.emit(event = "capture_started", traceId = it)
@@ -461,66 +451,6 @@ object AudioRecorder {
      *
      * The line it logs is the point. "Sebagian device" cannot be answered by
      * reading source, and this is the only place that knows.
-     */
-    private fun attachCaptureEffects(sessionId: Int) {
-        releaseCaptureEffects()
-
-        gainControl = try {
-            if (AutomaticGainControl.isAvailable()) {
-                AutomaticGainControl.create(sessionId)?.apply { enabled = true }
-            } else null
-        } catch (e: Exception) { null }
-
-        /*
-         * Attached in order to be read, and set by nothing here.
-         *
-         * This was forced on while gain control was attached, then forced off
-         * when the built-in microphone stayed deaf. Neither was measured. There
-         * is no VOX logic change between the build reported bad and the build
-         * reported better, so the improvement was never mine to claim -- and
-         * the field then reported the headset, which had been working, getting
-         * worse.
-         *
-         * The state before any of it was the platform's own choice, and the
-         * headset worked under it. So the effect is created to read what this
-         * device decided and nothing sets it. vox_level now carries the
-         * amplitude to the relay, which is what should have decided this from
-         * the start.
-         */
-        noiseSuppressor = try {
-            if (NoiseSuppressor.isAvailable()) NoiseSuppressor.create(sessionId) else null
-        } catch (e: Exception) { null }
-
-        echoCanceler = try {
-            if (AcousticEchoCanceler.isAvailable()) {
-                AcousticEchoCanceler.create(sessionId)?.apply { enabled = true }
-            } else null
-        } catch (e: Exception) { null }
-
-        SafeLog.i(
-            TAG,
-            "capture effects: gain_control=" + (gainControl?.enabled == true) +
-                " echo_canceler=" + (echoCanceler?.enabled == true) +
-                " noise_suppressor=" + (noiseSuppressor?.enabled == true) +
-                " (that last one is this device's own default; nothing here sets it)",
-        )
-    }
-
-    private fun releaseCaptureEffects() {
-        try { gainControl?.release() } catch (e: Exception) {}
-        try { noiseSuppressor?.release() } catch (e: Exception) {}
-        try { echoCanceler?.release() } catch (e: Exception) {}
-        gainControl = null
-        noiseSuppressor = null
-        echoCanceler = null
-    }
-
-    /**
-     * Hand over what was kept before VOX decided, oldest first.
-     *
-     * Through the same filter and the same authorization hold as a live frame:
-     * these are not a special kind of audio, they are simply audio that was
-     * recorded before anything knew it would be wanted.
      */
     private fun flushPreTrigger(filter: AudioFilter, userIdTruncated: Int) {
         while (preTrigger.isNotEmpty()) {
@@ -766,7 +696,6 @@ object AudioRecorder {
     }
 
     private fun cleanup() {
-        releaseCaptureEffects()
         cleanupAudioRecord()
         preRoll.clear()
         preTrigger.clear()
