@@ -180,7 +180,12 @@ class PTTService : Service() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             putExtra("FORCE_LOGOUT", true)
         }
+        // Navigate while this is still a foreground service. Dropping foreground
+        // privilege first can make a background activity launch disappear.
         startActivity(intent)
+        stopForeground(true)
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID)
+        stopSelf()
         handler.post { Toast.makeText(applicationContext, "Sesi Anda telah diakhiri oleh admin.", Toast.LENGTH_LONG).show() }
     }
 
@@ -531,11 +536,23 @@ class PTTService : Service() {
         } catch (e: Exception) {}
         if (wakeLock?.isHeld == true) try { wakeLock?.release() } catch (e: Exception) {}
         if (screenWakeLock?.isHeld == true) try { screenWakeLock?.release() } catch (e: Exception) {}
-        WebSocketManager.disconnect()
+        // Logout already disconnected and the Login screen may now own a new
+        // pre-auth transport. A late service teardown must not close that socket.
+        if (WebSocketManager.hasAuthorizedSession()) {
+            WebSocketManager.disconnect()
+        }
+        stopForeground(true)
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID)
         super.onDestroy()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!WebSocketManager.hasAuthorizedSession()) {
+            stopForeground(true)
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val notification = createNotification("PTT Aktif", if (WebSocketManager.isConnected()) "Terhubung ke Server" else "Aplikasi berjalan di latar belakang")
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

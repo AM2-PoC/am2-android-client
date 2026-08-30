@@ -1,4 +1,4 @@
 {
-  "id": "PTT mulai merekam begitu relay mengizinkan, tanpa delay tetap. Nama versi kini menyebut build yang menghasilkannya.",
-  "en": "PTT starts recording the moment the relay allows it, with no fixed delay. The version name now says which build produced it."
+  "id": "Logout kini selalu kembali ke layar masuk, menghentikan layanan PTT dan membersihkan notifikasi reconnect. Pemeriksaan update juga menampilkan alasan penolakan dan mencoba ulang unduhan yang terputus.",
+  "en": "Logout now always returns to sign-in, stops the PTT service, and removes reconnect notifications. Update checks also name refusal reasons and retry interrupted downloads."
 }

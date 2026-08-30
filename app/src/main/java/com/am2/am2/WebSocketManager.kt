@@ -2206,6 +2206,8 @@ object WebSocketManager {
         if (wanted) connect()
     }
 
+    fun hasAuthorizedSession(): Boolean = isAuthorizedSession
+
     fun isConnected(): Boolean {
         return _connectionStatus.value == true
     }
