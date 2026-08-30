@@ -33,6 +33,14 @@ class LogoutLifecycleContractTest(unittest.TestCase):
         self.assertIn("Intent.FLAG_ACTIVITY_CLEAR_TASK", body)
         self.assertIn("startActivity", body)
         self.assertLess(body.index("WebSocketManager.logout()"), body.index("startActivity"))
+        self.assertNotIn("finishAffinity()", body,
+            "task replacement is followed by finishAffinity, which can finish the new login task")
+
+    def test_service_destruction_cannot_tear_down_the_logged_out_login_transport(self):
+        destroyed = section(self.service, "override fun onDestroy()", "\n    }")
+        self.assertRegex(destroyed,
+            r"if \(WebSocketManager\.hasAuthorizedSession\(\)\)[\s\S]{0,160}?WebSocketManager\.disconnect\(\)",
+            "service destruction disconnects the login screen transport after logout")
 
     def test_main_screen_refuses_a_task_restored_without_a_session(self):
         created = section(self.main, "override fun onCreate", "\n    }")
