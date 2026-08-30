@@ -85,5 +85,73 @@ class UpdateVerifierContractTest(unittest.TestCase):
         )
 
 
+
+class TheChannelSurvivesAPathChangeTest(unittest.TestCase):
+    """A handset already in the field must not be stranded by a URL edit.
+
+    UpdateMetadata required the manifest's update_url to equal a string
+    compiled into the APK, character for character. Every handset already
+    installed therefore accepts exactly one path forever: change it, and those
+    units can never be updated again by any means the operator has. They are
+    not broken and not reachable -- the definition of stranded.
+
+    What the check is for is making sure an APK cannot be fetched from
+    somewhere else. That is a statement about the origin, not about the path,
+    so the origin is what is compared and the path comes from the manifest.
+    """
+
+    def setUp(self):
+        self.metadata = code(
+            (ROOT / "app/src/main/java/com/am2/am2/update/UpdateMetadata.kt")
+            .read_text(encoding="utf-8"))
+
+    def test_the_path_is_not_frozen_into_every_installed_handset(self):
+        self.assertNotIn(
+            "require(url == approvedUrl)", self.metadata,
+            "the manifest path must match a compiled literal exactly, so changing "
+            "it strands every handset already in the field",
+        )
+
+    def test_the_origin_is_still_enforced(self):
+        # Loosening the path must not loosen where an APK may come from.
+        self.assertRegex(
+            self.metadata, r"(origin|scheme|host)",
+            "nothing constrains where the APK may be fetched from any more",
+        )
+        self.assertIn(
+            "approvedUrl", self.metadata,
+            "the build no longer states which channel it trusts",
+        )
+
+
+class ARefusalReachesTheRelayTest(unittest.TestCase):
+    """A stranded handset says why, without anyone reading a toast to us.
+
+    The reason a refusal is invisible is that it lives in a Toast on a radio in
+    somebody's hand. vox_level is the precedent: three rounds of argument about
+    VOX ended the moment the handset reported its own numbers.
+    """
+
+    def setUp(self):
+        self.about = code(
+            (ROOT / "app/src/main/java/com/am2/am2/AboutActivity.kt")
+            .read_text(encoding="utf-8"))
+
+    def test_the_refusal_is_reported_where_it_can_be_read(self):
+        self.assertIn(
+            '"update_refused"', self.about,
+            "a refused update is only ever shown on the handset itself",
+        )
+
+    def test_the_report_carries_what_makes_it_actionable(self):
+        report = self.about[self.about.index('"update_refused"'):]
+        report = report[:report.index("\n        }") + 10] if "\n        }" in report else report
+        for field in ("reason", "offered", "installed"):
+            self.assertIn(
+                field, report,
+                "the report omits %s, so it names a failure nobody can place" % field,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

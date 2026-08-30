@@ -16,6 +16,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
 import com.am2.am2.databinding.ActivityAboutBinding
 import com.am2.am2.update.UpdateMetadata
+import org.json.JSONObject
 import com.am2.am2.update.UpdateCheck
 import com.am2.am2.update.UpdateVerifier
 import okhttp3.OkHttpClient
@@ -180,12 +181,41 @@ class AboutActivity : BaseActivity() {
             .setPositiveButton("PASANG") { _, _ ->
                 when (val outcome = UpdateVerifier.check(file, metadata, installedVersionCode, packageManager)) {
                     is UpdateCheck.Ok -> installApk(file)
-                    is UpdateCheck.Refused ->
+                    is UpdateCheck.Refused -> {
+                        reportRefusal(outcome.reason, metadata.versionCode, installedVersionCode)
                         Toast.makeText(this, "Update ditolak: ${outcome.reason}", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
             .setNegativeButton("NANTI", null)
             .show()
+    }
+
+    /**
+     * Say why an update was refused, where somebody other than the operator
+     * can read it.
+     *
+     * A refusal lives in a Toast on a radio in somebody's hand, so a handset
+     * that cannot update is a handset nobody can diagnose -- which is how one
+     * spent a day being blamed on the build it was refusing. vox_level is the
+     * precedent: three rounds of argument about VOX ended the moment the
+     * handset reported its own numbers instead of being asked about them.
+     *
+     * Best effort by design. A refusal must never itself fail.
+     */
+    private fun reportRefusal(reason: String, offered: Long, installed: Long) {
+        try {
+            WebSocketManager.emit(
+                "update_refused",
+                JSONObject()
+                    .put("reason", reason)
+                    .put("offered", offered)
+                    .put("installed", installed)
+                    .put("sdk_int", Build.VERSION.SDK_INT)
+                    .put("device", "${Build.MANUFACTURER} ${Build.MODEL}"),
+            )
+        } catch (_: Exception) {
+        }
     }
 
     private fun updateDirectory(): File {
@@ -230,6 +260,7 @@ class AboutActivity : BaseActivity() {
                             runOnUiThread { showVerifiedInstallDialog(destination, metadata, installedVersionCode) }
                         is UpdateCheck.Refused -> {
                             destination.delete()
+                            reportRefusal(outcome.reason, metadata.versionCode, installedVersionCode)
                             throw Exception("Update ditolak: ${outcome.reason}")
                         }
                     }
