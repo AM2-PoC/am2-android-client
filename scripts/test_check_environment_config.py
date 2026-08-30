@@ -52,7 +52,16 @@ class EnvironmentConfigTest(unittest.TestCase):
         self.assertEqual([], offenders)
 
         verifier = (ROOT / "app/src/main/java/com/am2/am2/update/UpdateVerifier.kt").read_text()
-        self.assertIn("if (!BuildConfig.SELF_UPDATE_ENABLED) return false", verifier)
+        # The kill switch, by what it does rather than by the shape it was
+        # written in: the verifier answers on SELF_UPDATE_ENABLED before it
+        # looks at anything else. Pinning the old one-line form made a refusal
+        # that names its reason -- which is what a refused handset needed --
+        # fail this file.
+        self.assertRegex(
+            verifier,
+            r"if \(!BuildConfig\.SELF_UPDATE_ENABLED\)[\s\S]{0,120}?return",
+            "the self-update kill switch is no longer honoured first",
+        )
         self.assertIn("BuildConfig.APPLICATION_ID", verifier)
         self.assertNotIn('EXPECTED_PACKAGE = "com.am2.tik"', verifier)
         self.assertIn("if (!BuildConfig.SELF_UPDATE_ENABLED) return", about)
