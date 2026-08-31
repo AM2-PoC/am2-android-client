@@ -10,4 +10,13 @@
         restart instead of waiting for somebody to hold it.
     -->
     <string name="login_stay_signed_in">Tetap masuk di perangkat ini</string>
+    <!--
+        Named for what it changes. It writes start_on_boot, read only by
+        BootReceiver, which decides whether the app comes up when the handset
+        powers on. It has never had anything to do with signing in: fc645bb
+        separated the two, and a stored session resumes whether this is on or
+        off. The old label said "Auto Login" and sent operators looking here
+        for the reason their radio would not sign itself back in.
+    -->
+    <string name="setting_start_on_boot">Jalankan saat perangkat menyala</string>
 </resources>

@@ -238,7 +238,7 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="@dimen/margin_12dp"
-                            android:text="Auto Login"
+                            android:text="@string/setting_start_on_boot"
                             android:textColor="#BBBBBB"
                             android:textSize="@dimen/text_setting_label_small"
                             android:background="@drawable/menu_item_background"
