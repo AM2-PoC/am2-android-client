@@ -1666,6 +1666,21 @@ object WebSocketManager {
             // signer digest names a keystore, not a commit; this names the build.
             .put("client_version_code", BuildConfig.VERSION_CODE)
             .put("client_version_name", BuildConfig.VERSION_NAME)
+            /*
+             * Which Android, and which kind of handset.
+             *
+             * The staging acceptance plan asks for evidence on API 16, 19, 25,
+             * 26 and 34 from one APK digest, and nothing on the login record
+             * could say which of them had actually signed in. "It passed on
+             * KitKat" was a sentence somebody had to be believed about, which
+             * is not what an acceptance document is for.
+             *
+             * Manufacturer and model describe a kind of handset, not a person.
+             * The identifier for a particular unit is current_device_id, which
+             * is already here and is the one the relay revokes against.
+             */
+            .put("client_sdk_int", Build.VERSION.SDK_INT)
+            .put("client_device", "${Build.MANUFACTURER} ${Build.MODEL}")
 
         emit("app_login", data)
     }

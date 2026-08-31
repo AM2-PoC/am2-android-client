@@ -398,5 +398,55 @@ class DeviceTokenContractTest(unittest.TestCase):
             "a revoked token is kept and presented again, which is a loop",
         )
 
+
+class ALoginNamesTheHandsetTest(unittest.TestCase):
+    """A login says which Android and which handset it came from.
+
+    The staging acceptance plan asks for evidence on API 16, 19, 25, 26 and 34
+    from one APK digest. Nothing on the login record could say which API had
+    signed in, so "it passed on KitKat" was a sentence somebody had to be
+    believed about -- which is not what an acceptance document is for.
+
+    update_refused already carries both, because a refusal without them cannot
+    be acted on. A successful login without them cannot be evidenced, which is
+    the same gap wearing better clothes.
+    """
+
+    def setUp(self):
+        self.socket = code(
+            (ROOT / "app/src/main/java/com/am2/am2/WebSocketManager.kt")
+            .read_text(encoding="utf-8"))
+
+    def _payload(self):
+        body = self.socket[self.socket.index("private fun executeLogin"):]
+        return body[:body.index('emit("app_login"')]
+
+    def test_the_login_says_which_android(self):
+        self.assertRegex(
+            self._payload(), r'put\(\s*"client_sdk_int"[\s\S]{0,80}?SDK_INT',
+            "the login does not carry the API level, so acceptance across five "
+            "of them cannot be evidenced from the record",
+        )
+
+    def test_the_login_says_which_handset(self):
+        self.assertRegex(
+            self._payload(), r'put\(\s*"client_device"[\s\S]{0,120}?MODEL',
+            "the login does not name the handset, so one unit cannot be told "
+            "from another in a fleet",
+        )
+
+    def test_it_carries_no_identifier_that_follows_a_person(self):
+        # Manufacturer and model describe a kind of handset. ANDROID_ID and the
+        # serial identify one, and current_device_id already carries what the
+        # relay needs for that.
+        payload = self._payload()
+        for forbidden in ("Build.SERIAL", "getImei", "ANDROID_ID", "Settings.Secure"):
+            self.assertNotIn(
+                forbidden, payload,
+                "%s would put a persistent hardware identifier in every login "
+                "record" % forbidden,
+            )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
