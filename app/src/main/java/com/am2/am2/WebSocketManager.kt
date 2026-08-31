@@ -800,12 +800,7 @@ object WebSocketManager {
                 "login_success" -> {
                     if (!isCurrentSocket(generation) || !isAuthorizedSession) return
                     val wasInteractive = interactiveLoginPending
-                    val shouldRemember = if (wasInteractive) {
-                        rememberInteractiveLogin
-                    } else {
-                        persistAuthorizedSession
-                    }
-                    if (wasInteractive) persistAuthorizedSession = shouldRemember
+                    persistAuthorizedSession = true
                     isAuthorizedSession = true
                     isAuthenticatedOnCurrentSocket = true
                     reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS
@@ -818,17 +813,13 @@ object WebSocketManager {
                     // asks for the password once more next time.
                     val issued = dataObj.optString("device_token", "")
                     if (issued.isNotEmpty()) {
-                        val persisted = if (shouldRemember) {
-                            appContext?.let {
-                                CredentialStore.saveToken(
-                                    it,
-                                    issued,
-                                    savedUsername ?: dataObj.optString("username"),
-                                )
-                            } ?: false
-                        } else {
-                            appContext?.let { CredentialStore.clear(it) } ?: false
-                        }
+                        val persisted = appContext?.let {
+                            CredentialStore.saveToken(
+                                it,
+                                issued,
+                                savedUsername ?: dataObj.optString("username"),
+                            )
+                        } ?: false
                         if (!persisted) {
                             isAuthorizedSession = false
                             isAuthenticatedOnCurrentSocket = false
@@ -839,21 +830,12 @@ object WebSocketManager {
                         activeDeviceToken = issued
                         savedPassword = null
                         hasDeviceToken = true
-                    } else if (wasInteractive && shouldRemember) {
+                    } else if (wasInteractive) {
                         // A relay with no token leaves this session ephemeral.
                         // The operator password is never a durable credential.
                         persistAuthorizedSession = false
                         val cleared = appContext?.let { CredentialStore.clear(it) } ?: false
                         savedPassword = null
-                        if (!cleared) {
-                            isAuthorizedSession = false
-                            isAuthenticatedOnCurrentSocket = false
-                            _loginEvent.postValue(LoginEvent.Error("Sesi lama tidak dapat dihapus dengan aman."))
-                            disconnect()
-                            return
-                        }
-                    } else if (wasInteractive) {
-                        val cleared = appContext?.let { CredentialStore.clear(it) } ?: false
                         if (!cleared) {
                             isAuthorizedSession = false
                             isAuthenticatedOnCurrentSocket = false
@@ -1628,7 +1610,16 @@ object WebSocketManager {
     }
 
     @Synchronized
-    fun login(user: String, pass: String, remember: Boolean) {
+    /**
+     * Sign in, and keep the session. There is no longer a choice about that.
+     *
+     * A radio assigned to a unit stays signed in until somebody signs it out
+     * or an admin revokes the device, which is what every purpose-built field
+     * device does. The flag this used to take let an unticked sign-in run
+     * CredentialStore.clear() and throw away a token that was already working
+     * -- from an unlabelled tick box, so nothing on screen said it would.
+     */
+    fun login(user: String, pass: String) {
         socketGeneration += 1
         try {
             webSocket?.close(1000, "New login attempt")
@@ -1642,8 +1633,8 @@ object WebSocketManager {
         isAuthorizedSession = true
         reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS
         interactiveLoginPending = true
-        rememberInteractiveLogin = remember
-        persistAuthorizedSession = remember
+        rememberInteractiveLogin = true
+        persistAuthorizedSession = true
         authenticationWasAutomatic = false
         activeDeviceToken = null
         hasDeviceToken = false

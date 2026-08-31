@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""The one control on the login screen, and what it actually promises.
+"""What the login screen keeps, and what it must never keep.
+
+    The control this file was written for is gone: a radio assigned to a unit
+    stays signed in, and being asked to choose was how one quietly stopped.
+    What survives is the half that was always right -- the unit id is not a
+    credential and is remembered, the password is neither.
 
 The checkbox beside LOGIN carries no label at all -- no android:text, no
 contentDescription, a grey tick box next to a button. Nothing on screen says
@@ -38,35 +43,6 @@ class LoginScreenContractTest(unittest.TestCase):
     def setUp(self):
         self.login = code(LOGIN.read_text(encoding="utf-8"))
         self.layout = LAYOUT.read_text(encoding="utf-8")
-
-    def _checkbox(self):
-        start = self.layout.index("@+id/cbRememberMe")
-        end = self.layout.index("/>", start)
-        return self.layout[start:end]
-
-    def test_the_control_says_what_it_does(self):
-        box = self._checkbox()
-        self.assertRegex(
-            box, r"android:(text|contentDescription)=",
-            "the control that decides whether the handset can sign itself back in "
-            "is an unlabelled tick box",
-        )
-
-    def test_ticking_it_does_not_disable_the_fields_you_still_have_to_fill(self):
-        listener = self.login[self.login.index("cbRememberMe.setOnCheckedChangeListener"):]
-        listener = listener[:listener.index("\n        }")]
-        self.assertNotIn(
-            "updateInputStates(isChecked)", listener,
-            "ticking the box locks the username and password fields, so on a fresh "
-            "install an operator who ticks it first cannot type at all",
-        )
-
-    def test_the_lock_belongs_to_having_credentials_already(self):
-        auto = self.login[self.login.index("fun checkAutoLogin()"):]
-        self.assertIn(
-            "updateInputStates(true)", auto,
-            "nothing locks the fields even when they are filled in for you",
-        )
 
     def test_no_stored_password_is_put_back_on_screen(self):
         self.assertNotIn(
