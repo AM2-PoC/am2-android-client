@@ -17,14 +17,14 @@ class StoredCredentialStateTest {
     }
 
     @Test
-    fun usernameAndPasswordRemainCompatibleWithARelayThatIssuesNoToken() {
+    fun usernameAndPasswordNeverBecomeAResumableDiskSession() {
         val state = StoredCredentialState(
             username = "UNIT01",
             password = "password",
             token = null,
         )
 
-        assertTrue(state.canResume)
+        assertFalse(state.canResume)
     }
 
     @Test
