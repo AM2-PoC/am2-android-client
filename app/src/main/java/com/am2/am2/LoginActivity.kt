@@ -101,41 +101,6 @@ class LoginActivity : BaseActivity() {
         binding.btnLogin.setOnClickListener {
             performLogin()
         }
-
-        /*
-         * Ticking this does not lock the fields. The lock belongs to having
-         * credentials already -- checkAutoLogin applies it when there are some
-         * -- and applying it on any tick meant an operator on a fresh handset
-         * who ticked the box first could no longer type at all.
-         */
-        binding.cbRememberMe.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                binding.btnLogin.requestFocus()
-                // Hide keyboard if visible
-                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                imm.hideSoftInputFromWindow(binding.cbRememberMe.windowToken, 0)
-            }
-        }
-    }
-
-    private fun updateInputStates(isLocked: Boolean) {
-        val isEnabled = !isLocked
-        
-        binding.tilUsername.isEnabled = isEnabled
-        binding.etUsername.isFocusable = isEnabled
-        binding.etUsername.isFocusableInTouchMode = isEnabled
-        
-        binding.tilPassword.isEnabled = isEnabled
-        binding.etPassword.isFocusable = isEnabled
-        binding.etPassword.isFocusableInTouchMode = isEnabled
-
-        if (isLocked) {
-            binding.tilUsername.alpha = 0.5f
-            binding.tilPassword.alpha = 0.5f
-        } else {
-            binding.tilUsername.alpha = 1.0f
-            binding.tilPassword.alpha = 1.0f
-        }
     }
 
     private fun performLogin() {
@@ -323,26 +288,40 @@ class LoginActivity : BaseActivity() {
     }
 
     private fun sendLoginRequest(identity: String, pass: String) {
-        sharedPreferences.edit()
-            .putBoolean("remember_me", binding.cbRememberMe.isChecked)
-            .apply()
-        WebSocketManager.login(identity, pass, binding.cbRememberMe.isChecked)
+        /*
+         * No choice is offered any more. A radio assigned to a unit stays
+         * signed in until somebody signs it out or an admin revokes it, which
+         * is what every purpose-built field device does. The control that used
+         * to sit here did more than decline to save: an unticked sign-in ran
+         * CredentialStore.clear() and threw away a token that was working.
+         */
+        sharedPreferences.edit().putString(LAST_USERNAME, identity).apply()
+        WebSocketManager.login(identity, pass)
+    }
+
+    companion object {
+        /** Not a credential: the unit id, kept so it need not be retyped. */
+        const val LAST_USERNAME = "last_username"
     }
 
     private fun checkAutoLogin() {
         // One reader, which also migrates a handset that still has its
         // credentials in cleartext and removes them once it has.
         val stored = CredentialStore.state(safeContext)
-        val savedUser = stored.username
-        val rememberMe = sharedPreferences.getBoolean("remember_me", false)
 
-        if (savedUser != null) {
+        /*
+         * The unit id, from wherever it still exists.
+         *
+         * It outlives signing out on purpose. It is not a credential -- it is
+         * printed on the radio -- and retyping it was the part that was
+         * actually tedious. The password is a different thing entirely and is
+         * never kept, never filled in, and never survives a sign-out.
+         */
+        val savedUser = stored.username
+            ?: sharedPreferences.getString(LAST_USERNAME, null)
+        if (!savedUser.isNullOrEmpty()) {
             binding.etUsername.setText(savedUser)
-            binding.cbRememberMe.isChecked = rememberMe
-            if (rememberMe) {
-                updateInputStates(true)
-                binding.btnLogin.requestFocus()
-            }
+            binding.etPassword.requestFocus()
         }
         /*
          * The password is not filled in. The relay issues a device token and

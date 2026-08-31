@@ -224,9 +224,17 @@ class DeviceTokenContractTest(unittest.TestCase):
             "wasInteractive", manager_success,
             "login success cannot distinguish explicit login from automatic reconnect",
         )
-        self.assertIn(
+        # There is no choice to ignore any more: a signed-in radio stays signed
+        # in. What still has to hold is that the automatic path never reaches
+        # the clear() branch, which is what this file exists to protect.
+        self.assertNotIn(
             "shouldRemember", manager_success,
-            "an explicit successful login ignores the Remember Me choice",
+            "the stored session still depends on a choice that was removed",
+        )
+        self.assertRegex(
+            manager_success, r"else if \(wasInteractive\)[\s\S]{0,200}?CredentialStore\.clear\(",
+            "the branch that clears is no longer fenced to an interactive login, "
+            "so an automatic reconnect could delete a working token",
         )
         self.assertIn(
             "persistAuthorizedSession", manager_success,

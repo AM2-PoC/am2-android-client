@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""The one control on the login screen, and what it actually promises.
+"""What the login screen keeps, and what it must never keep.
+
+    The control this file was written for is gone: a radio assigned to a unit
+    stays signed in, and being asked to choose was how one quietly stopped.
+    What survives is the half that was always right -- the unit id is not a
+    credential and is remembered, the password is neither.
 
 The checkbox beside LOGIN carries no label at all -- no android:text, no
 contentDescription, a grey tick box next to a button. Nothing on screen says
@@ -39,40 +44,55 @@ class LoginScreenContractTest(unittest.TestCase):
         self.login = code(LOGIN.read_text(encoding="utf-8"))
         self.layout = LAYOUT.read_text(encoding="utf-8")
 
-    def _checkbox(self):
-        start = self.layout.index("@+id/cbRememberMe")
-        end = self.layout.index("/>", start)
-        return self.layout[start:end]
-
-    def test_the_control_says_what_it_does(self):
-        box = self._checkbox()
-        self.assertRegex(
-            box, r"android:(text|contentDescription)=",
-            "the control that decides whether the handset can sign itself back in "
-            "is an unlabelled tick box",
-        )
-
-    def test_ticking_it_does_not_disable_the_fields_you_still_have_to_fill(self):
-        listener = self.login[self.login.index("cbRememberMe.setOnCheckedChangeListener"):]
-        listener = listener[:listener.index("\n        }")]
-        self.assertNotIn(
-            "updateInputStates(isChecked)", listener,
-            "ticking the box locks the username and password fields, so on a fresh "
-            "install an operator who ticks it first cannot type at all",
-        )
-
-    def test_the_lock_belongs_to_having_credentials_already(self):
-        auto = self.login[self.login.index("fun checkAutoLogin()"):]
-        self.assertIn(
-            "updateInputStates(true)", auto,
-            "nothing locks the fields even when they are filled in for you",
-        )
-
     def test_no_stored_password_is_put_back_on_screen(self):
         self.assertNotIn(
             "etPassword.setText(", self.login,
             "the login screen still writes a stored password into a visible field",
         )
+
+
+
+class TheFileStillHasItsShapeTest(unittest.TestCase):
+    """Every declaration sits where it was declared to sit.
+
+    Removing a listener block took onCreate's closing brace with it. The file
+    still had equal numbers of braces -- a whole-file count said zero and gave
+    false confidence -- while every function after the deletion had become a
+    local one inside onCreate. The compiler said so plainly:
+
+        Modifier 'private' is not applicable to 'local function'
+
+    Balance is not structure. This checks the structure.
+    """
+
+    def setUp(self):
+        self.text = LOGIN.read_text(encoding="utf-8")
+
+    def test_every_member_function_sits_at_class_level(self):
+        body = self.text[self.text.index("class LoginActivity"):]
+        depth = 0
+        misplaced = []
+        for line in body.split("\n"):
+            if re.match(r"    (private |protected |override |)fun \w+", line):
+                if depth != 1:
+                    misplaced.append((line.strip()[:60], depth))
+            depth += line.count("{") - line.count("}")
+        self.assertEqual(
+            [], misplaced,
+            "these are nested inside another function, so the class lost a "
+            "closing brace somewhere above them: %r" % (misplaced,),
+        )
+
+    def test_the_class_closes_exactly_once(self):
+        body = self.text[self.text.index("class LoginActivity"):]
+        depth = 0
+        for ch in body:
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                self.assertGreaterEqual(depth, 0, "a brace closes more than was opened")
+        self.assertEqual(depth, 0, "the class body is left open")
 
 
 if __name__ == "__main__":
