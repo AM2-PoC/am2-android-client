@@ -192,7 +192,7 @@ jobs:
           ORG_GRADLE_PROJECT_AM2_STAGING_KEY_ALIAS: ${{ secrets.AM2_STAGING_KEY_ALIAS }}
           ORG_GRADLE_PROJECT_AM2_STAGING_KEY_PASSWORD: ${{ secrets.AM2_STAGING_KEY_PASSWORD }}
           ORG_GRADLE_PROJECT_AM2_APPROVED_SIGNER_SHA256: ${{ steps.approved_signer.outputs.digest }}
-        run: ./gradlew --no-daemon -PAM2_VERSION_CODE="$GITHUB_RUN_NUMBER" :app:testStagingDebugUnitTest :app:assembleStagingDebug :app:assembleStagingDebugAndroidTest
+        run: ./gradlew --no-daemon -PAM2_VERSION_CODE="$GITHUB_RUN_NUMBER" -PAM2_SOURCE_SHA="$GITHUB_SHA" :app:testStagingDebugUnitTest :app:assembleStagingDebug :app:assembleStagingDebugAndroidTest
       - name: Record immutable staging candidate identity
         shell: bash
         run: |
@@ -450,7 +450,8 @@ jobs:
           ./gradlew --no-daemon :app:test \
             :app:assembleProductionRelease :app:bundlePlayRelease \
             -PAM2_APPROVED_SIGNER_SHA256="$AM2_APPROVED_SIGNER_SHA256" \
-            -PAM2_VERSION_CODE="$GITHUB_RUN_NUMBER"
+            -PAM2_VERSION_CODE="$GITHUB_RUN_NUMBER" \
+            -PAM2_SOURCE_SHA="$GITHUB_SHA"
       - name: Record artifact identity
         shell: bash
         env:

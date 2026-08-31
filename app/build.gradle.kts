@@ -93,6 +93,31 @@ val buildVersionCode = providers.gradleProperty("AM2_VERSION_CODE")
     .orElse(1)
 
 /*
+ * Which source this binary came from, carried in the version itself.
+ *
+ * "Which commit is build 210?" took three queries to CI, repeatedly, on a day
+ * when the answer decided whether a build was guilty of anything. The version
+ * string is on every login record already; it may as well say.
+ *
+ * Semantic Versioning rule 10 allows it: build metadata is "a series of dot
+ * separated identifiers" of "[0-9A-Za-z-]", and it "MUST be ignored when
+ * determining version precedence" -- so this changes what a version says and
+ * nothing about how versions order. Android orders by versionCode regardless.
+ *
+ * Constrained rather than trusted: a branch name with a slash in it would
+ * produce a version string no tool can parse, and it would do so quietly.
+ */
+val buildSourceSha = providers.gradleProperty("AM2_SOURCE_SHA")
+    .map { property ->
+        val trimmed = property.trim()
+        require(trimmed.matches(Regex("[0-9a-f]{7,40}"))) {
+            "AM2_SOURCE_SHA must be a lowercase hexadecimal commit id"
+        }
+        ".g" + trimmed.take(7)
+    }
+    .orElse("")
+
+/*
  * The release a human declared, read from version.properties rather than
  * written here.
  *
@@ -160,7 +185,7 @@ android {
         create("dev") {
             dimension = "environment"
             applicationIdSuffix = ".dev"
-            versionNameSuffix = "-dev+${buildVersionCode.get()}"
+            versionNameSuffix = "-dev+${buildVersionCode.get()}${buildSourceSha.get()}"
             resValue("string", "app_name", "am² DEV")
             buildConfigField(
                 "String",
@@ -181,7 +206,7 @@ android {
         create("staging") {
             dimension = "environment"
             applicationIdSuffix = ".staging"
-            versionNameSuffix = "-staging+${buildVersionCode.get()}"
+            versionNameSuffix = "-staging+${buildVersionCode.get()}${buildSourceSha.get()}"
             resValue("string", "app_name", "am² STAGING")
             // Staging carries its own channel, so the update path can be
             // exercised before a production release depends on it.
@@ -209,7 +234,7 @@ android {
              * the build like the internal lanes do. Only `play` stays a plain
              * release, because only `play` has a store listing to keep tidy.
              */
-            versionNameSuffix = "+${buildVersionCode.get()}"
+            versionNameSuffix = "+${buildVersionCode.get()}${buildSourceSha.get()}"
             buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "true")
             buildConfigField(
                 "String",
