@@ -101,14 +101,7 @@ class LoginActivity : BaseActivity() {
         binding.btnLogin.setOnClickListener {
             performLogin()
         }
-
-        /*
-         * Ticking this does not lock the fields. The lock belongs to having
-         * credentials already -- checkAutoLogin applies it when there are some
-         * -- and applying it on any tick meant an operator on a fresh handset
-         * who ticked the box first could no longer type at all.
-         */
-
+    }
 
     private fun performLogin() {
         val identity = binding.etUsername.text.toString().trim()
