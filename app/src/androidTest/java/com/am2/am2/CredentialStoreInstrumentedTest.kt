@@ -76,6 +76,23 @@ class CredentialStoreInstrumentedTest {
     }
 
     @Test
+    fun blockedStartupRetriesCredentialErasure() {
+        val plain = context.getSharedPreferences(WebSocketManager.PREFS_NAME, Context.MODE_PRIVATE)
+        plain.edit()
+            .putBoolean("session_blocked", true)
+            .putString("username", "UNIT01")
+            .putString("password", "operator-secret")
+            .putString("device_token", "stale-token")
+            .commit()
+
+        assertFalse(CredentialStore.state(context).canResume)
+        assertTrue(plain.getBoolean("session_blocked", false))
+        assertFalse(plain.contains("username"))
+        assertFalse(plain.contains("password"))
+        assertFalse(plain.contains("device_token"))
+    }
+
+    @Test
     fun unreadableEncryptedCredentialFailsClosed() {
         assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
         assertTrue(CredentialStore.saveToken(context, "token-3", "UNIT01"))

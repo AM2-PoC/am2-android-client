@@ -106,6 +106,11 @@ object CredentialStore {
                 }
             }
         ) {
+            // A blocked marker is authorization-final, not cleanup-final. A
+            // prior crash may have happened after setting it but before old
+            // password/token copies were removed. Retry the idempotent erase on
+            // every startup while retaining the marker.
+            eraseBlockedCredentialMaterial(context)
             return StoredCredentialState(null, null, null)
         }
         val target = canonical(context)
@@ -173,16 +178,10 @@ object CredentialStore {
         return blocked
     }
 
-    /** Logout is durable before the caller may terminate the process. */
-    @Synchronized
-    fun clear(context: Context): Boolean {
-        val candidates = contexts(context)
-        var markerEstablished = false
+    /** Delete credential copies without ever removing SESSION_BLOCKED. */
+    private fun eraseBlockedCredentialMaterial(context: Context): Boolean {
         var cleared = true
-        candidates.forEach { candidate ->
-            val marker = plain(candidate).edit().putBoolean(SESSION_BLOCKED, true).commit()
-            markerEstablished = markerEstablished || marker
-            cleared = marker && cleared
+        contexts(context).forEach { candidate ->
             val encrypted = secure(candidate)
             if (encrypted != null) {
                 cleared = encrypted.edit()
@@ -194,6 +193,21 @@ object CredentialStore {
                 .remove(USER).remove(PASS).remove(TOKEN).commit() && cleared
             cleared = deleteLegacyFile(candidate) && cleared
         }
+        return cleared
+    }
+
+    /** Logout is durable before the caller may terminate the process. */
+    @Synchronized
+    fun clear(context: Context): Boolean {
+        val candidates = contexts(context)
+        var markerEstablished = false
+        var cleared = true
+        candidates.forEach { candidate ->
+            val marker = plain(candidate).edit().putBoolean(SESSION_BLOCKED, true).commit()
+            markerEstablished = markerEstablished || marker
+            cleared = marker && cleared
+        }
+        cleared = eraseBlockedCredentialMaterial(context) && cleared
         return markerEstablished && cleared
     }
 

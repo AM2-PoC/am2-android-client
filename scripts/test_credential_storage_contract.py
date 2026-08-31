@@ -128,6 +128,15 @@ class CredentialStorageContractTest(unittest.TestCase):
             "API 23+ treats a keystore failure as permission to write plaintext",
         )
 
+    def test_blocked_startup_retries_unfinished_credential_erasure(self):
+        store = code((JAVA / "CredentialStore.kt").read_text())
+        state = store[store.index("fun state(context: Context)"):]
+        state = state[:state.index("val target")]
+        self.assertIn(
+            "eraseBlockedCredentialMaterial(context)", state,
+            "a crash after SESSION_BLOCKED leaves old credentials on disk forever",
+        )
+
     def test_unreadable_modern_store_removes_old_password_material(self):
         store = code((JAVA / "CredentialStore.kt").read_text())
         state = store[store.index("fun state(context: Context)"):]
@@ -365,7 +374,13 @@ class DeviceTokenContractTest(unittest.TestCase):
             "logout force-kills the process around credential deletion",
         )
         self.assertIn(
-            "secureUnavailable(candidate)", clear,
+            "eraseBlockedCredentialMaterial(context)", clear,
+            "logout does not run the credential erasure helper after establishing the marker",
+        )
+        erase = store[store.index("fun eraseBlockedCredentialMaterial(context: Context)"):]
+        erase = erase[:erase.index("\n    }")]
+        self.assertIn(
+            "secureUnavailable(candidate)", erase,
             "logout treats an unreadable encrypted credential file as already cleared",
         )
 
