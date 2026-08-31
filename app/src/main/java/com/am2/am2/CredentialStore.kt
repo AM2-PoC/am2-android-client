@@ -103,10 +103,11 @@ object CredentialStore {
         }
         val target = canonical(context)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && secure(target) == null) {
-            // Modern Android has no plaintext credential mode. This also
-            // blocks a fresh install whose keystore failed before an encrypted
-            // preference file could be created.
-            blockSession(context)
+            // Modern Android has no plaintext credential mode. Delete every
+            // readable/plain copy and the unreadable encrypted file while
+            // retaining SESSION_BLOCKED, so old password material does not
+            // merely become dormant on disk.
+            clear(context)
             return StoredCredentialState(null, null, null)
         }
         val source = contexts(context)

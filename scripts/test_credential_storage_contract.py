@@ -128,6 +128,17 @@ class CredentialStorageContractTest(unittest.TestCase):
             "API 23+ treats a keystore failure as permission to write plaintext",
         )
 
+    def test_unreadable_modern_store_removes_old_password_material(self):
+        store = code((JAVA / "CredentialStore.kt").read_text())
+        state = store[store.index("fun state(context: Context)"):]
+        state = state[:state.index("\n    @Synchronized", 10)]
+        modern_failure = state[state.index("secure(target) == null"):]
+        modern_failure = modern_failure[:modern_failure.index("val source")]
+        self.assertIn(
+            "clear(context)", modern_failure,
+            "an unreadable keystore blocks resume but leaves the old password on disk",
+        )
+
 
 
 class DeviceTokenContractTest(unittest.TestCase):

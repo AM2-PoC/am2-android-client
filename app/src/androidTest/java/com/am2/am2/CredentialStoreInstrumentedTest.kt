@@ -85,10 +85,14 @@ class CredentialStoreInstrumentedTest {
         val alias = androidx.security.crypto.MasterKeys.getOrCreate(
             androidx.security.crypto.MasterKeys.AES256_GCM_SPEC,
         )
+        val plain = context.getSharedPreferences(WebSocketManager.PREFS_NAME, Context.MODE_PRIVATE)
+        plain.edit().putString("password", "legacy-secret").commit()
         val keyStore = java.security.KeyStore.getInstance("AndroidKeyStore")
         keyStore.load(null)
         keyStore.deleteEntry(alias)
 
         assertFalse(CredentialStore.state(context).canResume)
+        assertFalse(plain.contains("password"))
+        assertTrue(plain.getBoolean("session_blocked", false))
     }
 }
