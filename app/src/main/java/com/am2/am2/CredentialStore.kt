@@ -98,7 +98,14 @@ object CredentialStore {
     /** Read one complete record, migrate it, and delete every obsolete copy. */
     @Synchronized
     fun state(context: Context): StoredCredentialState {
-        if (contexts(context).any { plain(it).getBoolean(SESSION_BLOCKED, false) }) {
+        if (contexts(context).any { candidate ->
+                try {
+                    plain(candidate).getBoolean(SESSION_BLOCKED, false)
+                } catch (_: Exception) {
+                    true
+                }
+            }
+        ) {
             return StoredCredentialState(null, null, null)
         }
         val target = canonical(context)
@@ -169,9 +176,13 @@ object CredentialStore {
     /** Logout is durable before the caller may terminate the process. */
     @Synchronized
     fun clear(context: Context): Boolean {
+        val candidates = contexts(context)
+        var markerEstablished = false
         var cleared = true
-        contexts(context).forEach { candidate ->
-            cleared = plain(candidate).edit().putBoolean(SESSION_BLOCKED, true).commit() && cleared
+        candidates.forEach { candidate ->
+            val marker = plain(candidate).edit().putBoolean(SESSION_BLOCKED, true).commit()
+            markerEstablished = markerEstablished || marker
+            cleared = marker && cleared
             val encrypted = secure(candidate)
             if (encrypted != null) {
                 cleared = encrypted.edit()
@@ -183,7 +194,7 @@ object CredentialStore {
                 .remove(USER).remove(PASS).remove(TOKEN).commit() && cleared
             cleared = deleteLegacyFile(candidate) && cleared
         }
-        return cleared
+        return markerEstablished && cleared
     }
 
     private class AndroidPersistenceBackend(private val context: Context) :
