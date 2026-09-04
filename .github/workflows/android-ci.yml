@@ -492,6 +492,37 @@ jobs:
           DECLARED=$(printf '%s' "$AM2_APPROVED_SIGNER_SHA256" | tr -d ':' | tr 'A-F' 'a-f')
           test "$DECLARED" = "$SIGNED_BY" \
             || { echo "::error::build trusts $DECLARED but was signed by $SIGNED_BY"; exit 1; }
+
+          # The manifest the field channel serves, built here beside the bytes
+          # it describes.
+          #
+          # Only the staging lane produced one. The production channel was
+          # therefore assembled by hand, and it showed: it was found naming an
+          # update.apk that was not on the shelf, with nothing in the pipeline
+          # able to notice. A manifest written next to the APK it was measured
+          # from cannot disagree with it.
+          #
+          # Same fields and same order as the staging lane, so the two channels
+          # stay one format; only the URL differs, and it is the URL a handset
+          # already installed will ask for.
+          VERSION_CODE=$(sed -n "s/.*versionCode='\([0-9]\+\)'.*/\1/p" release-artifact/apk-badging.txt | head -1)
+          VERSION_NAME=$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" release-artifact/apk-badging.txt | head -1)
+          APK_SHA=$(sha256sum release-artifact/am2-client-production.apk | cut -d' ' -f1)
+          test -n "$VERSION_CODE" || { echo "::error::no versionCode in badging"; exit 1; }
+          test -n "$VERSION_NAME" || { echo "::error::no versionName in badging"; exit 1; }
+          [ "$VERSION_CODE" -gt 3 ] || { echo "::error::versionCode $VERSION_CODE cannot supersede a field unit"; exit 1; }
+          jq -n \
+            --argjson version_code "$VERSION_CODE" \
+            --arg version_name "$VERSION_NAME" \
+            --arg update_url "https://apiapi.am2-poc.com/update/update.apk" \
+            --arg sha256 "$APK_SHA" \
+            --arg signer_sha256 "$SIGNED_BY" \
+            --argjson changelog "$(cat app/release-notes.json)" \
+            '{version_code: $version_code, version_name: $version_name, update_url: $update_url,
+              sha256: $sha256, signer_sha256: $signer_sha256, changelog: $changelog}' \
+            > release-artifact/version.json
+          echo "--- production manifest"
+          cat release-artifact/version.json
           printf 'approved_signer=%s\n' "$DECLARED" >> release-artifact/build-metadata.txt
       - name: Upload release candidate only
         uses: actions/upload-artifact@v4
