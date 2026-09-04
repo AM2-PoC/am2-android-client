@@ -1,4 +1,4 @@
 {
-  "id": "Logout kini selalu kembali ke layar masuk, menghentikan layanan PTT dan membersihkan notifikasi reconnect. Pemeriksaan update juga menampilkan alasan penolakan dan mencoba ulang unduhan yang terputus.",
-  "en": "Logout now always returns to sign-in, stops the PTT service, and removes reconnect notifications. Update checks also name refusal reasons and retry interrupted downloads."
+  "id": "Posisi unit kini diperbarui walau unit sedang diam, jadi peta tidak lagi menandai unit yang berhenti sebagai data usang. Unit yang berpindah juga melapor lebih sering.",
+  "en": "A unit's position is refreshed even while it is standing still, so the map no longer marks a stopped unit as stale. Units on the move report more often too."
 }
