@@ -46,6 +46,7 @@ object WebSocketManager {
      * audio on a radio.
      */
     private const val RECONNECT_FIRST_ATTEMPT_MS = 0L
+
     private const val RECONNECT_BASE_DELAY_MS = 2000L
 
     /*
@@ -99,6 +100,17 @@ object WebSocketManager {
 
     private var lastSentLat: Double = 0.0
     private var lastSentLon: Double = 0.0
+
+    /*
+     * The last fix we were told about, whether or not it was worth sending.
+     *
+     * The heartbeat re-confirms this rather than asking for a new fix, so a
+     * handset sitting still costs one small message and no radio wake.
+     */
+    private var lastKnownLat: Double = 0.0
+    private var lastKnownLon: Double = 0.0
+    private var lastKnownAccuracy: Float = 0f
+
 
     @Volatile private var isConnecting = false
     @Volatile private var reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS
@@ -2075,6 +2087,14 @@ object WebSocketManager {
     ) {
         if (!actualSocketConnected) return
 
+        // Remembered whether or not it is sent, so the heartbeat has something
+        // current to confirm without asking the GPS for another fix.
+        lastKnownLat = lat
+        lastKnownLon = lon
+        lastKnownAccuracy = accuracy
+
+        // The rule itself is in LocationReportPolicy, where it can be tested
+        // without a socket, a service or a handset.
         if (!force && lastSentLat != 0.0 && lastSentLon != 0.0) {
             val results = FloatArray(1)
 
@@ -2086,9 +2106,32 @@ object WebSocketManager {
                 results
             )
 
-            if (results[0] < 100f) return
+            if (!LocationReportPolicy.shouldSend(results[0])) return
         }
 
+        sendLocation(lat, lon, accuracy)
+    }
+
+    /**
+     * Say again where we are, without asking where that is.
+     *
+     * A unit that is not moving sends nothing: Android delivers no fix below
+     * its displacement filter, and the distance gate above drops what little
+     * gets through. Its position stays right and its timestamp goes stale, and
+     * the panel grades by timestamp -- so a parked unit was painted as lost
+     * within five minutes of parking.
+     *
+     * This re-sends the fix already in hand rather than requesting a new one,
+     * so a stationary handset costs one small message and no radio wake. The
+     * period is set by the caller; see PTTService.
+     */
+    fun confirmLocation() {
+        if (!actualSocketConnected) return
+        if (lastKnownLat == 0.0 && lastKnownLon == 0.0) return
+        sendLocation(lastKnownLat, lastKnownLon, lastKnownAccuracy)
+    }
+
+    private fun sendLocation(lat: Double, lon: Double, accuracy: Float) {
         lastSentLat = lat
         lastSentLon = lon
 
