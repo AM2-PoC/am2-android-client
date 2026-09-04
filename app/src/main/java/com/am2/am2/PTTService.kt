@@ -43,6 +43,7 @@ class PTTService : Service() {
 
     private var volumeProvider: VolumeProviderCompat? = null
     private var backgroundLocationListener: Any? = null
+
     private var wasSomeoneElseTalking = false
 
     companion object {
@@ -172,6 +173,29 @@ class PTTService : Service() {
             if (lat != 0.0) {
                 WebSocketManager.updateLocation(lat, lon, acc)
             }
+        }
+        handler.removeCallbacks(locationHeartbeat)
+        handler.postDelayed(locationHeartbeat, LocationReportPolicy.HEARTBEAT_MS)
+    }
+
+    /*
+     * Say where we are even when we have not moved.
+     *
+     * Android delivers no fix below its displacement filter and the manager
+     * drops anything under its distance gate, so a parked unit sent nothing at
+     * all. Live Track grades a unit by how old its position is, which turned
+     * "this unit has stopped" into "we have lost this unit" about five minutes
+     * later. Measured on production: five of six online units were showing
+     * positions between seven and thirty-one minutes old, every one of them in
+     * the right place.
+     *
+     * It re-sends the fix already in hand rather than asking for a new one, so
+     * the cost is one small message and no radio wake.
+     */
+    private val locationHeartbeat = object : Runnable {
+        override fun run() {
+            WebSocketManager.confirmLocation()
+            handler.postDelayed(this, LocationReportPolicy.HEARTBEAT_MS)
         }
     }
 
@@ -533,6 +557,7 @@ class PTTService : Service() {
             SoundManager.release()
             mediaSession?.release()
             LocationHelper.stopLiveLocationUpdates(this, backgroundLocationListener)
+            handler.removeCallbacks(locationHeartbeat)
         } catch (e: Exception) {}
         if (wakeLock?.isHeld == true) try { wakeLock?.release() } catch (e: Exception) {}
         if (screenWakeLock?.isHeld == true) try { screenWakeLock?.release() } catch (e: Exception) {}
