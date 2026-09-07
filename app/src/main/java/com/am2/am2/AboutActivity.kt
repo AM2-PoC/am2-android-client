@@ -56,7 +56,9 @@ class AboutActivity : BaseActivity() {
         } catch (e: Exception) { "1.0.0" }
         binding.tvAppVersion.text = "Versi $currentVersionName"
 
-        binding.tvAboutUserId.text = "Username: ${WebSocketManager.myUserId ?: "-"}"
+        WebSocketManager.myUserIdLiveData.observe(this) { id ->
+            binding.tvAboutUserId.text = "Username: ${id ?: "-"}"
+        }
         
         WebSocketManager.myUserNameLiveData.observe(this) { name ->
             binding.tvAboutUserName.text = "Nama: ${name ?: "-"}"
