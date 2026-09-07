@@ -121,12 +121,27 @@ object WebSocketManager {
 
     private var disconnectDebounceRunnable: Runnable? = null
 
+    // Both halves of the identity publish, because a screen that renders one of
+    // them from a snapshot cannot tell a session that has not arrived yet from
+    // one that has gone. clearSession() nulls these on every disconnect, and in
+    // production this handset reconnects often enough that opening a screen
+    // inside a gap is routine rather than unlucky.
     var myUserId: String? = null
+        set(value) {
+            field = value
+            _myUserIdLiveData.postValue(value)
+        }
     var myUserName: String? = null
         set(value) {
             field = value
             _myUserNameLiveData.postValue(value)
         }
+
+    // Seeded, not empty. An observer on a LiveData that has never held a value
+    // is never called, so a screen opened before the first login would render
+    // no identity line at all rather than the dash that says "not signed in".
+    private val _myUserIdLiveData = MutableLiveData<String?>(null)
+    val myUserIdLiveData: LiveData<String?> = _myUserIdLiveData
 
     private val _myUserNameLiveData = MutableLiveData<String?>()
     val myUserNameLiveData: LiveData<String?> = _myUserNameLiveData
