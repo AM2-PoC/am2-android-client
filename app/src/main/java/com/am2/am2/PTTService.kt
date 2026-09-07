@@ -585,7 +585,19 @@ class PTTService : Service() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
                 startForeground(NOTIFICATION_ID, notification, type)
             } else startForeground(NOTIFICATION_ID, notification)
-        } catch (e: Exception) { try { startForeground(NOTIFICATION_ID, notification) } catch (e2: Exception) {} }
+        } catch (e: Exception) {
+            SafeLog.w(TAG, "the radio could not enter the foreground with its declared types", e)
+            try {
+                startForeground(NOTIFICATION_ID, notification)
+            } catch (e2: Exception) {
+                // Nothing after this point matters: a service started with
+                // startForegroundService that never reaches the foreground is
+                // stopped by the system. Saying so is the whole difference
+                // between a fault that can be found on a handset and one that
+                // can only be guessed at from the outside.
+                SafeLog.e(TAG, "the radio never reached the foreground and will be stopped", e2)
+            }
+        }
 
         when (intent?.action) {
             ACTION_START_PTT -> {
