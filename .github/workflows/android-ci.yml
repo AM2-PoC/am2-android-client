@@ -33,13 +33,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
       - name: Install Android toolchain
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
       - name: Verify source policies
@@ -80,13 +80,13 @@ jobs:
       matrix:
         include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"api":25,"variant":"Dev","package":"com.am2.tik.dev"},{"api":34,"variant":"Dev","package":"com.am2.tik.dev"}]' || (github.event_name == 'schedule' || github.event.inputs.lane == 'nightly') && '[{"api":16,"variant":"Dev","package":"com.am2.tik.dev"},{"api":19,"variant":"Dev","package":"com.am2.tik.dev"},{"api":25,"variant":"Dev","package":"com.am2.tik.dev"},{"api":26,"variant":"Dev","package":"com.am2.tik.dev"},{"api":34,"variant":"Dev","package":"com.am2.tik.dev"}]' || (startsWith(github.ref, 'refs/tags/') || github.event.inputs.lane == 'release') && '[{"api":16,"variant":"Production","package":"com.am2.tik"},{"api":19,"variant":"Production","package":"com.am2.tik"},{"api":25,"variant":"Production","package":"com.am2.tik"},{"api":26,"variant":"Production","package":"com.am2.tik"},{"api":34,"variant":"Production","package":"com.am2.tik"}]' || '[{"api":16,"variant":"Dev","package":"com.am2.tik.dev"},{"api":19,"variant":"Dev","package":"com.am2.tik.dev"},{"api":25,"variant":"Dev","package":"com.am2.tik.dev"},{"api":26,"variant":"Dev","package":"com.am2.tik.dev"},{"api":34,"variant":"Dev","package":"com.am2.tik.dev"}]') }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
       - name: Install Android toolchain
         run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
       - name: Enable KVM
@@ -97,7 +97,7 @@ jobs:
       - name: Build test APKs
         run: ./gradlew --no-daemon ":app:assemble${{ matrix.variant }}Debug" ":app:assemble${{ matrix.variant }}DebugAndroidTest"
       - name: Boot API ${{ matrix.api }} and run compatibility checks
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: ${{ matrix.api }}
           arch: ${{ matrix.api < 21 && 'x86' || 'x86_64' }}
@@ -113,13 +113,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
       - name: Install Android toolchain
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
       # One key across every staging build, so a handset can be updated in
@@ -276,7 +276,7 @@ jobs:
           echo "--- published manifest"
           cat staging-candidate/version.json
       - name: Upload immutable staging handoff
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: am2-client-staging-handoff-${{ github.sha }}-${{ github.run_attempt }}
           path: staging-candidate/
@@ -295,8 +295,8 @@ jobs:
         api: [16, 19, 25, 26, 34]
         package: [com.am2.tik.staging]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: am2-client-staging-handoff-${{ github.sha }}-${{ github.run_attempt }}
           path: staging-candidate
@@ -334,7 +334,7 @@ jobs:
           BADGED_CODE=$(sed -n "s/.*versionCode='\([0-9]\+\)'.*/\1/p" apk-badging.txt | head -1)
           test "$MANIFEST_CODE" = "$BADGED_CODE" \
             || { echo "::error::manifest says $MANIFEST_CODE, APK says $BADGED_CODE"; exit 1; }
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
       - name: Install Android platform tools
         run: sdkmanager "platform-tools"
       - name: Enable KVM
@@ -343,7 +343,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Boot API ${{ matrix.api }} and test the exact staging APK
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: ${{ matrix.api }}
           arch: ${{ matrix.api < 21 && 'x86' || 'x86_64' }}
@@ -359,7 +359,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: am2-client-staging-handoff-${{ github.sha }}-${{ github.run_attempt }}
           path: staging-candidate
@@ -379,7 +379,7 @@ jobs:
           )
           printf 'validated_api=16,19,25,26,34\n' >> staging-artifact/build-metadata.txt
       - name: Upload proven staging candidate
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: am2-client-staging-debug-${{ github.sha }}
           path: staging-artifact/
@@ -405,13 +405,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
       - name: Install Android toolchain
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
       # The upload key. It used to be kept out of CI deliberately, and the lane
@@ -525,7 +525,7 @@ jobs:
           cat release-artifact/version.json
           printf 'approved_signer=%s\n' "$DECLARED" >> release-artifact/build-metadata.txt
       - name: Upload release candidate only
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: am2-client-release-${{ github.sha }}
           path: release-artifact/
