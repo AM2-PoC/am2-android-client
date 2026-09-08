@@ -2,8 +2,9 @@
 
 <!-- Describe the change. -->
 
-## Risk and scope
+## Confidentiality and scope
 
+- [ ] No company-confidential source, customer/personal data, credentials, signing material, or unapproved artifact is exposed
 - Affected packages/flavors/API levels:
 - Explicit non-goals:
 - Signing/update/session/protocol impact: none / describe
