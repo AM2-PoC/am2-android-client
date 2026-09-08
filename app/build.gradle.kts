@@ -378,16 +378,16 @@ dependencies {
      * legacy path names these classes -- see CredentialStore, which branches on
      * the version, and SecureCredentialStore, which holds the imports.
      */
-    implementation("androidx.security:security-crypto:1.0.0")
+    implementation("androidx.security:security-crypto:1.1.0")
 
     // Media library
-    implementation("androidx.media:media:1.6.0")
+    implementation("androidx.media:media:1.8.0")
 
     // OKHTTP 3.12.x is the last version supporting API < 21
-    implementation("com.squareup.okhttp3:okhttp:3.12.13")
+    implementation("com.squareup.okhttp3:okhttp:5.5.0")
 
     // Google Play Services Location - version 18.0.0 is safer for very old devices
-    implementation("com.google.android.gms:play-services-location:18.0.0")
+    implementation("com.google.android.gms:play-services-location:21.4.0")
 
     // OsmDroid for Maps
     implementation(libs.osmdroid.android)
@@ -399,7 +399,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.5.1")
 
     testImplementation(libs.junit)
-    testImplementation("org.json:json:20240303")
+    testImplementation("org.json:json:20260814")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
