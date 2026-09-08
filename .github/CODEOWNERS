@@ -1,0 +1,12 @@
+# Default owners. Sensitive Android delivery boundaries are explicit.
+* @cipheraenys @riskyprsty
+
+/.github/ @cipheraenys @riskyprsty
+/app/ @cipheraenys @riskyprsty
+/gradle/ @cipheraenys @riskyprsty
+/scripts/ @cipheraenys @riskyprsty
+/build.gradle.kts @cipheraenys @riskyprsty
+/settings.gradle.kts @cipheraenys @riskyprsty
+/gradle.properties @cipheraenys @riskyprsty
+/version.properties @cipheraenys @riskyprsty
+/.github/CODEOWNERS @cipheraenys @riskyprsty
