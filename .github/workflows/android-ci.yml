@@ -96,6 +96,12 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: Build test APKs
         run: ./gradlew --no-daemon ":app:assemble${{ matrix.variant }}Debug" ":app:assemble${{ matrix.variant }}DebugAndroidTest"
+      - name: Reclaim build-only toolchains before emulator
+        run: |
+          rm -rf "$ANDROID_HOME/ndk/28.2.13676358" "$ANDROID_HOME/cmake/3.22.1"
+          test ! -e "$ANDROID_HOME/ndk/28.2.13676358"
+          test ! -e "$ANDROID_HOME/cmake/3.22.1"
+          df -h "$ANDROID_HOME"
       - name: Boot API ${{ matrix.api }} and run compatibility checks
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
