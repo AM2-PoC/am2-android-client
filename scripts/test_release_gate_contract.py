@@ -40,6 +40,15 @@ class ReleaseGateContractTest(unittest.TestCase):
         end = body.index("\n    steps:")
         self.header = body[:end]
 
+    def test_emulator_runner_has_an_explicit_stable_boot_contract(self):
+        self.assertEqual(
+            2,
+            self.workflow.count("emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none"),
+            "both DEV and staging compatibility jobs must use the same explicit headless software-rendered boot options",
+        )
+        self.assertEqual(2, self.workflow.count("emulator-boot-timeout: 900"))
+        self.assertEqual(2, self.workflow.count("disable-animations: false"))
+
     def test_no_environment_declaration(self):
         self.assertNotIn(
             "environment:",
