@@ -40,6 +40,16 @@ class ReleaseGateContractTest(unittest.TestCase):
         end = body.index("\n    steps:")
         self.header = body[:end]
 
+    def test_compatibility_job_reclaims_build_only_toolchains_before_emulator(self):
+        compatibility = self.workflow.split("  compatibility:", 1)[1].split("  build-staging-candidate:", 1)[0]
+        cleanup = 'rm -rf "$ANDROID_HOME/ndk/28.2.13676358" "$ANDROID_HOME/cmake/3.22.1"'
+        self.assertIn(cleanup, compatibility)
+        self.assertIn('test ! -e "$ANDROID_HOME/ndk/28.2.13676358"', compatibility)
+        self.assertIn('test ! -e "$ANDROID_HOME/cmake/3.22.1"', compatibility)
+        self.assertIn('df -h "$ANDROID_HOME"', compatibility)
+        self.assertLess(compatibility.index("Build test APKs"), compatibility.index(cleanup))
+        self.assertLess(compatibility.index(cleanup), compatibility.index("Boot API"))
+
     def test_no_environment_declaration(self):
         self.assertNotIn(
             "environment:",
