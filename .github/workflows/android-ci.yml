@@ -102,7 +102,7 @@ jobs:
           api-level: ${{ matrix.api }}
           arch: ${{ matrix.api < 21 && 'x86' || 'x86_64' }}
           target: default
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disk-size: 4096M
           disable-animations: false
           emulator-boot-timeout: 900
           script: sh scripts/run_emulator_compatibility.sh "${{ matrix.package }}"
@@ -349,7 +349,7 @@ jobs:
           api-level: ${{ matrix.api }}
           arch: ${{ matrix.api < 21 && 'x86' || 'x86_64' }}
           target: default
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disk-size: 4096M
           disable-animations: false
           emulator-boot-timeout: 900
           script: sh scripts/run_emulator_compatibility.sh "${{ matrix.package }}" staging-candidate/am2-client-staging-debug.apk staging-candidate/am2-client-staging-debug-androidTest.apk

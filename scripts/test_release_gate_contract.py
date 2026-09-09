@@ -43,8 +43,8 @@ class ReleaseGateContractTest(unittest.TestCase):
     def test_emulator_runner_has_an_explicit_stable_boot_contract(self):
         self.assertEqual(
             2,
-            self.workflow.count("emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none"),
-            "both DEV and staging compatibility jobs must use the same explicit headless software-rendered boot options",
+            self.workflow.count("disk-size: 4096M"),
+            "both emulator jobs must cap userdata below hosted-runner free-space limits",
         )
         self.assertEqual(2, self.workflow.count("emulator-boot-timeout: 900"))
         self.assertEqual(2, self.workflow.count("disable-animations: false"))
