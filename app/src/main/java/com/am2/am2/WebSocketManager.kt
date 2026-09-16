@@ -1843,17 +1843,6 @@ object WebSocketManager {
      * while the common case pays nothing.
      */
     /**
-     * Tell the operator the press was heard and refused.
-     *
-     * Every refusal used to be a bare `return`. Nothing sounded, nothing moved,
-     * and under rapid pressing most presses were refused — so the button did not
-     * feel busy, it felt broken.
-     */
-    private fun onPressRefused() {
-        SoundManager.playRefused()
-    }
-
-    /**
      * The microphone never opened, so this is not a transmission.
      *
      * Every audio source refused -- the shape a Bluetooth route in the wrong

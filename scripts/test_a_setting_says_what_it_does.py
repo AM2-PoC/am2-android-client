@@ -2,8 +2,7 @@
 
 The checkbox in Settings read "Auto Login" and wrote `start_on_boot`, which is
 read in exactly one place -- BootReceiver -- where it decides whether the app
-starts when the handset powers on. It has never had anything to do with signing
-in.
+starts when the handset powers on. It does not control sign-in.
 
 fc645bb already separated the two in code: a stored login is a session whether
 or not the app was asked to start on boot, and WebSocketManager says so at

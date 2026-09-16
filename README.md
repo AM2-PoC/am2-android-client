@@ -1,10 +1,16 @@
 # AM2 Android Client
 
-**Internal repository:** Not intended for public use or external contributions. Repository access and use require authorization by the repository owner.
+Android push-to-talk client (`com.am2.tik`).
 
-AM2 Android push-to-talk client (`com.am2.tik`).
+## Requirements
 
-## Verification
+- JDK 21
+- Android SDK 35
+- Build Tools 35.0.0
+- NDK 28.2.13676358
+- CMake 3.22.1
+
+## Verify
 
 ```bash
 python3 scripts/test_check_log_policy.py
@@ -12,8 +18,4 @@ python3 scripts/check_log_policy.py
 ./gradlew --no-daemon :app:testDevDebugUnitTest :app:assembleDevDebug
 ```
 
-Android builds, dependency resolution, emulators, compatibility matrices, signing, staging, and release publication use isolated developer environments or GitHub-hosted ephemeral CI—not the production VPS. Production release remains a separately approved signer, upgrade, artifact, and physical-device gate.
-
-## Security
-
-This repository does not provide a public vulnerability-reporting channel. Authorized personnel must use the security process assigned to their role. Do not include credentials, signing material, personal data, production data, or exploit details in tickets, logs, or pull requests.
+Compatibility matrices and signed artifact generation run through approved GitHub Actions lanes. Production publication additionally requires signer continuity, install-over verification against the active release, affected physical-device/network acceptance, explicit approval, and rollback evidence. Do not run Android builds or dependency resolution on a runtime host.

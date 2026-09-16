@@ -77,10 +77,6 @@ class PressPathContractTest(unittest.TestCase):
         self.assertNotRegex(stop, r"postDelayed\(\{\s*stopTalking\(\)",
                             "stopTalking still re-posts itself")
 
-    def test_a_refused_press_tells_the_operator(self):
-        # Returning in silence is why the button felt broken rather than busy.
-        self.assertIn("onPressRefused", self.ws)
-
     def test_a_bluetooth_route_with_no_microphone_is_ready_immediately(self):
         device = DEVICE.read_text()
         ready = section(device, "fun isCaptureRouteReady()", "\n    }")

@@ -1,22 +1,23 @@
 ## Summary
 
-<!-- Describe the change. -->
+<!-- What changed and why? -->
 
-## Confidentiality and scope
+## Scope
 
-- [ ] No company-confidential source, customer/personal data, credentials, signing material, or unapproved artifact is exposed
-- Affected packages/flavors/API levels:
-- Explicit non-goals:
-- Signing/update/session/protocol impact: none / describe
+- [ ] No confidential source, credentials, personal/production data, signing material, or unapproved artifact is exposed
+- Affected packages, flavors, and API levels:
+- Compatibility or protocol impact:
+- Signing, update, or session impact:
+- Follow-up work:
 
 ## Verification
 
 - [ ] Focused tests added or updated
 - [ ] Relevant local checks pass
 - [ ] Required CI lanes pass
-- [ ] No APK/AAB, keystore, credentials, build output, or personal IDE/device state added
+- [ ] No APK/AAB, keystore, credentials, build output, personal/production data, or local workspace files added
 
 ## Delivery
 
 - [ ] No artifact publication required
-- [ ] Staging/release/signing/publication requires a separate approved gate
+- [ ] Signing, staging, or publication has separate approval, signer/install-over continuity, affected-device acceptance, and rollback evidence

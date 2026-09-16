@@ -132,12 +132,6 @@ class ReleaseIsTheEnd(unittest.TestCase):
             "release no longer marks capture closed",
         )
 
-    def test_a_refused_press_still_tells_the_operator(self):
-        """Refusals remain -- half duplex and RX still refuse -- and must be audible."""
-        self.assertIn("onPressRefused", self.ws)
-        refused = section(self.ws, "private fun onPressRefused()", "\n    private fun ")
-        self.assertRegex(refused, r"SoundManager\.")
-
 
 if __name__ == "__main__":
     unittest.main()

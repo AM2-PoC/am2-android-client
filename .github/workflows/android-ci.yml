@@ -46,11 +46,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Discovered, not listed. A hand-maintained list goes stale the first
-          # time somebody adds a contract and forgets, and the failure is silent
-          # in the worst direction: a test that never runs looks exactly like a
-          # test that passes. It also made every branch edit the same three
-          # lines, so independent changes collided here and nowhere else.
+          # Discover contract scripts dynamically so new checks cannot be
+          # omitted from CI by a stale file list.
           shopt -s nullglob
           contracts=(scripts/test_*.py)
           if [ ${#contracts[@]} -eq 0 ]; then
@@ -480,9 +477,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release-artifact/am2-client-production.apk > release-artifact/apk-badging.txt
           stat --printf='apk_byte_size=%s\n' release-artifact/am2-client-production.apk > release-artifact/build-metadata.txt
           stat --printf='aab_byte_size=%s\n' release-artifact/am2-client-play.aab >> release-artifact/build-metadata.txt
-          # Signed is now the expected state, so a verification failure has to
-          # stop the lane. It used to be recorded as signed=false and shipped,
-          # which was correct when unsigned was intended and is not any more.
+          # Stop the lane when signature verification fails.
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs \
             release-artifact/am2-client-production.apk > release-artifact/signer-metadata.txt 2>&1
           printf 'signed=true\n' >> release-artifact/signer-metadata.txt
