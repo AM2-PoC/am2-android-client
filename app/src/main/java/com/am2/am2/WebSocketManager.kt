@@ -21,7 +21,6 @@ import okhttp3.WebSocketListener
 import okio.ByteString
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.text.SimpleDateFormat
@@ -285,7 +284,6 @@ object WebSocketManager {
     }
 
     @Volatile private var internalIsTalking = false
-    private var mapListener: OnMessageListener? = null
 
     private val pttHandler = Handler(Looper.getMainLooper())
     private var lastPttStartTime: Long = 0
@@ -310,9 +308,6 @@ object WebSocketManager {
         }
     }
 
-    interface OnMessageListener {
-        fun onMessage(text: String?)
-    }
 
     private fun createWebSocketClient(context: Context): OkHttpClient {
         val builder = OkHttpClient.Builder()
@@ -386,9 +381,6 @@ object WebSocketManager {
         return this.toLongOrNull()?.toInt() ?: this.hashCode()
     }
 
-    fun setMapListener(listener: OnMessageListener?) {
-        mapListener = listener
-    }
 
     private fun resetTalkingState() {
         emitReceiveTraceTransitions(receivePttTraces.clear())
@@ -816,7 +808,6 @@ object WebSocketManager {
         // Logout may invalidate the socket after onMessage's first check but
         // before this callback obtains the auth-state lock.
         if (!isCurrentSocket(generation)) return
-        mapListener?.onMessage(text)
 
         try {
             val payload = JSONObject(text)
@@ -2024,11 +2015,6 @@ object WebSocketManager {
     internal fun videoPressure(): WireAdmission.Pressure =
         WireAdmission.videoPressure(webSocket?.queueSize() ?: 0L)
 
-    /** Video frames refused so far to keep audio ahead of them. */
-    fun droppedVideoFrames(): Long = videoFramesDropped.get()
-
-    /** Audio frames lost while the socket was reconnecting or reauthenticating. */
-    fun droppedReauthFrames(): Long = reauthFramesDropped.get()
 
     fun sendVideoFrame(frameData: ByteArray) {
         if (!actualSocketConnected) return
@@ -2046,21 +2032,6 @@ object WebSocketManager {
         sendBinary(packet)
     }
 
-    fun sendAudioData(data: ByteArray) {
-        if (!actualSocketConnected) return
-
-        val userId = myUserId?.toTruncatedId() ?: 0
-
-        val header = ByteBuffer
-            .allocate(5)
-            .order(ByteOrder.LITTLE_ENDIAN)
-
-        header.put(1.toByte())
-        header.putInt(userId)
-
-        val packet = header.array() + data
-        sendBinary(packet)
-    }
 
     fun joinChannel(slug: String) {
         currentChannelSlug = slug
@@ -2079,9 +2050,6 @@ object WebSocketManager {
         }
     }
 
-    fun reportLocationImmediate() {
-        reportLocation(force = true)
-    }
 
     fun updateLocation(
         lat: Double,
@@ -2337,7 +2305,6 @@ object WebSocketManager {
     private fun clearSession() {
         myUserId = null
         myUserName = null
-        mapListener = null
 
         cancelDisconnectDebounce()
         cancelReconnect()

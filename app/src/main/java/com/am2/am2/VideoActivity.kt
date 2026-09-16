@@ -11,7 +11,6 @@ import android.content.pm.PackageManager
 import android.graphics.*
 import android.hardware.Camera
 import android.media.AudioManager
-import android.os.Build
 import android.os.Bundle
 import android.view.*
 import android.view.animation.AnimationUtils
@@ -260,12 +259,12 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     if (pttToggleEnabled) {
-                        if (!isStreaming) { v.isPressed = true; startPtt() } 
-                        else { v.isPressed = false; stopPtt() }
-                    } else { v.isPressed = true; startPtt() }
+                        if (!isStreaming) { v.isPressed = true; startVideoStream() }
+                        else { v.isPressed = false; stopVideoStream() }
+                    } else { v.isPressed = true; startVideoStream() }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (!pttToggleEnabled) { v.isPressed = false; stopPtt() }
+                    if (!pttToggleEnabled) { v.isPressed = false; stopVideoStream() }
                 }
             }
             true
@@ -273,13 +272,6 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
         binding.btnSwitchCamera.setOnClickListener { switchCamera() }
     }
 
-    private fun startPtt() {
-        startVideoStream()
-    }
-
-    private fun stopPtt() {
-        stopVideoStream()
-    }
 
     private fun switchCamera() {
         if (Camera.getNumberOfCameras() < 2) return

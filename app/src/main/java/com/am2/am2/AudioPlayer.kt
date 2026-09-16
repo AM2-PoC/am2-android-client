@@ -242,14 +242,6 @@ object AudioPlayer {
         }
     }
 
-    fun updateConfig(usage: Int, keepAlive: Boolean) {
-        val useVoiceComm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            usage == AudioAttributes.USAGE_VOICE_COMMUNICATION
-        } else {
-            usage == AudioManager.STREAM_VOICE_CALL
-        }
-        updateAudioRouting(useVoiceComm)
-    }
 
     fun updateAudioRouting(useVoiceComm: Boolean) {
         if (this.useVoiceCommunication != useVoiceComm) {
