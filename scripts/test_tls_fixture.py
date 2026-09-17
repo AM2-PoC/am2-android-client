@@ -78,8 +78,7 @@ class TlsFixtureAcceptLoopTest(unittest.TestCase):
         )
 
     def test_a_stalled_peer_cannot_wedge_the_accept_loop(self):
-        # wrap_socket runs inline in a single-threaded loop, so a client that
-        # connects and then says nothing blocks every later connection forever.
+
         self.assertIn(
             "settimeout",
             self.source,
@@ -89,4 +88,3 @@ class TlsFixtureAcceptLoopTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

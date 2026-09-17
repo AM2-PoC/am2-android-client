@@ -42,9 +42,7 @@ class FrameDeliveryContractTest(unittest.TestCase):
         )
 
     def test_every_sender_resolves_to_a_stable_identity(self):
-        # Same numeric id must always produce the same key: the decoder map and
-        # the speaker set are keyed by it, so an identity that varied per frame
-        # would build a decoder per frame.
+
         self.assertIn("fun senderIdentity(", self.text)
         identity = section(self.text, "fun senderIdentity(", "\n    }")
         self.assertIn("findUserNameById", identity)
@@ -52,14 +50,12 @@ class FrameDeliveryContractTest(unittest.TestCase):
         self.assertNotIn("Random", identity)
 
     def test_the_private_call_check_is_still_an_authorisation_decision(self):
-        # Naming and authorisation were tangled together. Dropping a frame
-        # because it is not from the private-call peer is correct and must stay.
+
         self.assertIn("targetIdInt", self.handler)
         self.assertIn("return", self.handler)
 
     def test_a_frame_from_an_unknown_sender_is_traceable(self):
-        # It used to vanish with no record, which is why this took so long to
-        # find. It has to be visible once, not per frame.
+
         self.assertIn("unknown sender", self.text.lower())
 
 

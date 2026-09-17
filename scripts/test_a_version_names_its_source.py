@@ -44,9 +44,7 @@ class AVersionNamesItsSourceTest(unittest.TestCase):
         )
 
     def test_the_release_number_has_moved_since_the_token_work(self):
-        # Rule 7: new backward compatible functionality is a MINOR. Device
-        # tokens, token expiry, always-persisted sessions and the auth= field
-        # are all that, and 1.1.0 predates every one of them.
+
         major, minor, patch = (int(p) for p in self._declared().split("."))
         self.assertGreater(
             (major, minor), (1, 1),
@@ -62,10 +60,10 @@ class AVersionNamesItsSourceTest(unittest.TestCase):
         )
 
     def test_every_flavour_suffix_is_legal_metadata(self):
-        # A suffix that breaks rule 10 is not a version any tool can parse.
+
         for suffix in re.findall(r'versionNameSuffix = "([^"]*)"', self.gradle):
             body = suffix.split("+", 1)[1] if "+" in suffix else ""
-            # Gradle interpolation stands in for a value; check the shape around it.
+
             skeleton = re.sub(r"\$\{[^}]*\}", "X", body)
             if skeleton:
                 self.assertRegex(
@@ -74,7 +72,7 @@ class AVersionNamesItsSourceTest(unittest.TestCase):
                 )
 
     def test_the_source_identifier_cannot_contain_illegal_characters(self):
-        # A short SHA is hex, but nothing stops a caller passing a branch name.
+
         self.assertRegex(
             self.gradle, r"AM2_SOURCE_SHA[\s\S]{0,400}?(require|matches|Regex|filter)",
             "the source identifier is used unchecked, so a value with a slash "

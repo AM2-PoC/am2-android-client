@@ -54,7 +54,7 @@ class SettingActivity : BaseActivity() {
         checkScreenSizeCapabilities()
         loadSettings()
         setupListeners()
-        // applyScreenSettings() sudah dipanggil oleh BaseActivity
+
     }
 
     private fun initBluetoothAdapter() {
@@ -174,15 +174,6 @@ class SettingActivity : BaseActivity() {
             notifyVoxChanged()
         }
 
-        /*
-         * Sensitivity, not threshold, because that is what the operator is
-         * choosing: further right means VOX keys on a quieter voice. The
-         * recorder wants the amplitude to compare against, so the two are
-         * inverses of each other and the conversion lives here.
-         *
-         * Written when the finger lifts rather than on every pixel, so a drag
-         * across the bar is one preference write and one service intent.
-         */
         binding.sbVoxSensitivity.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {}
             override fun onStartTrackingTouch(bar: SeekBar?) {}
@@ -252,12 +243,6 @@ class SettingActivity : BaseActivity() {
         }
     }
 
-    /**
-     * Tell a running PTTService that something about VOX changed.
-     *
-     * Without this the new value waits for the next service start, and on a
-     * radio that is left switched on that is never.
-     */
     private fun notifyVoxChanged() {
         try {
             val intent = Intent(this, PTTService::class.java).apply {
@@ -415,15 +400,13 @@ class SettingActivity : BaseActivity() {
     private fun getDeviceAddressSafe(device: InputDevice?): String {
         if (device == null) return "00:00:00:00:00:00"
         
-        // Cek apakah ini perangkat Bluetooth dengan mencoba mendapatkan alamatnya
         return try {
             val method = device.javaClass.getMethod("getAddress")
             val addr = method.invoke(device) as? String
             if (!addr.isNullOrEmpty() && addr != "00:00:00:00:00:00") {
                 addr
             } else {
-                // Untuk headset kabel atau tombol internal, kita gunakan MAC default
-                // agar tidak terjebak pada ID dinamis yang bisa berubah.
+
                 "00:00:00:00:00:00"
             }
         } catch (_: Exception) {

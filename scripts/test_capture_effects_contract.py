@@ -30,6 +30,8 @@ import re
 import unittest
 from pathlib import Path
 
+from kotlin_source import executable_text
+
 ROOT = Path(__file__).resolve().parents[1]
 RECORDER = ROOT / "app/src/main/java/com/am2/am2/AudioRecorder.kt"
 
@@ -37,9 +39,7 @@ EFFECTS = ("AutomaticGainControl", "NoiseSuppressor", "AcousticEchoCanceler")
 
 
 def code(text: str) -> str:
-    """Source without comments: this file explains the removal at length."""
-    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
-    return re.sub(r"//[^\n]*", "", text)
+    return executable_text(text)
 
 
 class CaptureEffectsContractTest(unittest.TestCase):
@@ -62,8 +62,7 @@ class CaptureEffectsContractTest(unittest.TestCase):
         )
 
     def test_the_recorder_still_reports_what_vox_measured(self):
-        # The telemetry stays. It is what identified this, and it costs the
-        # capture path nothing.
+
         self.assertRegex(
             self.recorder, r'WebSocketManager\.emit\(\s*"vox_level"',
             "removing the effects also removed the measurement that found them",

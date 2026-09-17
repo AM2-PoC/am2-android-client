@@ -44,7 +44,7 @@ class ReconnectContractTest(unittest.TestCase):
                              "the first reconnect still waits long enough to be heard as a gap")
 
     def test_a_successful_session_resets_to_the_immediate_delay(self):
-        # Resetting to the backoff base is what made the next drop pay it again.
+
         self.assertNotIn("reconnectDelay = 2000L", self.text)
         self.assertIn("reconnectDelay = RECONNECT_FIRST_ATTEMPT_MS", self.text)
 
@@ -62,13 +62,12 @@ class ReconnectContractTest(unittest.TestCase):
 
     def test_jitter_never_turns_into_a_longer_wait_than_the_cap(self):
         jitter = section(self.text, "private fun jitteredDelay(", "\n    }")
-        # A spread that can exceed MAX_RECONNECT_DELAY would quietly extend the
-        # worst case beyond the bound the backoff promises.
+
         self.assertIn("coerceIn", jitter)
 
     def test_an_immediate_attempt_stays_immediate(self):
         jitter = section(self.text, "private fun jitteredDelay(", "\n    }")
-        # Spreading zero would reintroduce the very delay this removes.
+
         self.assertRegex(jitter, r"<=\s*0L|== 0L")
 
 
@@ -101,8 +100,7 @@ class TransportBeforeLoginTest(unittest.TestCase):
         )
 
     def test_every_reconnect_decision_goes_through_the_policy(self):
-        # onFailure used to test isAuthorizedSession inline, so a rule added to
-        # the policy would apply to half the ways a socket can end.
+
         body = re.sub(r"//[^\n]*", "", self.ws)
         for call in re.finditer(r"attemptReconnect\(\)", body):
             before = body[max(0, call.start() - 400):call.start()]
@@ -123,8 +121,7 @@ class TransportBeforeLoginTest(unittest.TestCase):
         )
 
     def test_leaving_the_login_screen_does_not_end_an_authorised_session(self):
-        # wantTransport(false) must not be disconnect(): by the time the screen
-        # goes away the operator may have just signed in.
+
         stop = self.login[self.login.index("wantTransport(false)") - 400:]
         stop = stop[:stop.index("wantTransport(false)") + 200]
         self.assertNotIn(

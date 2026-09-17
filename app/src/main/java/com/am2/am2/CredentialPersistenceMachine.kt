@@ -10,10 +10,6 @@ internal interface CredentialPersistenceBackend {
     fun unblock(): Boolean
 }
 
-/**
- * The marker is the commit record: every interruption before the final step is
- * non-resumable, even when the encrypted record was already written.
- */
 internal fun persistRememberedToken(
     backend: CredentialPersistenceBackend,
     record: StoredCredentialState,

@@ -12,29 +12,9 @@ data class UpdateMetadata(
     val changelog: String
 ) {
     companion object {
-        /**
-         * The one URL this build accepts an update from.
-         *
-         * It was the production URL written as a literal and compiled into
-         * every environment, so a staging build refused its own channel and
-         * would only have taken an APK served from production — the exact
-         * cross-environment hand-off that separate channels exist to prevent.
-         */
+
         val approvedUrl: String get() = BuildConfig.UPDATE_APK_URL
 
-        /**
-         * Scheme and host, which is what "may this APK come from here" means.
-         *
-         * The whole URL used to have to match the compiled literal character
-         * for character. Every handset already installed therefore accepted
-         * exactly one path forever: change it and those units could never be
-         * updated again by anything the operator has. They are not broken and
-         * not reachable, which is the definition of stranded, and it is not a
-         * thing a later release can undo.
-         *
-         * The origin still cannot move. An APK is fetched over https from the
-         * one host this build trusts, and the path is the channel's to choose.
-         */
         private fun origin(url: String): String {
             val end = url.indexOf('/', url.indexOf("//").let { if (it < 0) 0 else it + 2 })
             return (if (end < 0) url else url.substring(0, end)).trim().lowercase()

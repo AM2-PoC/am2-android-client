@@ -3,7 +3,6 @@ package com.am2.am2.logging
 import android.util.Log
 import com.am2.am2.BuildConfig
 
-/** Debug-only sanitized application logging. Direct android.util.Log use is rejected by CI. */
 object SafeLog {
     fun d(tag: String, message: String) {
         if (!BuildConfig.DEBUG) return

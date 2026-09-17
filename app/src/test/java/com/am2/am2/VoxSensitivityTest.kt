@@ -4,15 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * A control that responds while pointing the wrong way is worse than none.
- *
- * Sensitivity and threshold run opposite to each other, and the conversion is
- * integer arithmetic in both directions, so a sign or an operand order that is
- * wrong still returns plausible numbers. Nothing about that shows up in source
- * review, and on a handset it reads as "VOX is just bad in this room" rather
- * than as a bug.
- */
 class VoxSensitivityTest {
 
     @Test
@@ -31,10 +22,7 @@ class VoxSensitivityTest {
 
     @Test
     fun `every position on the bar survives the round trip`() {
-        // Exhaustive, because it is only 101 values and because integer
-        // division is exactly where a mapping like this loses a step: reopen
-        // the settings screen and the slider would sit somewhere other than
-        // where it was left.
+
         for (progress in 0..VoxSensitivity.MAX_PROGRESS) {
             val threshold = VoxSensitivity.thresholdFor(progress)
             assertEquals(
@@ -53,19 +41,14 @@ class VoxSensitivityTest {
 
     @Test
     fun `a stored threshold from outside the range still lands on the bar`() {
-        // Nothing writes these today. A future default, or a hand-edited
-        // preference, must not put the slider past its own ends.
+
         assertEquals(VoxSensitivity.MAX_PROGRESS, VoxSensitivity.progressFor(0))
         assertEquals(0, VoxSensitivity.progressFor(Int.MAX_VALUE))
     }
 
     @Test
     fun `the default sits on the bar within one step of itself`() {
-        // 2200 is not on a step boundary, so it shows as the nearest position
-        // and would be rewritten slightly if the operator touches the slider.
-        // That is quantisation and it does not accumulate -- the bar is always
-        // derived from the stored value, never from the last bar position --
-        // but it should stay within one step.
+
         val shown = VoxSensitivity.progressFor(VoxSensitivity.DEFAULT_THRESHOLD)
         val step = (VoxSensitivity.MAX_THRESHOLD - VoxSensitivity.MIN_THRESHOLD) / VoxSensitivity.MAX_PROGRESS
         val drift = Math.abs(VoxSensitivity.thresholdFor(shown) - VoxSensitivity.DEFAULT_THRESHOLD)
@@ -74,10 +57,7 @@ class VoxSensitivityTest {
 
     @Test
     fun `most of the bar travels toward the sensitivity an operator asks for`() {
-        // The reported fault is "VOX is not sensitive enough". Under a linear
-        // map from 500 to 12000 the default sat at position 85, so eighty-five
-        // steps made VOX deafer and fifteen made it keener -- the control had
-        // almost no travel in the only direction anybody ever moves it.
+
         val default = VoxSensitivity.progressFor(VoxSensitivity.DEFAULT_THRESHOLD)
         assertTrue(
             "the default sits at $default, leaving ${VoxSensitivity.MAX_PROGRESS - default} " +
@@ -88,10 +68,7 @@ class VoxSensitivityTest {
 
     @Test
     fun `the steps are proportional, because loudness is`() {
-        // A linear map spends most of its travel between "shout" and "loud
-        // speech", which is a range nobody speaks in. Doubling a quiet sound
-        // and doubling a loud one are the same perceptual step, so the bar has
-        // to move by ratio, not by difference.
+
         val loudEnd = VoxSensitivity.thresholdFor(0) - VoxSensitivity.thresholdFor(1)
         val quietEnd = VoxSensitivity.thresholdFor(VoxSensitivity.MAX_PROGRESS - 1) -
             VoxSensitivity.thresholdFor(VoxSensitivity.MAX_PROGRESS)
@@ -104,9 +81,7 @@ class VoxSensitivityTest {
 
     @Test
     fun `the floor is where it was, because nothing has measured below it`() {
-        // Moving it is the change that could make VOX key on room noise, and
-        // no amplitude any handset has actually reported has been recorded
-        // anywhere. The curve is fixed here; the floor waits for numbers.
+
         assertEquals(500, VoxSensitivity.MIN_THRESHOLD)
     }
 }

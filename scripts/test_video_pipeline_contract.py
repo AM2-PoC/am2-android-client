@@ -26,18 +26,13 @@ class VideoPipelineContractTest(unittest.TestCase):
         self.frame = section(self.text, "override fun onPreviewFrame(", "override fun onKeyDown(")
 
     def test_the_receive_side_sheds_like_the_send_side(self):
-        # The unbounded-queue-behind-a-fixed-rate-producer defect, which was
-        # fixed on the send path, was still present here: every arriving frame
-        # was submitted to a single-thread executor that never shed, so display
-        # drifted further behind live and never recovered.
+
         observer = section(self.text, "WebSocketManager.incomingVideoFrame.observe", "WebSocketManager.ptpTargetId.observe")
         self.assertIn("decoding.compareAndSet(false, true)", observer)
         self.assertRegex(observer, r"finally\s*\{[^}]*decoding\.set\(false\)")
 
     def test_video_yields_the_wire_to_audio(self):
-        # Audio and video share one socket drained in order, so a video frame
-        # accepted ahead of speech delays it. Capture must not even encode a
-        # frame the wire has no room for.
+
         self.assertIn("WebSocketManager.videoPressure()", self.frame)
         self.assertIn("Pressure.BLOCKED", self.frame)
 
@@ -46,7 +41,7 @@ class VideoPipelineContractTest(unittest.TestCase):
         self.assertIn("Pressure.HEAVY", self.frame)
 
     def test_a_frame_is_captured_only_when_the_encoder_is_free(self):
-        # Backpressure, not a schedule: queue depth can never exceed one.
+
         self.assertIn("compareAndSet(false, true)", self.frame)
         self.assertIn("AtomicBoolean", self.text)
 
@@ -55,26 +50,24 @@ class VideoPipelineContractTest(unittest.TestCase):
         self.assertNotIn("lastFrameTime", self.text)
 
     def test_the_gate_is_always_released(self):
-        # A frame that throws must not wedge the pipeline shut forever.
+
         self.assertRegex(self.frame, r"finally\s*\{[^}]*encoding\.set\(false\)")
 
     def test_each_frame_is_encoded_exactly_once(self):
         self.assertIn("compressToJpeg", self.frame)
-        # The decode-and-re-encode round trip is what made a frame cost more
-        # than its own interval.
+
         self.assertNotIn("BitmapFactory.decodeByteArray", self.frame)
         self.assertNotIn("CompressFormat.WEBP", self.text)
         self.assertNotIn("Bitmap.createBitmap", self.frame)
 
     def test_rotation_happens_on_the_yuv_bytes(self):
-        # Extracted so the index arithmetic can be tested directly; a wrong
-        # index corrupts every frame and is invisible in review.
+
         self.assertIn("Nv21Transform.rotate(", self.frame)
         self.assertNotIn("Matrix()", self.frame)
         self.assertTrue((ROOT / "app/src/test/java/com/am2/am2/Nv21TransformTest.kt").is_file())
 
     def test_camera_geometry_is_not_read_per_frame(self):
-        # camera.parameters is a native round trip and races releaseCamera().
+
         self.assertNotIn("camera?.parameters", self.frame)
         self.assertNotIn("camera.parameters", self.frame)
         self.assertIn("previewWidth", self.text)

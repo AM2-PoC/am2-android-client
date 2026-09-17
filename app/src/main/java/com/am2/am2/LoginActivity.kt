@@ -1,7 +1,5 @@
 package com.am2.am2
 
-import com.am2.am2.logging.SafeLog
-
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -21,7 +19,6 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.am2.am2.databinding.ActivityLoginBinding
-import java.io.File
 
 class LoginActivity : BaseActivity() {
 
@@ -42,7 +39,6 @@ class LoginActivity : BaseActivity() {
                 Manifest.permission.ACCESS_NETWORK_STATE
             )
             
-            // Tambahkan izin storage untuk penyimpanan permanen (khusus Android 9 ke bawah)
             if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
                 permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
@@ -67,14 +63,12 @@ class LoginActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Gunakan Device Protected Storage agar data bisa dibaca saat Boot (sebelum Unlock PIN/Pola)
         safeContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             applicationContext.createDeviceProtectedStorageContext()
         } else {
             applicationContext
         }
 
-        // Inisialisasi WebSocketManager dengan safeContext agar auto-login saat boot lancar
         WebSocketManager.init(safeContext)
 
         if (WebSocketManager.myUserName != null) {
@@ -177,12 +171,6 @@ class LoginActivity : BaseActivity() {
             .show()
     }
 
-    /*
-     * This screen needs the relay reachable before anybody has signed in, and
-     * reconnecting used to be gated on having a session. The first drop -- the
-     * phone sleeping is enough -- left it reporting "Server Offline" against a
-     * relay that was up, until a login called connect() directly.
-     */
     override fun onStart() {
         super.onStart()
         WebSocketManager.wantTransport(true)
@@ -266,9 +254,7 @@ class LoginActivity : BaseActivity() {
             when (event) {
                 is WebSocketManager.LoginEvent.Success -> {
                     runOnUiThread {
-                        // WebSocketManager owns the persisted session. This
-                        // event also fires for automatic token reconnects, when
-                        // there was no interactive request to evaluate.
+
                         startMainActivity()
                         WebSocketManager.clearLoginEvent()
                     }
@@ -288,13 +274,7 @@ class LoginActivity : BaseActivity() {
     }
 
     private fun sendLoginRequest(identity: String, pass: String) {
-        /*
-         * No choice is offered any more. A radio assigned to a unit stays
-         * signed in until somebody signs it out or an admin revokes it, which
-         * is what every purpose-built field device does. The control that used
-         * to sit here did more than decline to save: an unticked sign-in ran
-         * CredentialStore.clear() and threw away a token that was working.
-         */
+
         sharedPreferences.edit().putString(LAST_USERNAME, identity).apply()
         WebSocketManager.login(identity, pass)
     }

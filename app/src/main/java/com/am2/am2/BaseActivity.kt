@@ -48,7 +48,7 @@ open class BaseActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Harus diset SEBELUM super.onCreate
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
             window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
@@ -66,18 +66,18 @@ open class BaseActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         applyScreenSettings()
-        // Refresh warna saat kembali aktif
+
         applyStatusBarColorByStatus(WebSocketManager.talkingStatus.value ?: "IDLE")
     }
 
     private fun applyStatusBarColorByStatus(status: String) {
         val s = status.lowercase()
         val colorRes = when {
-            // TX: You are Speaking
+
             s.contains("you are speaking") || s.contains("private to") -> android.R.color.holo_red_dark
-            // RX: Someone is Speaking
+
             s.contains("is speaking") || s.contains("are speaking") || s.contains("private from") -> android.R.color.holo_green_dark
-            // IDLE / Default
+
             else -> android.R.color.black
         }
         updateStatusBarColor(colorRes)
@@ -89,7 +89,6 @@ open class BaseActivity : AppCompatActivity() {
                 try {
                     window.statusBarColor = ContextCompat.getColor(this, colorRes)
                     
-                    // Pastikan teks ikon status bar tetap putih (Bukan Light Mode)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         val decorView = window.decorView
                         var flags = decorView.systemUiVisibility

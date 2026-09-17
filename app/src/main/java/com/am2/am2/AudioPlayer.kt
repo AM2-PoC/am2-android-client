@@ -18,11 +18,11 @@ object AudioPlayer {
     private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
     private val MIN_BUFFER_SIZE = AudioTrack.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
     private const val FRAME_BYTES = 640
-    /* Long enough for the mixer to leave its loop at a frame boundary. */
+
     private const val MIXER_DRAIN_TIMEOUT_MS = 200L
-    /** Write-to-head-position reporting lag, not the length of a transmission. */
+
     private const val PLAYBACK_REPORT_GRACE_MS = 150L
-    /* One frame, so a wait costs exactly what a frame is worth. */
+
     private const val FRAME_MS = 20L
     private val setupPending = java.util.concurrent.atomic.AtomicBoolean(false)
     private val setupExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
@@ -46,19 +46,11 @@ object AudioPlayer {
     private const val SILENCE_TIMEOUT_MS = 1500L
     private val silentBuffer = ShortArray(320)
 
-    /*
-     * One frame is 20 ms, so every frame held anywhere on this path is 20 ms the
-     * listener waits. Prefill starts at the smallest amount that survives normal
-     * mobile jitter and only grows while a network keeps underrunning, then
-     * decays back so the delay is given up again once conditions improve.
-     */
     private const val MIN_PREFILL_FRAMES = 3
     private const val MAX_PREFILL_FRAMES = 10
-    /* A gap this long is a talk spurt that ended, not jitter. Only then is it
-     * right to prefill again; shorter gaps are covered by silence. */
+
     private const val END_OF_SPURT_FRAMES = 15
-    /* Backlog above this is delay that will never be heard as anything but
-     * lateness, so the oldest frames are shed to recover it. */
+
     private const val HIGH_WATER_FRAMES = 15
     private const val PREFILL_DECAY_FRAMES = 250
     
@@ -74,22 +66,8 @@ object AudioPlayer {
         
         val head = try { track.playbackHeadPosition.toLong() and 0xFFFFFFFFL } catch (e: Exception) { 0L }
         
-        // Cek apakah hardware masih memproses data
         val isHardwarePlaying = totalFramesWritten > head
         
-        /*
-         * Only the reporting lag, not the transmission.
-         *
-         * The line above is the precise answer: the hardware's own account of
-         * what it still has to render. This covers the short window where a
-         * write has landed but the head position has not caught up yet, so the
-         * indicator does not flicker to idle mid-speech.
-         *
-         * It was a flat second, which is not lag -- it is long enough to
-         * outlast the tail entirely, so the receiving handset kept showing the
-         * sender as talking well after the audio had finished and the relay had
-         * already broadcast an empty speaker list.
-         */
         val isWithinGracePeriod =
             (System.currentTimeMillis() - lastDataWriteTime) < PLAYBACK_REPORT_GRACE_MS
         
@@ -172,8 +150,7 @@ object AudioPlayer {
         @Synchronized
         fun enqueue(data: ByteArray) {
             val sequence = ++nextSequence
-            // Shed the oldest frames rather than the newest: the stale ones are
-            // what the listener would hear as lateness.
+
             while (queue.size > HIGH_WATER_FRAMES) queue.poll()
             queue.offer(ReceivedFrame(data, sequence))
             if (PttTrace.shouldSampleFrame(sequence)) {
@@ -198,9 +175,7 @@ object AudioPlayer {
 
             val frame = queue.poll()
             if (frame == null) {
-                // A gap is normal. The mixer covers it with silence and the
-                // stream resumes on the next frame; only a gap long enough to be
-                // the end of the spurt earns a fresh prefill.
+
                 consecutiveUnderruns++
                 framesSinceUnderrun = 0
                 if (consecutiveUnderruns == 1 && targetPrefill < MAX_PREFILL_FRAMES) {
@@ -211,7 +186,7 @@ object AudioPlayer {
             }
 
             consecutiveUnderruns = 0
-            // Give the added prefill back once the network has behaved for a while.
+
             if (++framesSinceUnderrun >= PREFILL_DECAY_FRAMES) {
                 framesSinceUnderrun = 0
                 if (targetPrefill > MIN_PREFILL_FRAMES) targetPrefill--
@@ -242,14 +217,6 @@ object AudioPlayer {
         }
     }
 
-    fun updateConfig(usage: Int, keepAlive: Boolean) {
-        val useVoiceComm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            usage == AudioAttributes.USAGE_VOICE_COMMUNICATION
-        } else {
-            usage == AudioManager.STREAM_VOICE_CALL
-        }
-        updateAudioRouting(useVoiceComm)
-    }
 
     fun updateAudioRouting(useVoiceComm: Boolean) {
         if (this.useVoiceCommunication != useVoiceComm) {
@@ -359,13 +326,7 @@ object AudioPlayer {
                         // or the network thread blocks on playback.
                         val track = synchronized(this) { audioTrack }
                         if (track == null || track.state != AudioTrack.STATE_INITIALIZED) {
-                            /*
-                             * No track to write to yet. Without this the loop
-                             * re-enters at once, decodes every handler again and
-                             * throws the PCM away — draining at CPU speed the
-                             * jitter buffer it had just filled, and burning a
-                             * core while doing it.
-                             */
+
                             requestAudioTrack()
                             Thread.sleep(FRAME_MS)
                         } else {
@@ -433,18 +394,6 @@ object AudioPlayer {
         requestAudioTrack()
     }
 
-    /*
-     * Ask for a track; do not build one here.
-     *
-     * playAudio runs on the OkHttp reader thread. Building an AudioTrack takes
-     * 10-50 ms and used to happen inline under this object's monitor, during
-     * which nothing was read from the socket at all — not this stream's audio,
-     * not anyone else's, and not video. The stall showed up as everything
-     * pausing together, which reads like the network rather than like us.
-     *
-     * The mixer tolerates a missing track by waiting, so handing the work to a
-     * dedicated thread costs nothing and keeps the reader free.
-     */
     private fun requestAudioTrack() {
         val track = synchronized(this) { audioTrack }
         if (track != null && track.state == AudioTrack.STATE_INITIALIZED) return

@@ -1,20 +1,19 @@
-# Internal contribution workflow
+# Contributing
 
-This repository is not intended for public contributions. Access and contribution require authorization by the repository owner.
+Repository access and contributions require authorization. Do not change visibility, grant access, weaken repository controls, or distribute source or release artifacts outside approved channels.
 
 ## Workflow
 
-1. Work only in the access scope approved for your role.
-2. Create a short-lived `feat/`, `fix/`, `docs/`, `test/`, `refactor/`, `ci/`, or `chore/` branch from current `main`.
-3. Keep one coherent change per pull request and use Conventional Commits.
-4. Add or update the smallest test that proves the behavior.
-5. Obtain the required review and all required checks before merge.
-6. Do not push directly to `main`, grant access, alter repository visibility, weaken security controls, or share source/artifacts outside approved channels.
-7. Never commit APK/AAB files, keystores, credentials, personal data, customer data, `local.properties`, generated build output, or local editor/AI state.
+1. Branch from current `main` using `feat/`, `fix/`, `docs/`, `test/`, `refactor/`, `ci/`, or `chore/`.
+2. Keep each pull request focused on one change.
+3. Use Conventional Commits.
+4. Add the smallest regression test that proves changed behavior.
+5. Update documentation when a contract or release procedure changes.
+6. Merge only after review and required checks pass.
 
-Android builds, dependency resolution, emulators, compatibility matrices, signing, staging, and release publication run only on isolated developer systems or GitHub-hosted ephemeral CI—not the production VPS.
+Do not push directly to `main`. Production publication requires signer continuity, install-over verification against the active release, affected physical-device acceptance, explicit approval, and rollback evidence.
 
-## Verification
+## Local checks
 
 ```bash
 python3 scripts/check_log_policy.py
@@ -22,8 +21,10 @@ python3 scripts/check_log_policy.py
 git diff --check
 ```
 
-Do not run a full compatibility matrix for documentation-only changes. Release, staging, signing, publication, and production actions remain separate approved gates.
+Use the affected CI lane for compatibility or release-sensitive changes. Documentation-only changes do not require the full emulator matrix.
 
-## Security reports
+## Repository hygiene
 
-Use the approved internal security-reporting channel. Do not place undisclosed vulnerability details, credentials, signing material, personal data, customer data, or destructive proof-of-concept payloads in issues, pull requests, logs, or fixtures.
+Do not commit APK/AAB files, keystores, credentials, personal or production data, `local.properties`, generated build output, local IDE state, or assistant workspaces. Keep comments focused on current contracts and non-obvious compatibility constraints.
+
+Report vulnerabilities through the team's security channel; do not place undisclosed details in issues or pull requests.

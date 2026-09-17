@@ -96,7 +96,6 @@ class PTTService : Service() {
         val isNowSomeoneTalking = speakers.isNotEmpty()
         val isMeTalking = WebSocketManager.isTalkingNow()
         
-        // Hanya bunyikan nada RX jika rekan mulai bicara DAN kita tidak sedang TX
         if (isNowSomeoneTalking && !wasSomeoneElseTalking && !isMeTalking) {
             SoundManager.playRxStart()
         } else if (!isNowSomeoneTalking && wasSomeoneElseTalking) {
@@ -158,10 +157,9 @@ class PTTService : Service() {
         if ((voxEnabled || gatewayMode) && WebSocketManager.isConnected()) {
             AudioRecorder.startRecording()
         } else if (!voxEnabled && !gatewayMode) {
-            // Hentikan rekaman secara paksa jika VOX dan Gateway dimatikan
+
             AudioRecorder.stopRecording(true)
             
-            // Jika sedang TX (berbicara) saat VOX/Gateway dimatikan, paksa berhenti bicara
             if (WebSocketManager.isTalkingNow()) {
                 performStopTalking()
             }
@@ -178,20 +176,6 @@ class PTTService : Service() {
         handler.postDelayed(locationHeartbeat, LocationReportPolicy.HEARTBEAT_MS)
     }
 
-    /*
-     * Say where we are even when we have not moved.
-     *
-     * Android delivers no fix below its displacement filter and the manager
-     * drops anything under its distance gate, so a parked unit sent nothing at
-     * all. Live Track grades a unit by how old its position is, which turned
-     * "this unit has stopped" into "we have lost this unit" about five minutes
-     * later. Measured on production: five of six online units were showing
-     * positions between seven and thirty-one minutes old, every one of them in
-     * the right place.
-     *
-     * It re-sends the fix already in hand rather than asking for a new one, so
-     * the cost is one small message and no radio wake.
-     */
     private val locationHeartbeat = object : Runnable {
         override fun run() {
             WebSocketManager.confirmLocation()
@@ -204,8 +188,7 @@ class PTTService : Service() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             putExtra("FORCE_LOGOUT", true)
         }
-        // Navigate while this is still a foreground service. Dropping foreground
-        // privilege first can make a background activity launch disappear.
+
         startActivity(intent)
         stopForeground(true)
         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(NOTIFICATION_ID)
@@ -347,7 +330,6 @@ class PTTService : Service() {
                         val savedKey = prefs.getInt("ptt_key", -1)
                         val pttSource = prefs.getString("ptt_source", "") ?: ""
                         
-                        // Perbaikan: Macaddress hanya divalidasi jika sumbernya adalah PTT BLE
                         val isBleSource = pttSource.contains("BLE", ignoreCase = true)
                         val isCorrectDevice = if (isBleSource) {
                             val savedMac = prefs.getString("ptt_mac", "00:00:00:00:00:00")
@@ -457,13 +439,7 @@ class PTTService : Service() {
         val isPtpActive = WebSocketManager.ptpTargetId.value != null
 
         if (voxEnabled && !fromVox && !isPtpActive) {
-            /*
-             * VOX owns the transmit decision, so the press is refused -- but
-             * say so. The on-screen button is dimmed and explains itself; a
-             * Bluetooth or wired PTT button arrives here with no affordance at
-             * all and used to get nothing back, which is indistinguishable
-             * from a button that has stopped working.
-             */
+
             SoundManager.playRefused()
             return
         }
@@ -480,14 +456,7 @@ class PTTService : Service() {
     }
 
     private fun performStopTalking() {
-        /*
-         * Disarm the volume-key timer.
-         *
-         * Volume-key PTT has no release event, so a timer ends the
-         * transmission. It was never cancelled when a stop arrived by any other
-         * route, so it stayed armed and fired later — ending the NEXT
-         * transmission, at a moment nothing on screen explained.
-         */
+
         handler.removeCallbacksAndMessages("VOL_PTT_END")
         WebSocketManager.stopTalking()
     }
@@ -561,8 +530,7 @@ class PTTService : Service() {
         } catch (e: Exception) {}
         if (wakeLock?.isHeld == true) try { wakeLock?.release() } catch (e: Exception) {}
         if (screenWakeLock?.isHeld == true) try { screenWakeLock?.release() } catch (e: Exception) {}
-        // Logout already disconnected and the Login screen may now own a new
-        // pre-auth transport. A late service teardown must not close that socket.
+
         if (WebSocketManager.hasAuthorizedSession()) {
             WebSocketManager.disconnect()
         }
@@ -590,11 +558,7 @@ class PTTService : Service() {
             try {
                 startForeground(NOTIFICATION_ID, notification)
             } catch (e2: Exception) {
-                // Nothing after this point matters: a service started with
-                // startForegroundService that never reaches the foreground is
-                // stopped by the system. Saying so is the whole difference
-                // between a fault that can be found on a handset and one that
-                // can only be guessed at from the outside.
+
                 SafeLog.e(TAG, "the radio never reached the foreground and will be stopped", e2)
             }
         }

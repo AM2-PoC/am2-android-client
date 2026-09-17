@@ -95,7 +95,6 @@ object CredentialStore {
         return StoredCredentialState(null, null, null)
     }
 
-    /** Read one complete record, migrate it, and delete every obsolete copy. */
     @Synchronized
     fun state(context: Context): StoredCredentialState {
         if (contexts(context).any { candidate ->
@@ -196,7 +195,6 @@ object CredentialStore {
         return cleared
     }
 
-    /** Logout is durable before the caller may terminate the process. */
     @Synchronized
     fun clear(context: Context): Boolean {
         val candidates = contexts(context)

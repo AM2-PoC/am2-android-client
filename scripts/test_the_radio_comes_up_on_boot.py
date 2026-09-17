@@ -51,8 +51,7 @@ class TheRadioComesUpOnBootTest(unittest.TestCase):
         )
 
     def test_boot_starts_the_service_that_holds_the_radio(self):
-        # The call, with its bracket, and the service it is given. Matching the
-        # name alone let `startForegroundServiceX(` satisfy this.
+
         self.assertRegex(
             self.receiver,
             r"ContextCompat\.startForegroundService\([\s\S]{0,200}?PTTService::class\.java",
@@ -77,16 +76,7 @@ class TheRadioComesUpOnBootTest(unittest.TestCase):
         self.assertIn("android.intent.action.BOOT_COMPLETED", self.manifest)
 
     def test_a_failed_foreground_start_is_not_swallowed(self):
-        # The receiver already learned this lesson -- it logs when the start is
-        # refused, because the previous fault hid for months behind a silence.
-        # The service then discarded the same class of failure with an empty
-        # catch, so a handset that came up and immediately died looked exactly
-        # like a handset where the receiver never fired. Those need different
-        # fixes, and nothing on the device could tell them apart.
-        # Scoped to the foreground start rather than the whole file. PTTService
-        # discards exceptions in several other places, each with its own reason
-        # to be judged separately; widening this assertion would force six
-        # unrelated decisions into the change that fixes boot.
+
         start = self.service.find("startForeground(")
         self.assertNotEqual(start, -1, "the service no longer starts in the foreground")
         region = self.service[start:start + 600]
@@ -103,8 +93,7 @@ class TheRadioComesUpOnBootTest(unittest.TestCase):
         )
 
     def test_the_service_refuses_to_run_without_a_session(self):
-        # Always-persisted sessions mean this is normally true; when it is not,
-        # a service holding a notification and no session is worse than nothing.
+
         self.assertRegex(
             self.service,
             r"hasAuthorizedSession\(\)[\s\S]{0,400}?START_NOT_STICKY",

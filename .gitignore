@@ -1,30 +1,24 @@
+# Local build and IDE state
+.gradle/
+.idea/
 *.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
 local.properties
-
+.DS_Store
+build/
+**/build/
+captures/
+.externalNativeBuild/
+.cxx/
 __pycache__/
 *.py[cod]
 
-# Signing material. The release key never lives here; these patterns exist so
-# an accidental copy cannot be committed.
+# Local automation workspaces
+.codex/
+.claude/
+.superpowers/
+.hermes/
+
+# Signing material
 *.jks
 *.keystore
 keystore.properties
-
-# Personal Android Studio state; shared project configuration stays tracked.
-/.idea/appInsightsSettings.xml
-/.idea/deviceManager.xml
-/.idea/deploymentTargetSelector.xml
-/.idea/runConfigurations.xml

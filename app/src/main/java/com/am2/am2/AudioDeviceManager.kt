@@ -52,27 +52,10 @@ class AudioDeviceManager(private val context: Context) {
         var isScoConnected = false
             private set
 
-        /** A Bluetooth device that offers a microphone, not just a speaker. */
         @Volatile
         var isBluetoothScoCapable = false
             private set
 
-        /*
-         * Whether capture may open now.
-         *
-         * Only Bluetooth has an asynchronous route handshake: startBluetoothSco()
-         * requests the link and the system reports CONNECTED later. Wired, USB and
-         * the built-in microphone are usable as soon as they are selected.
-         */
-        /*
-         * Only a headset that can carry a microphone is worth waiting for.
-         *
-         * A2DP is an output profile: a Bluetooth speaker has no microphone, so
-         * capture will use the built-in one and there is no link to wait for.
-         * Treating any Bluetooth device as SCO-capable made every press on such
-         * a device pay the full fallback, every time, for a handshake that was
-         * never going to happen.
-         */
         fun isCaptureRouteReady(): Boolean = !isBluetoothScoCapable || isScoConnected
 
         fun getCurrentStreamType(audioManager: AudioManager): Int {
@@ -125,11 +108,7 @@ class AudioDeviceManager(private val context: Context) {
                 Intent.ACTION_HEADSET_PLUG -> updateDeviceStatus()
                 BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED -> updateDeviceStatus()
                 AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED -> {
-                    // startBluetoothSco() only requests the link; this broadcast
-                    // reports when it is actually carrying audio. Capture must
-                    // wait for CONNECTED, because AudioRecord binds its input
-                    // route on construction and will not move onto a link that
-                    // connects afterwards.
+
                     val state = intent.getIntExtra(
                         AudioManager.EXTRA_SCO_AUDIO_STATE,
                         AudioManager.SCO_AUDIO_STATE_ERROR,
@@ -167,16 +146,13 @@ class AudioDeviceManager(private val context: Context) {
         if (this.isCommActive != active) {
             this.isCommActive = active
             
-            // Batalkan penundaan penutupan mode jika ada aktivitas baru
             mainHandler.removeCallbacksAndMessages("STOP_COMM_MODE")
 
             if (active) {
                 requestAudioFocus()
                 updateDeviceStatus()
             } else {
-                // HANG TIME: Memberikan jeda 1.5 detik sebelum menutup SCO/jalur audio.
-                // Ini sangat penting agar nada STOP (Roger Beep) sempat terdengar di headset
-                // sebelum koneksinya diputus oleh sistem.
+
                 mainHandler.postAtTime({
                     if (!isCommActive) {
                         abandonAudioFocus()
@@ -333,20 +309,14 @@ class AudioDeviceManager(private val context: Context) {
     fun updateDeviceStatus() {
         val deviceStatus = getHardwareDeviceStatus()
         isBluetoothConnected = deviceStatus.hasBluetooth
-        /*
-         * Whether anything connected can actually carry a microphone. The
-         * headset profile is the authority: a device in the output list may be
-         * A2DP only, which is a speaker and has no input to wait for.
-         */
+
         isBluetoothScoCapable = deviceStatus.hasBluetooth && try {
             bluetoothHeadset?.connectedDevices?.isNotEmpty() == true
         } catch (e: SecurityException) {
-            // Without the runtime permission the proxy cannot be asked. Assume
-            // a microphone exists so a real headset is still waited for.
+
             true
         }
-        // A link that is gone cannot still be carrying audio; leaving this set
-        // would report a ready route for a headset that has been switched off.
+
         if (!deviceStatus.hasBluetooth) isScoConnected = false
 
         val currentDevice = when {
@@ -356,22 +326,11 @@ class AudioDeviceManager(private val context: Context) {
             else -> "Built-in Speaker"
         }
 
-        // KeepAlive hanya untuk Bluetooth
         toggleKeepAlive(deviceStatus.hasBluetooth)
 
         val useVoiceComm = deviceStatus.hasBluetooth || deviceStatus.hasWired || deviceStatus.hasUsb
 
         AudioPlayer.updateAudioRouting(useVoiceComm)
-        /*
-         * Capture no longer takes its source from this answer.
-         *
-         * Where the audio comes *out* and which source should record it are
-         * different questions, and sharing one boolean got the second one
-         * backwards: a headset -- no acoustic path back to the microphone --
-         * was given VOICE_COMMUNICATION and its echo canceller, while the
-         * built-in loudspeaker, the only route that has such a path, was given
-         * raw MIC. AudioRecorder now always prefers VOICE_COMMUNICATION.
-         */
 
         listener?.onDeviceChanged(currentDevice)
     }

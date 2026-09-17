@@ -121,7 +121,6 @@ class GroupActivity : BaseActivity() {
             
             val isCurrent = (slug == WebSocketManager.currentChannelSlug)
             
-            // Indikator visual untuk channel yang aktif saat ini
             if (isCurrent) {
                 holder.imgIcon.setColorFilter(Color.parseColor("#FF9800"))
                 holder.tvName.setTextColor(Color.parseColor("#FF9800"))

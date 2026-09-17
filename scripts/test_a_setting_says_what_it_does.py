@@ -2,8 +2,7 @@
 
 The checkbox in Settings read "Auto Login" and wrote `start_on_boot`, which is
 read in exactly one place -- BootReceiver -- where it decides whether the app
-starts when the handset powers on. It has never had anything to do with signing
-in.
+starts when the handset powers on. It does not control sign-in.
 
 fc645bb already separated the two in code: a stored login is a session whether
 or not the app was asked to start on boot, and WebSocketManager says so at
@@ -57,24 +56,21 @@ class ASettingSaysWhatItDoesTest(unittest.TestCase):
         return label
 
     def test_it_says_what_it_actually_changes(self):
-        # Against the label, resolved through strings.xml. Matching the control
-        # block let the id satisfy this: cbStartOnBoot contains "Boot", so a
-        # label reading "Sesuatu" passed.
+
         self.assertRegex(
             self._label("cbStartOnBoot"), r"(?i)(boot|menyala|dinyalakan|startup)",
             "the label does not say that it is about the handset starting up",
         )
 
     def test_nothing_else_on_the_screen_claims_to_control_signing_in(self):
-        # The session is always kept now; a screen offering to change that
-        # would be describing a choice that no longer exists.
+
         self.assertNotRegex(
             self.layout, r"(?i)auto.?login",
             "the settings screen still offers something called auto login",
         )
 
     def test_the_preference_key_is_untouched(self):
-        # Renaming the label must not rename what BootReceiver reads.
+
         self.assertIn(
             '"start_on_boot"', self.settings,
             "the boot preference key changed, which would silently reset every "
