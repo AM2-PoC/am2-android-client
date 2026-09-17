@@ -4,15 +4,15 @@ import re
 import unittest
 from pathlib import Path
 
+from kotlin_source import executable_text
+
 ROOT = Path(__file__).resolve().parents[1]
 LOGIN = ROOT / "app/src/main/java/com/am2/am2/LoginActivity.kt"
 LAYOUT = ROOT / "app/src/main/res/layout/activity_login.xml"
 
 
 def code(text: str) -> str:
-    """Source without comments, so prose cannot satisfy an absence check."""
-    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
-    return re.sub(r"//[^\n]*", "", text)
+    return executable_text(text)
 
 
 class LoginScreenContractTest(unittest.TestCase):

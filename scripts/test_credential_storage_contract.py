@@ -27,19 +27,13 @@ import re
 import unittest
 from pathlib import Path
 
+from kotlin_source import executable_text
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def code(text: str) -> str:
-    """Source with its comments removed.
-
-    Six assertions in one session matched prose rather than code -- a comment
-    explaining why something was removed says the same words the check was
-    looking for. An absence check that reads comments cannot distinguish a
-    change from an explanation of it.
-    """
-    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
-    return re.sub(r"//[^\n]*", "", text)
+    return executable_text(text)
 
 JAVA = ROOT / "app/src/main/java/com/am2/am2"
 MANIFEST = ROOT / "app/src/main/AndroidManifest.xml"

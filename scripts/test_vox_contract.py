@@ -18,6 +18,8 @@ import re
 import unittest
 from pathlib import Path
 
+from kotlin_source import executable_text
+
 ROOT = Path(__file__).resolve().parents[1]
 JAVA = ROOT / "app/src/main/java/com/am2/am2"
 RECORDER = JAVA / "AudioRecorder.kt"
@@ -28,14 +30,7 @@ DEVICES = JAVA / "AudioDeviceManager.kt"
 
 
 def code(text: str) -> str:
-    """Source with its comments removed.
-
-    Comments explaining a change say the same words the check is looking for,
-    so an assertion that reads them cannot tell a change from an explanation
-    of one. This has produced false greens here before.
-    """
-    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
-    return re.sub(r"//[^\n]*", "", text)
+    return executable_text(text)
 
 
 def section(text: str, start: str, end: str) -> str:

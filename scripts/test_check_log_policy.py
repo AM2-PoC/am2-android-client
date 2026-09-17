@@ -77,11 +77,12 @@ class LogPolicyTest(unittest.TestCase):
             "fun good() = Unit\n",
             safe_source='''
                 import android.util.Log
-
                 object SafeLog {
-                    fun e(tag: String, error: Throwable) {
-                        Log.e(tag, "$error")
-                    }
+                    fun d(tag: String, message: String) { if (!BuildConfig.DEBUG) return; Log.d(tag, message) }
+                    fun i(tag: String, message: String) { if (!BuildConfig.DEBUG) return; Log.i(tag, message) }
+                    fun w(tag: String, message: String, error: Throwable? = null) { if (!BuildConfig.DEBUG) return; Log.w(tag, message) }
+                    // if (!BuildConfig.DEBUG) return
+                    fun e(tag: String, message: String, error: Throwable? = null) { Log.e(tag, message) }
                 }
             ''',
         )

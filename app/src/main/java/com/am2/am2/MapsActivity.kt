@@ -242,7 +242,7 @@ class MapsActivity : BaseActivity() {
         when (state) {
             "TX" -> {
                 binding.cardInfoTx.visibility = View.VISIBLE
-                binding.txtSpeakerName.text = "\uD83D\uDCE2 You are Speaking"
+                binding.txtSpeakerName.text = "You are Speaking"
                 binding.txtSpeakerName.setTextColor(Color.parseColor("#FF5252"))
                 
                 val marker = userMarkers["me"]
@@ -257,7 +257,7 @@ class MapsActivity : BaseActivity() {
             }
             "RX" -> {
                 binding.cardInfoTx.visibility = View.VISIBLE
-                binding.txtSpeakerName.text = "\uD83D\uDCE2 $username is Speaking"
+                binding.txtSpeakerName.text = "$username is Speaking"
                 binding.txtSpeakerName.setTextColor(Color.parseColor("#4CAF50"))
                 
                 val marker = userMarkers.values.find { 
