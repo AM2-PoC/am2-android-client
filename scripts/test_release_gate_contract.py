@@ -69,13 +69,15 @@ class ReleaseGateContractTest(unittest.TestCase):
             "the repository goes private",
         )
 
-    def test_tag_releases_stay_restricted_to_version_tags(self):
+    def test_tag_releases_use_the_client_component_namespace(self):
         condition = self.header[self.header.index("if:"):]
         self.assertIn(
-            "refs/tags/v",
+            "refs/tags/client/v",
             condition,
-            "tag-triggered releases must still be restricted to v* tags",
+            "tag-triggered releases must use client/v* tags",
         )
+        self.assertIn('tags: ["client/v*"]', self.workflow)
+        self.assertNotIn("refs/tags/v'", condition)
 
 
 if __name__ == "__main__":
