@@ -1,7 +1,6 @@
 package com.am2.am2
 
 import android.app.Activity
-import android.content.Context
 import android.os.Bundle
 import androidx.multidex.MultiDexApplication
 import org.osmdroid.config.Configuration
@@ -37,10 +36,6 @@ class AppContext : MultiDexApplication() {
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
             override fun onActivityDestroyed(activity: Activity) {}
         })
-    }
-
-    override fun attachBaseContext(base: Context) {
-        super.attachBaseContext(base)
     }
 
     companion object {
