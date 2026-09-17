@@ -1,27 +1,5 @@
 #!/usr/bin/env python3
-"""What the login screen keeps, and what it must never keep.
-
-    The control this file was written for is gone: a radio assigned to a unit
-    stays signed in, and being asked to choose was how one quietly stopped.
-    What survives is the half that was always right -- the unit id is not a
-    credential and is remembered, the password is neither.
-
-The checkbox beside LOGIN carries no label at all -- no android:text, no
-contentDescription, a grey tick box next to a button. Nothing on screen says
-what it does, and what it does is decide whether this handset can bring itself
-back after a restart. That is not a preference; on a field radio it is the
-difference between a unit that returns by itself and one that needs a person
-holding it.
-
-Two behaviours behind it were wrong as well:
-
-    sense once credentials are filled in for you; the listener applied it on
-    any tick, so on a fresh install an operator who ticked the box first could
-    no longer type anything.
-
-    device token there is no stored password to fill, and the line survives as
-    the last place that would put one back on screen.
-"""
+"""Login UI must never restore a stored password into a visible field."""
 import re
 import unittest
 from pathlib import Path
@@ -51,17 +29,7 @@ class LoginScreenContractTest(unittest.TestCase):
 
 
 class TheFileStillHasItsShapeTest(unittest.TestCase):
-    """Every declaration sits where it was declared to sit.
-
-    Removing a listener block took onCreate's closing brace with it. The file
-    still had equal numbers of braces -- a whole-file count said zero and gave
-    false confidence -- while every function after the deletion had become a
-    local one inside onCreate. The compiler said so plainly:
-
-        Modifier 'private' is not applicable to 'local function'
-
-    Balance is not structure. This checks the structure.
-    """
+    """Every member declaration must remain at class scope."""
 
     def setUp(self):
         self.text = LOGIN.read_text(encoding="utf-8")
