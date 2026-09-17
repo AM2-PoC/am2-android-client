@@ -78,15 +78,29 @@ class LogPolicyTest(unittest.TestCase):
             safe_source='''
                 import android.util.Log
                 object SafeLog {
-                    fun d(tag: String, message: String) { if (!BuildConfig.DEBUG) return; Log.d(tag, message) }
-                    fun i(tag: String, message: String) { if (!BuildConfig.DEBUG) return; Log.i(tag, message) }
-                    fun w(tag: String, message: String, error: Throwable? = null) { if (!BuildConfig.DEBUG) return; Log.w(tag, message) }
+                    fun d(tag: String, message: String) {
+                        if (!BuildConfig.DEBUG) return
+                        Log.d(tag, message)
+                    }
+                    fun i(tag: String, message: String) {
+                        if (!BuildConfig.DEBUG) return
+                        Log.i(tag, message)
+                    }
+                    fun w(tag: String, message: String, error: Throwable? = null) {
+                        if (!BuildConfig.DEBUG) return
+                        Log.w(tag, message)
+                    }
                     // if (!BuildConfig.DEBUG) return
-                    fun e(tag: String, message: String, error: Throwable? = null) { Log.e(tag, message) }
+                    fun e(tag: String, message: String, error: Throwable? = null) {
+                        Log.e(tag, message)
+                    }
                 }
             ''',
         )
-        self.assertTrue(findings)
+        self.assertIn(
+            "app/src/main/java/com/am2/am2/logging/SafeLog.kt: SafeLog.e missing executable debug guard",
+            findings,
+        )
 
     def test_rejects_facade_when_only_one_method_is_guarded(self):
         findings = self.scan(

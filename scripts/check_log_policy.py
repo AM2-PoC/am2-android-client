@@ -5,6 +5,8 @@ import re
 import sys
 from pathlib import Path
 
+from kotlin_source import executable_text
+
 FORBIDDEN = (
     (re.compile(r"(?:\bandroid\.util\.)?\bLog\s*\.[A-Za-z_][A-Za-z0-9_]*\s*\("), "direct android.util.Log call"),
     (re.compile(r"\.printStackTrace\s*\("), "printStackTrace call"),
@@ -55,7 +57,7 @@ def exposes_throwable(parameters: str, body: str) -> bool:
 
 
 def facade_violations(path: Path, root: Path) -> list[str]:
-    text = path.read_text(encoding="utf-8", errors="replace")
+    text = executable_text(path.read_text(encoding="utf-8", errors="replace"))
     rel = path.relative_to(root)
     findings: list[str] = []
     methods = SAFE_METHOD.findall(text)
