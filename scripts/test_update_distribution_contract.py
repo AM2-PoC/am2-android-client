@@ -145,7 +145,7 @@ class PublishedManifest(unittest.TestCase):
         """
         workflow = WORKFLOW.read_text()
         start = workflow.index("build-staging-candidate:")
-        # The next job header: a two-space indented key at the start of a line.
+
         after = re.search(r"\n  [a-z][a-z0-9-]*:\n", workflow[start:])
         job = workflow[start:start + after.start()] if after else workflow[start:]
 
@@ -156,11 +156,7 @@ class PublishedManifest(unittest.TestCase):
         )
 
     def test_the_trusted_signer_comes_from_the_key_that_actually_signs(self):
-        # A hand-set value is a value that drifts from the keystore it is
-        # supposed to describe, and the drift is invisible until a handset
-        # refuses an update in the field. Derive it from the keystore the job
-        # has already restored, and check it against what apksigner reports for
-        # the APK that was built with it.
+
         workflow = WORKFLOW.read_text()
         self.assertRegex(
             workflow, r"keytool[^\n]*-list",
@@ -168,16 +164,7 @@ class PublishedManifest(unittest.TestCase):
         )
 
     def test_release_notes_are_published_in_every_language_the_panel_renders(self):
-        # The panel is bilingual and release notes are the one string on it that
-        # cannot live in a catalogue -- they are written per release, not per
-        # key. So the manifest carries an object keyed by locale, and both ends
-        # already know how to read one: am2_release_notes() in the panel and
-        # resolveReleaseNotes() in the relay, which fall back to a plain string
-        # for every manifest published before this.
-        #
-        # It used to publish "staging build from <sha>", which is not a release
-        # note in any language and which the version name now says better --
-        # 1.1.0-staging+124 identifies the build on its own.
+
         notes = ROOT / "app/release-notes.json"
         self.assertTrue(notes.is_file(), "app/release-notes.json is missing")
 

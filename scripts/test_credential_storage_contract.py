@@ -27,19 +27,13 @@ import re
 import unittest
 from pathlib import Path
 
+from kotlin_source import executable_text
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def code(text: str) -> str:
-    """Source with its comments removed.
-
-    Six assertions in one session matched prose rather than code -- a comment
-    explaining why something was removed says the same words the check was
-    looking for. An absence check that reads comments cannot distinguish a
-    change from an explanation of it.
-    """
-    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
-    return re.sub(r"//[^\n]*", "", text)
+    return executable_text(text)
 
 JAVA = ROOT / "app/src/main/java/com/am2/am2"
 MANIFEST = ROOT / "app/src/main/AndroidManifest.xml"
@@ -60,8 +54,7 @@ class CredentialStorageContractTest(unittest.TestCase):
         )
 
     def test_the_plaintext_file_is_removed_rather_than_merely_stopped(self):
-        # Handsets already carry one. Not writing it again leaves every
-        # existing device exactly as exposed as before.
+
         store = (JAVA / "CredentialStore.kt")
         self.assertTrue(store.is_file(), "nothing owns credential storage")
         self.assertIn(
@@ -75,9 +68,7 @@ class CredentialStorageContractTest(unittest.TestCase):
         self.assertIn("EncryptedSharedPreferences", code(secure.read_text()))
 
     def test_the_keystore_class_is_never_reached_below_its_own_minimum(self):
-        # Referencing a class the platform cannot load is a verify-time crash on
-        # old Android, so the import lives in a file the legacy path never
-        # touches, and the branch is on the version.
+
         store = code((JAVA / "CredentialStore.kt").read_text())
         self.assertNotIn(
             "EncryptedSharedPreferences", store,
@@ -174,12 +165,7 @@ class DeviceTokenContractTest(unittest.TestCase):
         )
 
     def test_the_password_is_dropped_once_a_token_arrives(self):
-        # Otherwise the token is an addition rather than a replacement, and
-        # every handset still carries the thing that cannot be revoked.
-        # The body of saveToken, not the file. A bare name match found the
-        # definition of forgetPassword further down and passed against a build
-        # where the call had been deleted -- the seventh assertion in this
-        # session to match a declaration rather than a use.
+
         body = code(self.store)
         body = body[body.index("fun saveToken"):]
         body = body[:body.index("\n    fun ")]
@@ -193,8 +179,7 @@ class DeviceTokenContractTest(unittest.TestCase):
         )
 
     def test_a_stored_token_counts_as_a_session(self):
-        # The password is gone by then. Prove that init restores the complete
-        # token-only state rather than merely naming the token flag somewhere.
+
         init = self.socket[self.socket.index("fun init(context: Context)"):]
         init = code(init[:init.index("\n    fun ")])
         self.assertIn(
@@ -224,9 +209,7 @@ class DeviceTokenContractTest(unittest.TestCase):
             "wasInteractive", manager_success,
             "login success cannot distinguish explicit login from automatic reconnect",
         )
-        # There is no choice to ignore any more: a signed-in radio stays signed
-        # in. What still has to hold is that the automatic path never reaches
-        # the clear() branch, which is what this file exists to protect.
+
         self.assertNotIn(
             "shouldRemember", manager_success,
             "the stored session still depends on a choice that was removed",
@@ -284,8 +267,7 @@ class DeviceTokenContractTest(unittest.TestCase):
         )
 
     def test_an_unreachable_relay_is_not_a_verdict_on_the_credential(self):
-        # protocol.js answers a database timeout with login_error too. Erasing
-        # the token over it signs the handset out until someone reaches it.
+
         branch = self._refusal()["server_unavailable"]
         for destructive in ("CredentialStore.blockSession", "CredentialStore.clear",
                             "savedPassword = null", "isAuthorizedSession = false"):
@@ -306,9 +288,7 @@ class DeviceTokenContractTest(unittest.TestCase):
         )
 
     def test_a_forbidden_account_keeps_what_it_was_issued(self):
-        # An expired subscription is the agency's problem. If the handset
-        # erases its token over it, every unit needs a manual login after the
-        # admin pays -- which is a truck roll, not a renewal.
+
         branch = self._refusal()["not_permitted"]
         for destructive in ("CredentialStore.blockSession", "CredentialStore.clear",
                             "savedPassword = null"):
@@ -329,13 +309,9 @@ class DeviceTokenContractTest(unittest.TestCase):
         )
 
     def test_backoff_survives_a_socket_that_never_authenticates(self):
-        # A socket that opens, fails to authenticate and closes would reset the
-        # delay on every open, so a relay refusing logins is retried in a hot
-        # loop. Only a login that succeeded proves the wait was long enough.
+
         socket = code(self.socket)
-        # Anchored on the function, not on a line inside it: the reset this
-        # test exists to forbid sat ABOVE actualSocketConnected, so slicing
-        # from there passed with the defect still in place.
+
         opened = socket[socket.index("private fun handleOpen("):]
         opened = opened[:opened.index("executeLogin(")]
         self.assertNotIn(
@@ -436,9 +412,7 @@ class ALoginNamesTheHandsetTest(unittest.TestCase):
         )
 
     def test_it_carries_no_identifier_that_follows_a_person(self):
-        # Manufacturer and model describe a kind of handset. ANDROID_ID and the
-        # serial identify one, and current_device_id already carries what the
-        # relay needs for that.
+
         payload = self._payload()
         for forbidden in ("Build.SERIAL", "getImei", "ANDROID_ID", "Settings.Secure"):
             self.assertNotIn(

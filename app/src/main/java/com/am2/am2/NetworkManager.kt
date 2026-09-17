@@ -59,9 +59,6 @@ object NetworkManager {
                 cancelOfflineDebounce()
                 updateStatusFromManager(immediate = true)
                 
-                // Pemicu Reconnect yang lebih cerdas:
-                // Hanya panggil connect() jika WebSocketManager benar-benar terputus total.
-                // Jika sedang 'RECONNECTING' di internal WebSocketManager, biarkan internal loop-nya bekerja.
                 if (!WebSocketManager.isConnected()) {
                     WebSocketManager.connect()
                 }
@@ -69,7 +66,7 @@ object NetworkManager {
 
             override fun onLost(network: Network) {
                 SafeLog.w(TAG, "Jaringan Terputus")
-                // Gunakan delay saat kehilangan jaringan agar UI tidak berkedip
+
                 updateStatusFromManager(immediate = false)
             }
 

@@ -43,15 +43,14 @@ class UpdateVerifierContractTest(unittest.TestCase):
         self.about = code(ABOUT.read_text(encoding="utf-8"))
 
     def test_no_check_refuses_without_naming_itself(self):
-        # A bare `return false` is a refusal nobody can act on.
+
         self.assertNotIn(
             "return false", self.verifier,
             "a check refuses without saying which one it was",
         )
 
     def test_the_reasons_are_distinct(self):
-        # The stable prefix is the identifier; some reasons append the value
-        # they saw, which is what makes a bug report actionable.
+
         reasons = re.findall(r'Refused\(\s*"([a-z0-9_]+)', self.verifier)
         self.assertGreaterEqual(
             len(reasons), 7,
@@ -113,7 +112,7 @@ class TheChannelSurvivesAPathChangeTest(unittest.TestCase):
         )
 
     def test_the_origin_is_still_enforced(self):
-        # Loosening the path must not loosen where an APK may come from.
+
         self.assertRegex(
             self.metadata, r"(origin|scheme|host)",
             "nothing constrains where the APK may be fetched from any more",
@@ -173,16 +172,12 @@ class ATruncatedDownloadIsNotASignatureFailureTest(unittest.TestCase):
         self.about = code(
             (ROOT / "app/src/main/java/com/am2/am2/AboutActivity.kt")
             .read_text(encoding="utf-8"))
-        # startManualDownload and the single attempt it repeats: the retry
-        # lives in one and the completeness check in the other, and the
-        # contract is about the pair.
+
         self.download = self.about[self.about.index("fun startManualDownload"):]
         self.download = self.download[:self.download.index("fun getInstalledVersionCode")]
 
     def test_a_short_download_raises_rather_than_being_written_and_forgotten(self):
-        # Bound to the comparison and the throw it guards, not to the presence
-        # of the words. An earlier pair of assertions here passed with the
-        # condition replaced by `if (false)`.
+
         self.assertRegex(
             self.download,
             r"written\s*!=\s*promised[\s\S]{0,200}?throw",

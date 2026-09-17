@@ -18,7 +18,6 @@ class MenuActivity : BaseActivity() {
 
         setupPermissions()
 
-        // Memberikan fokus awal ke item pertama yang terlihat
         binding.menuGroup.post {
             binding.menuGroup.requestFocus()
         }

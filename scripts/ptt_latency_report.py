@@ -32,13 +32,8 @@ from pathlib import Path
 
 FIELD = re.compile(r"(\w+)=(-?\d+|\w+)")
 
-# One Opus frame of audio. AudioRecorder captures 320 samples at 16 kHz, so the
-# device owes the socket one frame every 20 ms; the relay uses the same figure
-# to judge arrivals. Send pacing is measured against it.
 FRAME_INTERVAL_MS = 20.0
 
-# Ordered stages within one transmission on the sending device. Each pair is
-# reported as the time from the first event to the second.
 TRANSMIT_SEGMENTS = [
     ("button_down", "start_sent", "press to request"),
     ("start_sent", "start_authorized", "relay authorization"),
@@ -49,7 +44,6 @@ TRANSMIT_SEGMENTS = [
     ("button_down", "frame_sent", "press to first frame on the wire"),
 ]
 
-# Ordered stages within one transmission on the receiving device.
 RECEIVE_SEGMENTS = [
     ("frame_received", "frame_decoded", "arrival to decoded"),
     ("frame_decoded", "playback_written", "decoded to playback"),
@@ -133,7 +127,7 @@ def send_pacing_ms(events, frame_interval_ms=FRAME_INTERVAL_MS):
 
     errors = []
     for samples in per_trace.values():
-        # By sequence, not by log order: logcat interleaves.
+
         samples.sort()
         for (seq_a, ns_a), (seq_b, ns_b) in zip(samples, samples[1:]):
             expected_ms = (seq_b - seq_a) * frame_interval_ms

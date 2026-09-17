@@ -1,20 +1,5 @@
 #!/usr/bin/env bash
-#
-# Write the manifest a device will actually accept, from a signed APK.
-#
-# The staging lane produces its manifest in CI, where the APK and its signature
-# are both present. Production cannot: CI builds it unsigned, because the
-# release key is deliberately not there. So the production manifest has to be
-# written wherever signing happens -- and every time it was written by hand it
-# was written wrong, with `download_url` instead of `update_url` and no digests
-# at all, which made the parse throw before any version was compared.
-#
-# Nothing here is restated by the operator. Version, digest and signer are read
-# back off the artifact, so the manifest cannot describe a different build.
-#
-# Usage:
-#   scripts/publish_update_manifest.sh SIGNED.apk https://host/update/update.apk [CHANGELOG]
-#
+
 set -euo pipefail
 
 usage() {
@@ -49,8 +34,6 @@ version_name=$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<<"$badging" | head 
 [[ $version_code =~ ^[0-9]+$ ]] || { echo "no versionCode in $apk" >&2; exit 1; }
 [[ -n $version_name ]] || { echo "no versionName in $apk" >&2; exit 1; }
 
-# An unsigned APK would produce an empty signer digest and a manifest the device
-# rejects after downloading, deleting and silently reporting nothing.
 signer=$("$build_tools/apksigner" verify --print-certs "$apk" \
     | sed -n 's/.*certificate SHA-256 digest: *\([0-9a-fA-F]\{64\}\).*/\1/p' \
     | head -1 | tr 'A-F' 'a-f')

@@ -26,8 +26,7 @@ class PttAuthorizationSourceTest(unittest.TestCase):
         handler = section(self.text, '"ptt_audio_start_authorized" ->', '"ptt_active_status" ->')
         self.assertIn("traceId == activeTransmitTraceId", handler)
         self.assertIn("internalIsTalking", handler)
-        # Authorization is one of two conditions; the microphone route is the
-        # other. See test_audio_route_readiness.py for the combined gate.
+
         self.assertIn("startCaptureWhenReady()", handler)
 
     def test_capture_still_opens_when_the_relay_never_acknowledges(self):

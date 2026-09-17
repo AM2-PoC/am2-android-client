@@ -40,8 +40,7 @@ class TheScreenFollowsTheSessionTest(unittest.TestCase):
         self.about = code(ABOUT.read_text(encoding="utf-8"))
 
     def test_both_identity_fields_are_observable(self):
-        # Not one of them. An asymmetry here is exactly how this fault arrived:
-        # the name was made observable and the id was left a plain read.
+
         for field in ("myUserNameLiveData", "myUserIdLiveData"):
             self.assertTrue(
                 re.search(r"val %s\s*:\s*LiveData" % field, self.manager),
@@ -50,8 +49,7 @@ class TheScreenFollowsTheSessionTest(unittest.TestCase):
             )
 
     def test_the_identity_livedata_is_actually_fed(self):
-        # A LiveData nothing ever posts to is a field that is always null, which
-        # would pass the declaration check above and still show a dash forever.
+
         self.assertTrue(
             re.search(r"_myUserIdLiveData\.postValue", self.manager),
             "nothing ever publishes the user id, so the mirror stays empty",
@@ -66,9 +64,7 @@ class TheScreenFollowsTheSessionTest(unittest.TestCase):
             )
 
     def test_the_about_screen_does_not_sample_the_identity(self):
-        # The specific regression: a direct read of the backing property into a
-        # view. Observing and then also sampling would reintroduce the stale
-        # first paint this contract exists to prevent.
+
         offenders = re.findall(
             r"^.*\.text\s*=.*WebSocketManager\.(myUserId|myUserName)\b.*$",
             self.about,

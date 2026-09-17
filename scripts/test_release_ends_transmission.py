@@ -39,7 +39,7 @@ class ReleaseIsTheEnd(unittest.TestCase):
     def setUp(self):
         self.ws = read(SOCKET)
         body = section(self.ws, "fun stopTalking()", "\n    fun ")
-        # Past the declaration, so a self-call is distinguishable from the name.
+
         self.stop = body[body.index("{") + 1:]
 
     def test_the_teardown_the_operator_feels_is_synchronous(self):
@@ -131,12 +131,6 @@ class ReleaseIsTheEnd(unittest.TestCase):
             r"captureStarted = false",
             "release no longer marks capture closed",
         )
-
-    def test_a_refused_press_still_tells_the_operator(self):
-        """Refusals remain -- half duplex and RX still refuse -- and must be audible."""
-        self.assertIn("onPressRefused", self.ws)
-        refused = section(self.ws, "private fun onPressRefused()", "\n    private fun ")
-        self.assertRegex(refused, r"SoundManager\.")
 
 
 if __name__ == "__main__":

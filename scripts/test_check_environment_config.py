@@ -39,11 +39,6 @@ class EnvironmentConfigTest(unittest.TestCase):
         self.assertNotIn('"wss://apiapi.am2-poc.com"', ws)
         self.assertNotIn('"https://apiapi.am2-poc.com/update/version.json"', about)
 
-        # Naming the two endpoints that existed at the time let a third one
-        # through: UpdateMetadata carried the production APK URL as a literal,
-        # so every build — staging included — would only accept an update
-        # served from production. The rule is that no source file holds an
-        # endpoint of its own, so it is checked by absence across the tree.
         offenders = sorted(
             path.relative_to(ROOT).as_posix()
             for path in (ROOT / "app/src/main/java").rglob("*.kt")
@@ -52,11 +47,7 @@ class EnvironmentConfigTest(unittest.TestCase):
         self.assertEqual([], offenders)
 
         verifier = (ROOT / "app/src/main/java/com/am2/am2/update/UpdateVerifier.kt").read_text()
-        # The kill switch, by what it does rather than by the shape it was
-        # written in: the verifier answers on SELF_UPDATE_ENABLED before it
-        # looks at anything else. Pinning the old one-line form made a refusal
-        # that names its reason -- which is what a refused handset needed --
-        # fail this file.
+
         self.assertRegex(
             verifier,
             r"if \(!BuildConfig\.SELF_UPDATE_ENABLED\)[\s\S]{0,120}?return",
@@ -82,18 +73,12 @@ class EnvironmentConfigTest(unittest.TestCase):
         for host in ("dev-api.am2-poc.com", "staging-apiapi.am2-poc.com", "apiapi.am2-poc.com"):
             self.assertIn(f'"https://{host}/update/update.apk"', text)
 
-        # Counted against the flavours themselves rather than a literal, so
-        # adding one cannot leave it silently sharing another's endpoint --
-        # and so the assertion does not have to be re-derived by hand every
-        # time the flavour list grows.
         flavours = self.flavour_names(text)
         self.assertEqual(
             len(flavours), text.count("UPDATE_APK_URL"),
             f"one of {flavours} does not declare its own update APK URL",
         )
-        # One per flavour, plus the defaultConfig value they override. Staging
-        # and play both need their own: staging exercises the update path it
-        # owns, play must have it switched off.
+
         self.assertEqual(
             len(flavours) + 1, text.count("SELF_UPDATE_ENABLED"),
             f"one of {flavours} does not state whether it updates itself",
@@ -228,11 +213,7 @@ class EnvironmentConfigTest(unittest.TestCase):
         self.assertIn("create_tls_fixture.sh", emulator_script)
         self.assertIn("start_tls_fixture", emulator_script)
         self.assertIn("stop_tls_fixture", emulator_script)
-        # The policy step discovers scripts/test_*.py rather than listing them,
-        # so every contract in that directory runs — including this one — and a
-        # new contract cannot be added without being executed. Naming one file
-        # here would pin a weaker property and would break the moment the list
-        # stopped being hand-maintained.
+
         self.assertIn("contracts=(scripts/test_*.py)", text)
         self.assertIn("No source contracts were found", text)
         self.assertNotIn("DevLegacyCompat", text)

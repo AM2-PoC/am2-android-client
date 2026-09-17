@@ -39,19 +39,17 @@ class RecorderLifecycleContractTest(unittest.TestCase):
         start = section(self.text, "fun startRecording(", "private fun handleVoxLogic")
         self.assertIn("join(", start,
                       "startRecording does not wait for the previous thread to unwind")
-        # The join has to come before the shared encoder is touched, or the
-        # native handle can still be destroyed underneath the old thread.
+
         self.assertLess(start.index("join("), start.index("createEncoder"),
                         "the encoder is recreated before the previous thread has finished")
 
     def test_the_recording_thread_is_held_so_it_can_be_waited_on(self):
-        # A bare `thread { }` returns a handle nobody kept, which is why the
-        # original could only ever set a flag and hope.
+
         self.assertRegex(self.text, r"recordingThread\s*=",
                          "the recording thread handle is not retained")
 
     def test_the_recorder_handle_is_published_across_threads(self):
-        # Written under a lock, read unlocked from the recording loop.
+
         self.assertRegex(self.text, r"@Volatile\s+private var audioRecord",
                          "audioRecord is still a plain field read across threads")
 
@@ -80,7 +78,7 @@ class RecorderLifecycleContractTest(unittest.TestCase):
         """
         text = re.sub(r"/\*.*?\*/", "", self.text, flags=re.S)
         text = re.sub(r"//[^\n]*", "", text)
-        # Strings can hold parentheses and would otherwise read as call sites.
+
         text = re.sub(r'"(?:[^"\\]|\\.)*"', '""', text)
 
         declared = set(re.findall(r"\bfun\s+(\w+)\s*\(", text))
@@ -88,7 +86,7 @@ class RecorderLifecycleContractTest(unittest.TestCase):
 
         control_flow = {"if", "while", "for", "when", "catch", "return", "try",
                         "synchronized", "run", "let", "apply", "also", "require", "check"}
-        # Kotlin's own, and three reached through an `apply`/`?.apply` receiver.
+
         elsewhere = {"arrayOf", "thread", "putExtra", "release", "stop"}
 
         self.assertEqual(
@@ -97,24 +95,17 @@ class RecorderLifecycleContractTest(unittest.TestCase):
         )
 
     def test_no_new_unpublished_field_crosses_threads(self):
-        # By absence: every mutable field in this file is either volatile,
-        # atomic, or named here as deliberately confined to one thread.
+
         confined = {
-            # Written and read only by the recording thread, inside handleVoxLogic.
+
             "voxTriggerCount", "voxSilenceTimer", "lastVoxTriggerAt",
-            # Same thread, inside reportVoxLevel: diagnostic accumulators and
-            # the stamp that rate-limits them. Nothing outside the loop reads
-            # any of these -- they are summed per frame by the recording thread
-            # and zeroed by the same thread when the window closes.
+
             "voxLevelPeak", "voxLevelReportedAt",
             "voxLevelSum", "voxLevelFloor", "voxLevelFrames",
-            # Set once during init, before any thread reads it.
+
             "appContext",
         }
-        # Public vars count too: settings write them, the recording thread reads
-        # them. Restricting this to `private` is how two of them were missed.
-        # Anchored to the object's own indent so locals inside functions and
-        # fields of nested classes are not mistaken for shared state.
+
         declared = re.findall(r"^    (?:private )?var (\w+)", self.text, re.M)
         volatile = set(re.findall(r"@Volatile\n    (?:private )?var (\w+)", self.text))
         unpublished = {name for name in declared if name not in volatile} - confined

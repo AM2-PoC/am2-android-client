@@ -24,8 +24,7 @@ class VideoOverlayContractTest(unittest.TestCase):
         self.text = VIDEO.read_text()
 
     def test_no_placeholder_label_is_shown_over_the_camera(self):
-        # A hardcoded string bypassed resource review and reached production as
-        # a banner across the video.
+
         self.assertNotIn('"PREVIEW"', self.text)
 
     def test_the_overlay_is_hidden_when_nobody_is_streaming(self):

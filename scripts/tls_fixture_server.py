@@ -48,8 +48,7 @@ def handle(connection: ssl.SSLSocket) -> None:
         is_websocket = b"upgrade: websocket" in request.lower()
         connection.sendall(response_for(request))
         if is_websocket:
-            # Keep the upgraded connection alive long enough for OkHttp's
-            # onOpen callback to run and send its close frame.
+
             time.sleep(5)
 
 
@@ -63,25 +62,14 @@ def main() -> None:
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     context.maximum_version = ssl.TLSVersion.TLSv1_2
-    # Android 4.1's OpenSSL stack does not advertise ECDHE suites that modern
-    # OpenSSL enables by default. Keep this fixture at TLS 1.2 while offering
-    # an RSA key-exchange suite so it exercises the real Jelly Bean path.
+
     context.set_ciphers("AES128-SHA:@SECLEVEL=1")
     context.load_cert_chain(args.cert, args.key)
 
     with socket.create_server(("127.0.0.1", args.port), reuse_port=False) as listener:
         while True:
             raw, _ = listener.accept()
-            # Two instrumented tests abort the handshake on purpose, to prove a
-            # bad certificate is rejected. An abort arrives here as a peer reset
-            # rather than an SSLError, so catching only SSLError let it escape
-            # and end the loop -- and whichever tests ran after a negative one
-            # then failed against a dead fixture, a confusing multi-test failure
-            # whose cause appeared nowhere in the output.
-            #
-            # The timeout covers the other half: wrap_socket runs inline in this
-            # single-threaded loop, so a peer that connects and then says nothing
-            # would otherwise block every later connection indefinitely.
+
             try:
                 raw.settimeout(10)
                 connection = context.wrap_socket(raw, server_side=True)

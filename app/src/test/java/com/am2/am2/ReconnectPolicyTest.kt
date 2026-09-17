@@ -27,8 +27,7 @@ class ReconnectPolicyTest {
 
     @Test
     fun aScreenWaitingForTheRelayReconnectsWithoutASession() {
-        // The login screen, after the phone has slept. There is nothing to
-        // resume and the socket is still needed.
+
         assertTrue(ReconnectPolicy.shouldReconnect(
             isAuthorized = false, transportWanted = true, closeCode = 1006))
         assertTrue(ReconnectPolicy.shouldReconnect(

@@ -40,8 +40,7 @@ class FrameLossVisibilityContractTest(unittest.TestCase):
 
     def test_the_recorder_does_not_silently_filter_its_own_frames(self):
         loop = section(self.recorder, "while (isRecording)", "\n            }")
-        # Deciding here means the decision is invisible: sendBinary is where the
-        # trace lives, and a frame filtered before it leaves no record at all.
+
         self.assertNotIn("isConnectedOnSocket()", loop,
                          "the recorder still drops frames before the place that records drops")
 
@@ -53,8 +52,7 @@ class FrameLossVisibilityContractTest(unittest.TestCase):
 
     def test_a_frame_lost_to_reauthentication_is_counted(self):
         send = section(self.ws, "fun sendBinary(", "\n    fun isConnected()")
-        # The reconnect window is the biggest single source; it needs its own
-        # reason, not to be folded into a generic failure.
+
         self.assertIn("reauth", send.lower())
 
     def test_enqueue_cannot_race_the_handler_being_released(self):

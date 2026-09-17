@@ -52,9 +52,7 @@ class PermissionSurfaceContractTest(unittest.TestCase):
         )
 
     def test_the_operator_name_still_works_without_it(self):
-        # The point of the removal: this call never needed the permission, so
-        # it must still be here afterwards. Deleting the permission AND the
-        # feature would satisfy the assertions above for the wrong reason.
+
         self.assertTrue(
             "networkOperatorName" in NETWORK.read_text(),
             "the operator name lookup was removed along with the permission",

@@ -268,7 +268,6 @@ class MainActivity : BaseActivity() {
         binding.btnPtt.isPressed = isTalking
         binding.btnPtt.isActivated = hasSpeakers && !isTalking
         
-        // Redupkan tombol jika RX Only atau VOX Aktif (kecuali sedang Private Call)
         binding.btnPtt.alpha = if ((isRxOnly || voxEnabled) && !isPtpActive) 0.5f else 1.0f
 
         val color = when {

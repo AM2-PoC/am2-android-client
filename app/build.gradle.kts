@@ -8,23 +8,6 @@ plugins {
 
 val approvedSigner = providers.gradleProperty("AM2_APPROVED_SIGNER_SHA256").orElse("")
 
-/*
- * Release signing material, supplied from outside the repository.
- *
- * Absent by default, because CI builds the production artifact unsigned on
- * purpose -- the release key is deliberately not there. An unconfigured build
- * is legitimate and has to keep working.
- *
- * The state worth guarding is the one in between. Hand Gradle a keystore path
- * with no password and it attaches no signing config at all, so the release
- * artifact comes out signed with the *debug* key: it builds, it installs, and
- * it is not a release. Nothing in the output says otherwise.
- *
- * This check runs at configuration time, so a half-configured machine fails
- * every Gradle invocation rather than only the release task. That is the
- * intent: the wrong state should be loud where it is set, not discovered
- * later in an artifact that already shipped.
- */
 val signingProps: Map<String, String?> = listOf(
     "AM2_KEYSTORE_FILE",
     "AM2_KEYSTORE_PASSWORD",
@@ -39,25 +22,7 @@ require(signingConfigured || signingProps.values.all { it == null }) {
         signingProps.filterValues { it == null }.keys.joinToString(", ")
 }
 
-/*
- * The staging key, which is a different key on purpose.
- *
- * Android permits an install over an existing app only when the new package
- * carries the *same* signature. It does not care whether the key is called
- * debug or release -- a debug keystore holds a real private key. What matters
- * is continuity, and this project has never had any: every staging APK is
- * built on a runner that generates a debug key and discards it, so 1.1.119
- * could not be overwritten by 1.1.124 and each round of field testing costs
- * an operator their local state.
- *
- * Separate from the release key because this one has to live in CI to be of
- * any use, and the upload key must not. Collapsing them would put the app's
- * permanent identity on every runner that builds a staging APK.
- *
- * Unconfigured is legitimate: a developer without the key still builds and
- * runs, falling back to their own debug key. Continuity only matters for the
- * artifact that reaches a handset.
- */
+/* Staging uses a persistent key distinct from the production signing key. */
 val stagingSigningProps: Map<String, String?> = listOf(
     "AM2_STAGING_KEYSTORE_FILE",
     "AM2_STAGING_KEYSTORE_PASSWORD",
@@ -72,18 +37,6 @@ require(stagingSigningConfigured || stagingSigningProps.values.all { it == null 
         stagingSigningProps.filterValues { it == null }.keys.joinToString(", ")
 }
 
-/**
- * The build's identity, supplied by CI as its run number.
- *
- * This was the literal 3 in every APK ever produced. The device decides an
- * update exists by comparing version codes, so an unchanging one made the
- * channel permanently answer "already current" -- and left neither end able to
- * name the build actually installed. A round of latency work was evaluated
- * against an APK that could not be shown to contain it.
- *
- * A local build keeps a low number, so a developer APK can never look newer
- * than a published one and is never offered to a field device.
- */
 val buildVersionCode = providers.gradleProperty("AM2_VERSION_CODE")
     .map { property ->
         val parsed = property.trim().toIntOrNull()
@@ -92,21 +45,6 @@ val buildVersionCode = providers.gradleProperty("AM2_VERSION_CODE")
     }
     .orElse(1)
 
-/*
- * Which source this binary came from, carried in the version itself.
- *
- * "Which commit is build 210?" took three queries to CI, repeatedly, on a day
- * when the answer decided whether a build was guilty of anything. The version
- * string is on every login record already; it may as well say.
- *
- * Semantic Versioning rule 10 allows it: build metadata is "a series of dot
- * separated identifiers" of "[0-9A-Za-z-]", and it "MUST be ignored when
- * determining version precedence" -- so this changes what a version says and
- * nothing about how versions order. Android orders by versionCode regardless.
- *
- * Constrained rather than trusted: a branch name with a slash in it would
- * produce a version string no tool can parse, and it would do so quietly.
- */
 val buildSourceSha = providers.gradleProperty("AM2_SOURCE_SHA")
     .map { property ->
         val trimmed = property.trim()
@@ -117,14 +55,6 @@ val buildSourceSha = providers.gradleProperty("AM2_SOURCE_SHA")
     }
     .orElse("")
 
-/*
- * The release a human declared, read from version.properties rather than
- * written here.
- *
- * CI has to know this string to write the update manifest the field app fetches,
- * and a quoted literal inside a build script is not something another job can
- * read. -PAM2_VERSION_NAME overrides it for a one-off build.
- */
 val buildVersionName = providers.gradleProperty("AM2_VERSION_NAME")
     .orElse(
         providers.provider {
@@ -208,8 +138,7 @@ android {
             applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging+${buildVersionCode.get()}${buildSourceSha.get()}"
             resValue("string", "app_name", "am² STAGING")
-            // Staging carries its own channel, so the update path can be
-            // exercised before a production release depends on it.
+
             buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "true")
             buildConfigField(
                 "String",
@@ -229,11 +158,7 @@ android {
         }
         create("production") {
             dimension = "environment"
-            /*
-             * Sideloaded to every unit and never listed anywhere, so it carries
-             * the build like the internal lanes do. Only `play` stays a plain
-             * release, because only `play` has a store listing to keep tidy.
-             */
+
             versionNameSuffix = "+${buildVersionCode.get()}${buildSourceSha.get()}"
             buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "true")
             buildConfigField(
@@ -299,12 +224,7 @@ android {
     }
 
     signingConfigs {
-        /*
-         * staging is a product flavour on the *debug* build type, so
-         * assembleStagingDebug signs with this one. Overriding the existing
-         * debug config rather than inventing a `staging` build type: a fourth
-         * build type would be one nobody assembles.
-         */
+
         if (stagingSigningConfigured) {
             getByName("debug") {
                 storeFile = file(stagingSigningProps.getValue("AM2_STAGING_KEYSTORE_FILE")!!)
@@ -325,8 +245,7 @@ android {
 
     buildTypes {
         release {
-            // Null when unconfigured, which leaves the artifact unsigned --
-            // the deliberate CI behaviour. It is never the debug config.
+
             signingConfig = if (signingConfigured) signingConfigs.getByName("release") else null
             isMinifyEnabled = true
             isShrinkResources = false
@@ -380,19 +299,14 @@ dependencies {
      */
     implementation("androidx.security:security-crypto:1.0.0")
 
-    // Media library
     implementation("androidx.media:media:1.6.0")
 
-    // OKHTTP 3.12.x is the last version supporting API < 21
     implementation("com.squareup.okhttp3:okhttp:3.12.13")
 
-    // Google Play Services Location - version 18.0.0 is safer for very old devices
     implementation("com.google.android.gms:play-services-location:18.0.0")
 
-    // OsmDroid for Maps
     implementation(libs.osmdroid.android)
 
-    // Lifecycle - 2.5.1 is the last version supporting API 16
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.5.1")
     implementation("androidx.lifecycle:lifecycle-service:2.5.1")
     implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.5.1")

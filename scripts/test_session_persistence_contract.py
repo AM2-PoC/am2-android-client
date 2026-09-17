@@ -60,9 +60,7 @@ class SessionPersistenceContractTest(unittest.TestCase):
         )
 
     def test_boot_start_still_decides_starting_on_boot(self):
-        # The preference keeps its own job, in the receiver that owns it.
-        # Removing the gate must not remove the feature -- and naming the file
-        # that actually reads it is how this assertion says which is which.
+
         boot = (ROOT / "app/src/main/java/com/am2/am2/BootReceiver.kt").read_text()
         self.assertIn(
             '"start_on_boot"', boot,
@@ -70,12 +68,7 @@ class SessionPersistenceContractTest(unittest.TestCase):
         )
 
     def test_the_boot_preference_no_longer_gates_the_session(self):
-        # By absence, in the file that resumes: the two questions were joined
-        # here and nowhere else.
-        # The read, not the name. The comment above the assignment explains
-        # why the gate was removed and says "start_on_boot" while doing it --
-        # an absence check on the bare name fails against the very change it is
-        # meant to protect.
+
         init = section(self.socket, "fun init(context: Context)", "\n    fun ")
         self.assertNotRegex(
             init, r'getBoolean\(\s*"start_on_boot"',

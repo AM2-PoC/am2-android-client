@@ -97,8 +97,6 @@ class CredentialStoreInstrumentedTest {
         assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
         assertTrue(CredentialStore.saveToken(context, "token-3", "UNIT01"))
 
-        // Removing the keystore alias makes the encrypted preferences
-        // unreadable while leaving the credential file in place.
         val alias = androidx.security.crypto.MasterKeys.getOrCreate(
             androidx.security.crypto.MasterKeys.AES256_GCM_SPEC,
         )

@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -32,7 +31,6 @@ class AboutActivity : BaseActivity() {
 
     private val VERSION_JSON_URL = BuildConfig.UPDATE_MANIFEST_URL
 
-    /** A dropped link is worth another try; a broken channel is not. */
     private val DOWNLOAD_ATTEMPTS = 3
     private val DOWNLOAD_RETRY_DELAY_MS = 1500L
 
@@ -85,9 +83,7 @@ class AboutActivity : BaseActivity() {
     }
 
     private fun checkDownloadedUpdate() {
-        // Artifact bytes are only trusted within the metadata flow that
-        // downloaded them. Clear leftovers after a restart rather than infer
-        // identity from a filename.
+
         updateDirectory().listFiles { file ->
             file.name.startsWith("update_") && file.name.endsWith(".apk")
         }?.forEach { it.delete() }
@@ -126,8 +122,6 @@ class AboutActivity : BaseActivity() {
                     runOnUiThread {
                         binding.btnCheckUpdate.isEnabled = true
 
-                        // LOGIKA PENGECEKAN: Apakah versi server benar-benar lebih baru?
-                        // Strict metadata always carries a positive numeric version.
                         val isUpdateAvailable = serverVersionCode > currentVersionCode
 
                         if (isUpdateAvailable) {
@@ -142,7 +136,6 @@ class AboutActivity : BaseActivity() {
                                 showUpdateDialog(metadata)
                             }
                         } else {
-                            // JIKA VERSI SAMA ATAU LEBIH TINGGI (Aplikasi sudah terbaru)
                             binding.tvLatestVersion.text = "Versi saat ini v$currentVersionName sudah terbaru"
                             binding.tvLatestVersion.visibility = View.VISIBLE
                             binding.tvLatestVersion.setOnClickListener(null)
@@ -197,18 +190,6 @@ class AboutActivity : BaseActivity() {
             .show()
     }
 
-    /**
-     * Say why an update was refused, where somebody other than the operator
-     * can read it.
-     *
-     * A refusal lives in a Toast on a radio in somebody's hand, so a handset
-     * that cannot update is a handset nobody can diagnose -- which is how one
-     * spent a day being blamed on the build it was refusing. vox_level is the
-     * precedent: three rounds of argument about VOX ended the moment the
-     * handset reported its own numbers instead of being asked about them.
-     *
-     * Best effort by design. A refusal must never itself fail.
-     */
     private fun reportRefusal(reason: String, offered: Long, installed: Long) {
         try {
             WebSocketManager.emit(
@@ -239,20 +220,7 @@ class AboutActivity : BaseActivity() {
         Toast.makeText(this, "Mengunduh pembaruan...", Toast.LENGTH_SHORT).show()
         thread {
             try {
-                /*
-                 * The link this runs over drops. The handset's own diagnostics
-                 * report "Software caused connection abort", and the relay
-                 * measured its uplink stalling on six to twelve per cent of
-                 * frames with gaps up to 3.4 seconds. A nine megabyte APK does
-                 * not always arrive whole over that.
-                 *
-                 * Nothing used to check that it had: copyTo wrote whatever
-                 * arrived, the digest then disagreed, and the operator was told
-                 * the identity or signature of the APK was invalid -- about a
-                 * file that was merely incomplete. The same build had installed
-                 * the day before, when the link was better, which is exactly
-                 * why this looked like a property of the build.
-                 */
+
                 var lastFailure: Exception? = null
                 var attempt = 1
                 while (attempt <= DOWNLOAD_ATTEMPTS) {
@@ -278,13 +246,6 @@ class AboutActivity : BaseActivity() {
                 }
                 lastFailure?.let { throw it }
 
-                /*
-                 * The reason, not a verdict. Eight checks used to arrive
-                 * here as one sentence about signatures, and a handset
-                 * refused an update whose certificate was afterwards proven
-                 * identical to the build already installed -- with nothing
-                 * on the device or off it able to say which check fired.
-                 */
                 when (val outcome = UpdateVerifier.check(destination, metadata, installedVersionCode, packageManager)) {
                     is UpdateCheck.Ok ->
                         runOnUiThread { showVerifiedInstallDialog(destination, metadata, installedVersionCode) }
@@ -302,14 +263,6 @@ class AboutActivity : BaseActivity() {
         }
     }
 
-    /**
-     * One attempt at the APK, which either arrives whole or raises.
-     *
-     * The count is compared with the length the server promised. Without that
-     * the only thing that noticed a short file was the digest, and a digest
-     * mismatch was reported as an identity or signature failure -- which is a
-     * statement about the APK, not about the link that cut it in half.
-     */
     private fun downloadOnce(metadata: UpdateMetadata, destination: File) {
         if (destination.exists()) destination.delete()
 

@@ -5,17 +5,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * A wrong index here corrupts every frame sent, and it is invisible in source
- * review, so the transform is checked against frames whose every sample is
- * distinct.
- */
 class Nv21TransformTest {
 
     private val width = 4
     private val height = 6
 
-    /** Luma sample carrying its own coordinates, so a misplaced byte is traceable. */
     private fun luma(x: Int, y: Int): Byte = (y * width + x + 1).toByte()
 
     private fun frame(): ByteArray {
@@ -44,7 +38,7 @@ class Nv21TransformTest {
 
         for (y in 0 until height) {
             for (x in 0 until width) {
-                // 90 degrees clockwise sends (x, y) to (height - 1 - y, x).
+
                 assertEquals(luma(x, y), lumaAt(rotated, outWidth, height - 1 - y, x))
             }
         }
@@ -57,9 +51,7 @@ class Nv21TransformTest {
 
         for (y in 0 until height) {
             for (x in 0 until width) {
-                // The mirror flips the rotated column, which is what the Matrix
-                // pipeline did. Mirroring the source first would leave a front
-                // camera frame upside down.
+
                 assertEquals(luma(x, y), lumaAt(rotated, outWidth, outWidth - 1 - (height - 1 - y), x))
             }
         }
@@ -71,8 +63,7 @@ class Nv21TransformTest {
             for (mirror in booleanArrayOf(false, true)) {
                 val rotated = Nv21Transform.rotate(frame(), width, height, degrees, mirror)
                 assertEquals(frame().size, rotated.size)
-                // Nothing left untouched means no gap, and a preserved multiset
-                // means no sample was written twice over another.
+
                 assertArrayEquals(
                     frame().sorted().toByteArray(),
                     rotated.sorted().toByteArray(),
@@ -89,10 +80,7 @@ class Nv21TransformTest {
         while (index < rotated.size) {
             val v = rotated[index].toInt()
             val u = rotated[index + 1].toInt()
-            // The fixture gives every V sample a positive value and every U
-            // sample a negative one, so a pair that was split, reordered or
-            // offset by a single byte shows up as a sign that is on the wrong
-            // side of the pair.
+
             assertTrue("expected a V sample at $index, got $v", v > 0)
             assertTrue("expected a U sample at ${index + 1}, got $u", u < 0)
             index += 2
