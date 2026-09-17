@@ -1,24 +1,10 @@
 package com.am2.am2
 
-/**
- * Rotation and mirroring for NV21 camera frames.
- *
- * Preview callbacks always arrive in sensor orientation: setDisplayOrientation
- * only turns the local SurfaceView and setRotation only applies to takePicture.
- * The frame therefore has to be turned before it is encoded.
- *
- * Doing it on the bytes costs a transpose of the Y plane and of the interleaved
- * VU plane. The alternative the capture path used before was to decode the frame
- * to a Bitmap, rotate it with a Matrix and encode it again, which cost roughly
- * ten times as much for every frame sent.
- */
 object Nv21Transform {
 
-    /** Width of the frame produced by [rotate] for a given input width/height. */
     fun rotatedWidth(width: Int, height: Int, degrees: Int): Int =
         if (degrees == 90 || degrees == 270) height else width
 
-    /** Height of the frame produced by [rotate] for a given input width/height. */
     fun rotatedHeight(width: Int, height: Int, degrees: Int): Int =
         if (degrees == 90 || degrees == 270) width else height
 

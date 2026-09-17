@@ -29,28 +29,13 @@ package com.am2.am2
  */
 internal object WireAdmission {
 
-    /**
-     * How many bytes may already be queued before video is refused.
-     *
-     * Roughly one frame at the sizes this app sends, so at most one video frame
-     * is ever in flight ahead of an audio frame and head-of-line delay stays
-     * bounded by a single transmission rather than by a growing queue.
-     */
     const val VIDEO_QUEUE_BUDGET_BYTES = 24_000L
 
-    /** Sustained pressure, at which video should also lower its own cost. */
     const val VIDEO_PRESSURE_BYTES = 12_000L
 
     fun shouldAdmitVideo(queuedBytes: Long, budgetBytes: Long = VIDEO_QUEUE_BUDGET_BYTES): Boolean =
         queuedBytes < budgetBytes
 
-    /**
-     * How hard video should try to be cheap, given what is already queued.
-     *
-     * Reported as a level rather than a quality number so the capture side owns
-     * what to trade — resolution, quality, or skipping a frame — and this file
-     * stays a statement about the socket.
-     */
     fun videoPressure(queuedBytes: Long): Pressure = when {
         queuedBytes >= VIDEO_QUEUE_BUDGET_BYTES -> Pressure.BLOCKED
         queuedBytes >= VIDEO_PRESSURE_BYTES -> Pressure.HEAVY

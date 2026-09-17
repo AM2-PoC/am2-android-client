@@ -12,7 +12,6 @@ import java.security.MessageDigest
 sealed class UpdateCheck {
     object Ok : UpdateCheck()
 
-    /** [reason] is a stable identifier, not a sentence: it goes in bug reports. */
     data class Refused(val reason: String) : UpdateCheck()
 }
 
@@ -35,7 +34,7 @@ object UpdateVerifier {
                 return outcome
             }
             if (file.length() < 100 * 1024L) {
-                // The usual shape of a download that ended early.
+
                 outcome = UpdateCheck.Refused("file_too_small_${file.length()}")
                 return outcome
             }

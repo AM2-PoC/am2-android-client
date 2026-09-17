@@ -21,8 +21,7 @@ class BootReceiver : BroadcastReceiver() {
             )
             SafeLog.i("BootReceiver", "asked the radio service to come up after boot")
         } catch (e: Exception) {
-            // An OEM that refuses this is a real answer, and a silent one is
-            // what hid the previous fault for so long.
+
             SafeLog.e("BootReceiver", "the radio service could not be started after boot", e)
         }
     }

@@ -39,7 +39,6 @@ class LoginActivity : BaseActivity() {
                 Manifest.permission.ACCESS_NETWORK_STATE
             )
             
-            // Tambahkan izin storage untuk penyimpanan permanen (khusus Android 9 ke bawah)
             if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
                 permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
@@ -64,14 +63,12 @@ class LoginActivity : BaseActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Gunakan Device Protected Storage agar data bisa dibaca saat Boot (sebelum Unlock PIN/Pola)
         safeContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             applicationContext.createDeviceProtectedStorageContext()
         } else {
             applicationContext
         }
 
-        // Inisialisasi WebSocketManager dengan safeContext agar auto-login saat boot lancar
         WebSocketManager.init(safeContext)
 
         if (WebSocketManager.myUserName != null) {
@@ -257,9 +254,7 @@ class LoginActivity : BaseActivity() {
             when (event) {
                 is WebSocketManager.LoginEvent.Success -> {
                     runOnUiThread {
-                        // WebSocketManager owns the persisted session. This
-                        // event also fires for automatic token reconnects, when
-                        // there was no interactive request to evaluate.
+
                         startMainActivity()
                         WebSocketManager.clearLoginEvent()
                     }

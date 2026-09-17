@@ -40,12 +40,6 @@ object LocationHelper {
     private val geocoderExecutor = Executors.newFixedThreadPool(5)
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    /*
-     * Keep this global client because MainActivity still references:
-     * LocationHelper.okHttpClient
-     *
-     * This client has NO trust-all, NO custom HostnameVerifier.
-     */
     val okHttpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)

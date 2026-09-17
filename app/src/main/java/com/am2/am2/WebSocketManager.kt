@@ -38,45 +38,17 @@ object WebSocketManager {
     private const val DEBOUNCE_DISCONNECT_MS = 5000L
     private const val MAX_RECONNECT_DELAY = 10000L
 
-    /*
-     * Backoff protects a relay from a client that cannot connect. It should not
-     * be charged for the first attempt: a socket that just dropped has not
-     * failed to reconnect yet, and two seconds of not trying is heard as dead
-     * audio on a radio.
-     */
     private const val RECONNECT_FIRST_ATTEMPT_MS = 0L
 
     private const val RECONNECT_BASE_DELAY_MS = 2000L
 
-    /*
-     * Spread, so a site full of units that dropped together does not retry
-     * together, fail together and back off together.
-     */
     private const val RECONNECT_JITTER_FRACTION = 0.25
     private val reconnectJitter = java.util.Random()
     private const val AUTHORIZATION_FALLBACK_MS = 500L
     private const val BLUETOOTH_ROUTE_FALLBACK_MS = 700L
 
-    /*
-     * How long a speaker stays listed with no frames arriving.
-     *
-     * A fallback, not the rule: ptt_active_status clears the list
-     * authoritatively about a hundred milliseconds after the key is released.
-     * This only has to cover an end message that never arrives at all -- a lost
-     * packet, a sender that dropped off -- so it is a backstop rather than the
-     * thing the indicator normally waits for.
-     */
     private const val SPEAKER_FRAME_IDLE_MS = 2000L
 
-    /*
-     * How long the end signal waits for the last frames to land.
-     *
-     * The relay discards audio from a speaker it has already removed, so ending
-     * the instant the key is released truncates the transmission. This is not a
-     * debounce and the operator cannot feel it: everything they perceive --
-     * the flag, the UI, the mute state, the microphone -- is already settled
-     * before it starts.
-     */
     private const val TRANSMIT_TAIL_DRAIN_MS = 100L
 
 
@@ -91,12 +63,6 @@ object WebSocketManager {
     private var lastSentLat: Double = 0.0
     private var lastSentLon: Double = 0.0
 
-    /*
-     * The last fix we were told about, whether or not it was worth sending.
-     *
-     * The heartbeat re-confirms this rather than asking for a new fix, so a
-     * handset sitting still costs one small message and no radio wake.
-     */
     private var lastKnownLat: Double = 0.0
     private var lastKnownLon: Double = 0.0
     private var lastKnownAccuracy: Float = 0f
@@ -127,9 +93,6 @@ object WebSocketManager {
             _myUserNameLiveData.postValue(value)
         }
 
-    // Seeded, not empty. An observer on a LiveData that has never held a value
-    // is never called, so a screen opened before the first login would render
-    // no identity line at all rather than the dash that says "not signed in".
     private val _myUserIdLiveData = MutableLiveData<String?>(null)
     val myUserIdLiveData: LiveData<String?> = _myUserIdLiveData
 
@@ -150,12 +113,6 @@ object WebSocketManager {
     @Volatile private var persistAuthorizedSession = false
     @Volatile private var authenticationWasAutomatic = false
 
-    /*
-     * Something on screen is waiting for the relay even though nothing has
-     * signed in yet. The login screen sets this while it is in front, so a
-     * socket lost to the phone sleeping is brought back instead of leaving the
-     * screen reporting "Server Offline" against a relay that is up.
-     */
     @Volatile private var transportWanted = false
 
     private val _availableChannels = MutableLiveData<JSONArray>(JSONArray())
@@ -170,9 +127,9 @@ object WebSocketManager {
     private val activeSpeakers = Collections.synchronizedSet(LinkedHashSet<String>())
     private val speakerLastSeen = mutableMapOf<String, Long>()
     private val receivePttTraces = PttReceiveTraceRegistry()
-    /* Logged once per sender, not once per frame: a 50 Hz message is not a log. */
+
     private val unknownSendersSeen = Collections.synchronizedSet(mutableSetOf<Int>())
-    /* Video refused so audio would not wait. Reported, never silently absorbed. */
+
     private val videoFramesDropped = java.util.concurrent.atomic.AtomicLong(0)
     /* Audio lost while the session was re-establishing, counted rather than guessed at. */
     private val reauthFramesDropped = java.util.concurrent.atomic.AtomicLong(0)
@@ -183,7 +140,6 @@ object WebSocketManager {
     @Volatile private var captureStarted = false
     @Volatile private var transmitAuthorized = false
     private var pendingAuthTimeout: Runnable? = null
-    /* The one deferred stop, held so it can be cancelled and never queued twice. */
 
     private val _activeVideoStreamers = MutableLiveData<Set<String>>(emptySet())
     val activeVideoStreamers: LiveData<Set<String>> = _activeVideoStreamers
@@ -326,19 +282,12 @@ object WebSocketManager {
             Settings.Secure.ANDROID_ID
         )
 
-        // Restore the whole state. Once a token has been issued there is no
-        // password by design, but the username is still required to present it.
         val stored = CredentialStore.state(context)
         savedUsername = stored.username
         savedPassword = stored.password
 
         currentChannelSlug = prefs?.getString("last_channel_slug", null)
 
-        //
-        // A token counts as much as a password, and soon it is the only thing
-        // here: the password is deleted the moment the relay issues one. Asking
-        // only about the password would have brought the signed-out-after-a-
-        // restart fault straight back, by a different route.
         activeDeviceToken = stored.token
         hasDeviceToken = !activeDeviceToken.isNullOrEmpty()
         isAuthorizedSession = stored.canResume
@@ -474,10 +423,6 @@ object WebSocketManager {
             client = createWebSocketClient(context)
         }
 
-        /*
-         * Increment generation BEFORE closing old socket.
-         * This invalidates all late callbacks from old sockets.
-         */
         val generation = socketGeneration + 1
         socketGeneration = generation
 
@@ -607,9 +552,6 @@ object WebSocketManager {
 
                     handleDisconnectCleanup(immediate = false)
 
-                    // Through the policy, not inline: a failure is one of the ways
-                    // a socket ends, and a rule that applies to only some of them
-                    // is not a rule.
                     if (ReconnectPolicy.shouldReconnect(isAuthorizedSession, transportWanted, 1006)) {
                         attemptReconnect()
                     }
@@ -634,13 +576,7 @@ object WebSocketManager {
         SafeLog.i(TAG, "WebSocket connected generation=$generation")
         webSocket = socket
         isConnecting = false
-        /*
-         * The backoff is NOT reset here. A socket that opens, fails to
-         * authenticate and closes would reset it on every open, so a relay
-         * refusing logins is retried in a hot loop. Only a login that
-         * succeeded proves the wait was long enough, and that is where it
-         * resets.
-         */
+
         actualSocketConnected = true
         isAuthenticatedOnCurrentSocket = false
         reconnectAttempts = 0
@@ -716,13 +652,6 @@ object WebSocketManager {
         resetTalkingState()
     }
 
-    /**
-     * The scheduled delay, spread a little either side.
-     *
-     * An immediate attempt stays immediate: spreading zero would reintroduce
-     * exactly the wait this removes. The result is clamped so the spread can
-     * never push a retry past the bound the backoff promises.
-     */
     private fun jitteredDelay(base: Long): Long {
         if (base <= 0L) return 0L
         val spread = (base * RECONNECT_JITTER_FRACTION).toLong().coerceAtLeast(1L)
@@ -730,15 +659,6 @@ object WebSocketManager {
         return (base + offset).coerceIn(0L, MAX_RECONNECT_DELAY)
     }
 
-    /**
-     * The relay refused a login for its own reasons, not this handset's.
-     *
-     * The socket is still open and unauthenticated, so nothing would happen
-     * on its own. Closing it hands the retry to the ordinary reconnect path,
-     * which already backs off and jitters -- and the backoff is only reset by
-     * a login that succeeded, so a relay that keeps refusing is retried more
-     * and more slowly instead of in a loop.
-     */
     private fun retryLoginAfterRelayFailure() {
         actualSocketConnected = false
         try {
@@ -801,9 +721,6 @@ object WebSocketManager {
                     myUserId = dataObj.optString("id")
                     myUserName = dataObj.optString("username")
 
-                    // Kept, and the password dropped with it. A relay that
-                    // could not issue one sends null, and this handset simply
-                    // asks for the password once more next time.
                     val issued = dataObj.optString("device_token", "")
                     if (issued.isNotEmpty()) {
                         val persisted = appContext?.let {
@@ -895,8 +812,7 @@ object WebSocketManager {
 
                     when (reason) {
                         "server_unavailable" -> {
-                            // The relay could not answer. It said nothing about
-                            // this handset, so nothing here may act as if it had.
+
                             SafeLog.w(TAG, "Relay could not complete a login; the credential stands")
                             // An interactive attempt is left to the operator,
                             // who is watching the screen and can try again. Any
@@ -925,11 +841,7 @@ object WebSocketManager {
                             savedPassword = null
                             cancelReconnect()
                             if (!blocked) SafeLog.e(TAG, "A rejected credential could not be blocked durably")
-                            /*
-                             * A revoked token is worthless, and retrying with it
-                             * would be a loop. The password is gone by then, so
-                             * the only honest next step is to ask for it.
-                             */
+
                             if (reason == "token_revoked") {
                                 val cleared = appContext?.let { CredentialStore.clearToken(it) } ?: false
                                 activeDeviceToken = null
@@ -939,8 +851,6 @@ object WebSocketManager {
                         }
                     }
 
-                    // An automatic retry is not something the operator asked
-                    // for, and a toast on every backoff cycle is only noise.
                     if (reason != "server_unavailable" || !wasAutomatic) {
                         val msg = dataObj.optString("message", "Login Gagal")
                         _loginEvent.postValue(LoginEvent.Error(msg))
@@ -1626,14 +1536,6 @@ object WebSocketManager {
 
     fun currentTransmitTraceId(): Long? = activeTransmitTraceId
 
-    /**
-     * Whether the relay has agreed to carry this transmission.
-     *
-     * A press cannot ask -- capture is armed only after the acknowledgement,
-     * so by the time there is anything to send the answer is always yes. VOX
-     * needs it: the microphone is already open there, so frames exist before
-     * the relay has decided, and the relay drops audio while it decides.
-     */
     fun isTransmitAuthorized(): Boolean = transmitAuthorized
 
     fun startTalking() {
@@ -1703,16 +1605,6 @@ object WebSocketManager {
         reportLocation(force = false)
     }
 
-    /*
-     * Non-gateway capture needs two things, and the former fixed 400/700 ms
-     * delay was a single guess covering both: the relay must have authorized
-     * the transmission, and the microphone route must be carrying audio.
-     *
-     * The route matters because AudioRecord binds its input on construction and
-     * will not move onto a Bluetooth SCO link that connects afterwards. Opening
-     * capture early does not clip the start of a transmission — it pins the
-     * whole transmission to the built-in microphone.
-     */
     private fun startCaptureWhenReady() {
         if (!internalIsTalking || captureStarted) return
         if (!transmitAuthorized) return
@@ -1720,8 +1612,6 @@ object WebSocketManager {
         executeStartRecording()
     }
 
-    /* Called when a Bluetooth route finishes connecting, which is usually after
-     * the press. A transmission already waiting on it starts here. */
     fun onCaptureRouteReady() {
         pttHandler.post { startCaptureWhenReady() }
     }
@@ -1744,9 +1634,7 @@ object WebSocketManager {
     private fun armAuthorizationFallback() {
         cancelAuthorizationFallback()
         val traceId = activeTransmitTraceId ?: return
-        // The same question isCaptureRouteReady() asks. Keying off mere Bluetooth
-        // presence made an A2DP speaker -- which has no microphone to wait for --
-        // extend the bound as though a headset were still connecting.
+
         val bound = if (AudioDeviceManager.isBluetoothScoCapable && !AudioDeviceManager.isScoConnected) {
             BLUETOOTH_ROUTE_FALLBACK_MS
         } else {
@@ -1790,10 +1678,7 @@ object WebSocketManager {
     private fun executeStartRecording() {
         if (!internalIsTalking || captureStarted) return
         val target = internalPtpTargetId
-        // Claim the capture only once the source is known, so a transmission
-        // with no channel yet can still start when one arrives. Capture itself
-        // is told nothing: a frame carries a user id and the relay resolves the
-        // room from it, so the destination was never this side's to pass.
+
         if (target.isNullOrEmpty() && currentChannelSlug == null) return
 
         cancelAuthorizationFallback()
@@ -1877,12 +1762,6 @@ object WebSocketManager {
         }
     }
 
-    /**
-     * How hard the uplink is pushing back right now.
-     *
-     * Exposed so the capture side can spend less before it is refused outright:
-     * a weak link should soften the picture rather than switch it on and off.
-     */
     internal fun videoPressure(): WireAdmission.Pressure =
         WireAdmission.videoPressure(webSocket?.queueSize() ?: 0L)
 
@@ -1930,14 +1809,10 @@ object WebSocketManager {
     ) {
         if (!actualSocketConnected) return
 
-        // Remembered whether or not it is sent, so the heartbeat has something
-        // current to confirm without asking the GPS for another fix.
         lastKnownLat = lat
         lastKnownLon = lon
         lastKnownAccuracy = accuracy
 
-        // The rule itself is in LocationReportPolicy, where it can be tested
-        // without a socket, a service or a handset.
         if (!force && lastSentLat != 0.0 && lastSentLon != 0.0) {
             val results = FloatArray(1)
 
@@ -1955,19 +1830,6 @@ object WebSocketManager {
         sendLocation(lat, lon, accuracy)
     }
 
-    /**
-     * Say again where we are, without asking where that is.
-     *
-     * A unit that is not moving sends nothing: Android delivers no fix below
-     * its displacement filter, and the distance gate above drops what little
-     * gets through. Its position stays right and its timestamp goes stale, and
-     * the panel grades by timestamp -- so a parked unit was painted as lost
-     * within five minutes of parking.
-     *
-     * This re-sends the fix already in hand rather than requesting a new one,
-     * so a stationary handset costs one small message and no radio wake. The
-     * period is set by the caller; see PTTService.
-     */
     fun confirmLocation() {
         if (!actualSocketConnected) return
         if (lastKnownLat == 0.0 && lastKnownLon == 0.0) return
@@ -2022,25 +1884,10 @@ object WebSocketManager {
         }
 
         val socket = webSocket
-        /*
-         * What is already waiting to go out. send() only enqueues and returns
-         * immediately, so a true result says the frame was accepted, not that
-         * it reached the wire. Recording the backlog here is what separates a
-         * frame delayed by the uplink from one delayed by encoding.
-         */
+
         val queueBytes = socket?.queueSize() ?: 0L
         val isAudio = data.firstOrNull()?.toInt() == 1
 
-        /*
-         * The one place the two media compete for the wire. Audio is always
-         * admitted; video is refused while the socket still holds a frame's
-         * worth, so it can never queue ahead of speech.
-         *
-         * Refused here rather than after enqueueing, because OkHttp cannot be
-         * asked to reorder what it already holds. A late video frame has no
-         * value either — by the time a backlog drained, its picture would be
-         * history — so dropping is the honest outcome, and it is counted.
-         */
         if (!isAudio && !WireAdmission.shouldAdmitVideo(queueBytes)) {
             videoFramesDropped.incrementAndGet()
             return
@@ -2116,8 +1963,7 @@ object WebSocketManager {
 
     @Synchronized
     fun logout(): Boolean {
-        // Invalidate callbacks before clearing disk, so a login_success already
-        // in flight cannot recreate the token after explicit logout.
+
         socketGeneration += 1
         isAuthorizedSession = false
         isAuthenticatedOnCurrentSocket = false
@@ -2141,7 +1987,6 @@ object WebSocketManager {
         actualSocketConnected = false
         isConnecting = false
 
-        /* Invalidate callbacks unless logout already did it before disk clear. */
         if (invalidateGeneration) socketGeneration += 1
 
         cancelReconnect()

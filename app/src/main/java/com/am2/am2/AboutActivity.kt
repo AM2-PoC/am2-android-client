@@ -31,7 +31,6 @@ class AboutActivity : BaseActivity() {
 
     private val VERSION_JSON_URL = BuildConfig.UPDATE_MANIFEST_URL
 
-    /** A dropped link is worth another try; a broken channel is not. */
     private val DOWNLOAD_ATTEMPTS = 3
     private val DOWNLOAD_RETRY_DELAY_MS = 1500L
 
@@ -84,9 +83,7 @@ class AboutActivity : BaseActivity() {
     }
 
     private fun checkDownloadedUpdate() {
-        // Artifact bytes are only trusted within the metadata flow that
-        // downloaded them. Clear leftovers after a restart rather than infer
-        // identity from a filename.
+
         updateDirectory().listFiles { file ->
             file.name.startsWith("update_") && file.name.endsWith(".apk")
         }?.forEach { it.delete() }
@@ -125,8 +122,6 @@ class AboutActivity : BaseActivity() {
                     runOnUiThread {
                         binding.btnCheckUpdate.isEnabled = true
 
-                        // LOGIKA PENGECEKAN: Apakah versi server benar-benar lebih baru?
-                        // Strict metadata always carries a positive numeric version.
                         val isUpdateAvailable = serverVersionCode > currentVersionCode
 
                         if (isUpdateAvailable) {
@@ -141,7 +136,6 @@ class AboutActivity : BaseActivity() {
                                 showUpdateDialog(metadata)
                             }
                         } else {
-                            // JIKA VERSI SAMA ATAU LEBIH TINGGI (Aplikasi sudah terbaru)
                             binding.tvLatestVersion.text = "Versi saat ini v$currentVersionName sudah terbaru"
                             binding.tvLatestVersion.visibility = View.VISIBLE
                             binding.tvLatestVersion.setOnClickListener(null)

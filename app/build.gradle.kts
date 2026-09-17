@@ -8,7 +8,6 @@ plugins {
 
 val approvedSigner = providers.gradleProperty("AM2_APPROVED_SIGNER_SHA256").orElse("")
 
-/* Release signing is optional, but partial configuration is rejected. */
 val signingProps: Map<String, String?> = listOf(
     "AM2_KEYSTORE_FILE",
     "AM2_KEYSTORE_PASSWORD",
@@ -38,7 +37,6 @@ require(stagingSigningConfigured || stagingSigningProps.values.all { it == null 
         stagingSigningProps.filterValues { it == null }.keys.joinToString(", ")
 }
 
-/** CI supplies a positive version code; local builds default to 1. */
 val buildVersionCode = providers.gradleProperty("AM2_VERSION_CODE")
     .map { property ->
         val parsed = property.trim().toIntOrNull()
@@ -47,7 +45,6 @@ val buildVersionCode = providers.gradleProperty("AM2_VERSION_CODE")
     }
     .orElse(1)
 
-/* CI appends a validated source SHA as SemVer build metadata. */
 val buildSourceSha = providers.gradleProperty("AM2_SOURCE_SHA")
     .map { property ->
         val trimmed = property.trim()
@@ -58,7 +55,6 @@ val buildSourceSha = providers.gradleProperty("AM2_SOURCE_SHA")
     }
     .orElse("")
 
-/* The release version is shared through version.properties; CI may override it. */
 val buildVersionName = providers.gradleProperty("AM2_VERSION_NAME")
     .orElse(
         providers.provider {
@@ -142,8 +138,7 @@ android {
             applicationIdSuffix = ".staging"
             versionNameSuffix = "-staging+${buildVersionCode.get()}${buildSourceSha.get()}"
             resValue("string", "app_name", "am² STAGING")
-            // Staging carries its own channel, so the update path can be
-            // exercised before a production release depends on it.
+
             buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "true")
             buildConfigField(
                 "String",
@@ -163,11 +158,7 @@ android {
         }
         create("production") {
             dimension = "environment"
-            /*
-             * Sideloaded to every unit and never listed anywhere, so it carries
-             * the build like the internal lanes do. Only `play` stays a plain
-             * release, because only `play` has a store listing to keep tidy.
-             */
+
             versionNameSuffix = "+${buildVersionCode.get()}${buildSourceSha.get()}"
             buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "true")
             buildConfigField(
@@ -254,8 +245,7 @@ android {
 
     buildTypes {
         release {
-            // Null when unconfigured, which leaves the artifact unsigned --
-            // the deliberate CI behaviour. It is never the debug config.
+
             signingConfig = if (signingConfigured) signingConfigs.getByName("release") else null
             isMinifyEnabled = true
             isShrinkResources = false
@@ -309,16 +299,12 @@ dependencies {
      */
     implementation("androidx.security:security-crypto:1.0.0")
 
-    // Media library
     implementation("androidx.media:media:1.6.0")
 
-    // OKHTTP 3.12.x is the last version supporting API < 21
     implementation("com.squareup.okhttp3:okhttp:3.12.13")
 
-    // Google Play Services Location - version 18.0.0 is safer for very old devices
     implementation("com.google.android.gms:play-services-location:18.0.0")
 
-    // OsmDroid for Maps
     implementation(libs.osmdroid.android)
 
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.5.1")

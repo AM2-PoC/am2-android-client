@@ -12,14 +12,7 @@ data class UpdateMetadata(
     val changelog: String
 ) {
     companion object {
-        /**
-         * The one URL this build accepts an update from.
-         *
-         * It was the production URL written as a literal and compiled into
-         * every environment, so a staging build refused its own channel and
-         * would only have taken an APK served from production — the exact
-         * cross-environment hand-off that separate channels exist to prevent.
-         */
+
         val approvedUrl: String get() = BuildConfig.UPDATE_APK_URL
 
         private fun origin(url: String): String {

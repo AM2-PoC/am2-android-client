@@ -39,8 +39,6 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
 
     private val encoding = AtomicBoolean(false)
 
-    /* The receive-side twin of [encoding]: at most one frame decoding at a time,
-     * so a slow decoder sheds instead of falling further behind. */
     private val decoding = AtomicBoolean(false)
 
     private var previewWidth = 0
@@ -56,14 +54,11 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
     private val decodingExecutor = Executors.newSingleThreadExecutor()
 
     private companion object {
-        /* Long edge requested from the camera, so the frame never needs scaling. */
+
         const val TARGET_FRAME_EDGE = 480
-        /* JPEG is the only format YuvImage encodes, and at this quality a frame
-         * is about the size the previous WEBP pass produced for a fraction of
-         * the work. The receiver decodes by content, not by declared format. */
+
         const val FRAME_QUALITY = 55
-        /* Used while the uplink is backing up: a softer picture still arriving
-         * beats a sharp one that is refused. */
+
         const val FRAME_QUALITY_HEAVY = 35
     }
 
@@ -184,8 +179,7 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
             } else {
                 binding.ivIncomingVideo.visibility = View.GONE
                 binding.cvLocalPreview.visibility = View.VISIBLE
-                // Nothing to caption: the screen is the operator's own camera,
-                // so the banner is hidden rather than labelled.
+
                 binding.layoutVideoInfo.visibility = View.GONE
                 binding.tvStreamerName.text = ""
                 binding.ivIncomingVideo.setImageBitmap(null)
@@ -207,10 +201,7 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
         WebSocketManager.incomingVideoFrame.observe(this) { pair ->
             if (isFinishing) return@observe
             val data = pair.second
-            // The same backpressure the send side already has. Without it a
-            // decoder slower than the arrival rate builds a backlog that never
-            // clears, and the picture drifts further behind live for as long as
-            // the stream runs. The newest frame is always the useful one.
+
             if (!decoding.compareAndSet(false, true)) return@observe
             decodingExecutor.execute {
                 try {
@@ -278,9 +269,6 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
             val opened = Camera.open(currentCameraId)
             camera = opened
 
-            // Ask the camera for a frame close to what is actually sent, so no
-            // downscale is needed later. Some devices ignore an unsupported
-            // size, so choose from the list they report.
             val parameters = opened.parameters
             if (parameters.supportedPreviewFormats?.contains(ImageFormat.NV21) != false) {
                 parameters.previewFormat = ImageFormat.NV21
@@ -297,9 +285,7 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
 
             val info = Camera.CameraInfo()
             Camera.getCameraInfo(currentCameraId, info)
-            // Preview callbacks always arrive in sensor orientation:
-            // setDisplayOrientation only affects the local SurfaceView and
-            // setRotation only applies to takePicture.
+
             frameRotation = info.orientation
             mirrorFrame = info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT
 
@@ -367,15 +353,7 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
     override fun onPreviewFrame(data: ByteArray?, camera: Camera?) {
         if (!isStreaming || data == null || isFinishing) return
         if (previewWidth == 0 || previewHeight == 0) return
-        // Drop this frame rather than queue it: the next one is more current
-        // than anything a backlog could deliver.
-        /*
-         * Spend less before the wire refuses us. Encoding a frame the socket
-         * has no room for costs a rotate and a compress and is thrown away at
-         * the last moment, so read the pressure here and decline early — and
-         * soften the picture in between, so a weak uplink degrades rather than
-         * switching video on and off.
-         */
+
         val pressure = WebSocketManager.videoPressure()
         if (pressure == WireAdmission.Pressure.BLOCKED) return
         if (!encoding.compareAndSet(false, true)) return
