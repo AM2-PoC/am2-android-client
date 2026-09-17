@@ -174,12 +174,6 @@ class LoginActivity : BaseActivity() {
             .show()
     }
 
-    /*
-     * This screen needs the relay reachable before anybody has signed in, and
-     * reconnecting used to be gated on having a session. The first drop -- the
-     * phone sleeping is enough -- left it reporting "Server Offline" against a
-     * relay that was up, until a login called connect() directly.
-     */
     override fun onStart() {
         super.onStart()
         WebSocketManager.wantTransport(true)
@@ -285,13 +279,7 @@ class LoginActivity : BaseActivity() {
     }
 
     private fun sendLoginRequest(identity: String, pass: String) {
-        /*
-         * No choice is offered any more. A radio assigned to a unit stays
-         * signed in until somebody signs it out or an admin revokes it, which
-         * is what every purpose-built field device does. The control that used
-         * to sit here did more than decline to save: an unticked sign-in ran
-         * CredentialStore.clear() and threw away a token that was working.
-         */
+
         sharedPreferences.edit().putString(LAST_USERNAME, identity).apply()
         WebSocketManager.login(identity, pass)
     }

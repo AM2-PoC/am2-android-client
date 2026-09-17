@@ -233,12 +233,7 @@ android {
     }
 
     signingConfigs {
-        /*
-         * staging is a product flavour on the *debug* build type, so
-         * assembleStagingDebug signs with this one. Overriding the existing
-         * debug config rather than inventing a `staging` build type: a fourth
-         * build type would be one nobody assembles.
-         */
+
         if (stagingSigningConfigured) {
             getByName("debug") {
                 storeFile = file(stagingSigningProps.getValue("AM2_STAGING_KEYSTORE_FILE")!!)
@@ -326,7 +321,6 @@ dependencies {
     // OsmDroid for Maps
     implementation(libs.osmdroid.android)
 
-    // Lifecycle - 2.5.1 is the last version supporting API 16
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.5.1")
     implementation("androidx.lifecycle:lifecycle-service:2.5.1")
     implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.5.1")

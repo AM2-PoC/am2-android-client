@@ -38,8 +38,7 @@ class PttTraceContractTest(unittest.TestCase):
         loop = section(start, "while (isRecording)", "\n            }")
         self.assertIn("currentTransmitTraceId()", loop,
                       "the trace id is still captured once, so later transmissions log a stale one")
-        # Reading it once before the thread starts is what made VOX and gateway
-        # transmissions untraceable, which is where latency is worst.
+
         before_thread = start[:start.index("thread(")]
         self.assertNotIn("currentTransmitTraceId()", before_thread)
 
@@ -55,8 +54,7 @@ class PttTraceContractTest(unittest.TestCase):
         )
 
     def test_a_dropped_frame_is_recorded_rather_than_lost_silently(self):
-        # A frame discarded without a trace is indistinguishable from one that
-        # was never captured, which is the state that made this hard to measure.
+
         self.assertIn('event = "frame_dropped"', self.ws)
 
     def test_the_report_tool_exists_and_is_runnable(self):
@@ -67,8 +65,7 @@ class PttTraceContractTest(unittest.TestCase):
             self.assertIn(segment, text)
 
     def test_the_report_refuses_to_subtract_clocks_from_different_devices(self):
-        # Two devices' System.nanoTime origins are unrelated. A tool that
-        # subtracts across them produces confident nonsense.
+
         text = REPORT.read_text()
         self.assertRegex(text, r"per-device|same device|one device",
                          "the report does not state that segments are per-device")

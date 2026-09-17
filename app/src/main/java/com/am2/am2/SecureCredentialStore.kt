@@ -7,18 +7,6 @@ import android.os.Build
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
 
-/**
- * The credential store the platform's keystore backs, for handsets that have one.
- *
- * Kept in its own file because of what it imports. EncryptedSharedPreferences
- * arrives with minSdk 23 and this application supports 16, so on the oldest
- * handsets these classes are simply not there. Naming a missing class inside a
- * method the old runtime verifies is how an app crashes at load rather than at
- * the branch that would have used it -- so the type appears here, and nothing
- * on the legacy path ever mentions this file.
- *
- * CredentialStore decides which path runs. This one only knows how.
- */
 @TargetApi(Build.VERSION_CODES.M)
 internal object SecureCredentialStore {
 

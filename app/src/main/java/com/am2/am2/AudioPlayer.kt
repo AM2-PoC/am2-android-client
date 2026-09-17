@@ -425,18 +425,6 @@ object AudioPlayer {
         requestAudioTrack()
     }
 
-    /*
-     * Ask for a track; do not build one here.
-     *
-     * playAudio runs on the OkHttp reader thread. Building an AudioTrack takes
-     * 10-50 ms and used to happen inline under this object's monitor, during
-     * which nothing was read from the socket at all — not this stream's audio,
-     * not anyone else's, and not video. The stall showed up as everything
-     * pausing together, which reads like the network rather than like us.
-     *
-     * The mixer tolerates a missing track by waiting, so handing the work to a
-     * dedicated thread costs nothing and keeps the reader free.
-     */
     private fun requestAudioTrack() {
         val track = synchronized(this) { audioTrack }
         if (track != null && track.state == AudioTrack.STATE_INITIALIZED) return

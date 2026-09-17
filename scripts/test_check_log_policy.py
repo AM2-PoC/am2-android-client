@@ -77,8 +77,7 @@ class LogPolicyTest(unittest.TestCase):
             "fun good() = Unit\n",
             safe_source='''
                 import android.util.Log
-                // if (!BuildConfig.DEBUG) return
-                // error.javaClass.simpleName
+
                 object SafeLog {
                     fun e(tag: String, error: Throwable) {
                         Log.e(tag, "$error")

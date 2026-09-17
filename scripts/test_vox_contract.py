@@ -82,9 +82,7 @@ class VoxSurvivesLosingTheMicrophoneTest(VoxTestCase):
         )
 
     def test_only_an_unrequested_exit_re_arms(self):
-        # isRecording is still true when the loop broke out on its own, and
-        # false when stopRecording asked. That is the discriminator; without it
-        # a re-arm would fight the operator switching VOX off.
+
         start = section(self.recorder, "fun startRecording(", "private fun handleVoxLogic")
         self.assertHas(
             start, r"finally\s*\{.{0,400}?ACTION_VOX_RESTART|unrequested|isRecording\s*//",
@@ -93,8 +91,7 @@ class VoxSurvivesLosingTheMicrophoneTest(VoxTestCase):
         )
 
     def test_the_retry_backs_off_and_has_a_ceiling(self):
-        # A microphone held by a phone call refuses every source immediately, so
-        # an undelayed retry is a tight loop of service intents.
+
         self.assertHas(
             self.recorder, r"VOX_RESTART_BASE_MS",
             "the restart has no backoff: a permanently unavailable microphone "
@@ -112,9 +109,7 @@ class VoxSurvivesLosingTheMicrophoneTest(VoxTestCase):
         )
 
     def test_the_wait_is_served_by_the_service_not_by_the_dying_thread(self):
-        # startRecording joins the previous thread. A thread that sleeps before
-        # exiting makes that join time out and refuses the very restart it
-        # asked for.
+
         self.assertHas(
             self.service, r"ACTION_VOX_RESTART\s*->.{0,300}?postDelayed",
             "the service does not defer the restart, so it lands before the "
@@ -175,7 +170,7 @@ class VoxWaitsForTheRelayTest(VoxTestCase):
         )
 
     def test_the_held_frames_are_flushed_when_authorization_arrives(self):
-        # Holding without flushing is just a slower way of losing them.
+
         self.assertHas(
             self.recorder, r"fun flushPreRoll|flushPreRoll\(\)",
             "held frames are never flushed, so the first word is dropped by "
@@ -183,7 +178,7 @@ class VoxWaitsForTheRelayTest(VoxTestCase):
         )
 
     def test_the_hold_is_bounded_so_a_refused_transmission_cannot_grow_it(self):
-        # A transmission the relay never authorizes must not accumulate.
+
         self.assertHas(
             self.recorder, r"(removeFirst|poll)\(\)",
             "the pre-roll never sheds, so a transmission that is never "
@@ -191,22 +186,6 @@ class VoxWaitsForTheRelayTest(VoxTestCase):
         )
 
 
-# CaptureAsksForTheProcessingItNeedsTest was here, and it enforced the very
-# thing that broke the radio.
-#
-# 523db03 attached AutomaticGainControl, NoiseSuppressor and AcousticEchoCanceler
-# to the capture session because VOX could not hear quiet speech, and this class
-# then held them in place. None of the three had ever been measured against the
-# state it replaced -- before that commit the capture path attached nothing at
-# all, and the radio worked.
-#
-# The field reported audio arriving as fragments, on the button as well as on
-# VOX. The button is what rules the VOX logic out: this is the capture path and
-# every transmission goes through it.
-#
-# The effects are gone and scripts/test_capture_effects_contract.py now holds
-# that. Putting any of them back needs a measurement first, which is what this
-# class should have demanded and never did.
 
 class VoxHearsTheBuiltInMicrophoneTest(VoxTestCase):
     """Noise suppression is tuned for a telephone call, not for a radio.
@@ -253,9 +232,6 @@ class VoxHearsTheBuiltInMicrophoneTest(VoxTestCase):
         """
         block = section(self.recorder, "private fun handleVoxLogic", "private fun requestVoxRestart")
 
-        # Every early return in the not-talking path is a refusal, and each one
-        # must be attributed. Counting `return` keeps this honest as the
-        # function grows: a new exit with no note fails here.
         returns = len(re.findall(r"\breturn\b", code(block)))
         notes = len(re.findall(r"noteVoxBlock\(", code(block)))
         self.assertGreaterEqual(
@@ -292,9 +268,6 @@ class VoxHearsTheBuiltInMicrophoneTest(VoxTestCase):
         report = section(self.recorder, "private fun reportVoxLevel", "private fun handleVoxLogic")
         body = code(report)
 
-        # Asserted as the accumulation, not as the name. `voxLevelSum` appears
-        # in its own reset line, so a check for the bare identifier stays green
-        # with the summing deleted -- which is exactly what it did.
         self.assertIn(
             "voxLevelSum += amplitude", body,
             "the window's mean is never accumulated",
@@ -315,9 +288,6 @@ class VoxHearsTheBuiltInMicrophoneTest(VoxTestCase):
                 "the {} never leaves the handset, so the floor stays a guess".format(field),
             )
 
-        # Reset with the window, like the peak and the block counts. A running
-        # total that is never cleared reports the whole session every time and
-        # converges on a number that describes nothing.
         for reset in ("voxLevelSum = 0", "voxLevelFloor = Int.MAX_VALUE", "voxLevelFrames = 0"):
             self.assertIn(
                 reset, body,
@@ -340,29 +310,20 @@ class VoxHearsTheBuiltInMicrophoneTest(VoxTestCase):
         )
 
     def test_the_amplitude_vox_compares_is_observable(self):
-        # Three rounds of this were argued from source because nothing ever
-        # recorded the one number that decides: what VOX measured, against what
-        # it was measuring for.
+
         self.assertRegex(
             self.recorder, r"(SafeLog|PttTrace)[\s\S]{0,300}?vox[_ ]?level",
             "nothing reports the amplitude VOX saw, so whether a threshold is "
             "wrong or a microphone is silent cannot be told apart",
         )
-        # And that it is called on the amplitude the loop just measured. The
-        # call, with its argument -- the declaration uses a different parameter
-        # name, so matching the bare name matches the definition and passes
-        # against a build that never invokes it. Two versions of this assertion
-        # did exactly that.
+
         self.assertIn(
             "reportVoxLevel(maxAmplitude)", self.recorder,
             "the level is never reported from the frame loop that measures it",
         )
 
     def test_the_level_leaves_the_handset(self):
-        # logcat is where this number went to die: since Android 4.1 no app may
-        # read another's log, so without a PC and adb the one measurement that
-        # decides the fault is locked on the device that has it. The relay
-        # already receives everything else this client says about itself.
+
         self.assertRegex(
             self.recorder, r'emit\(\s*"vox_level"',
             "the level is written to the handset's log only, where the person "
@@ -404,8 +365,7 @@ class VoxKeepsTheWordThatTriggeredItTest(VoxTestCase):
         )
 
     def test_the_ring_holds_copies_rather_than_the_buffer_it_reads_into(self):
-        # pcmBuffer is reused every iteration. Keeping references to it would
-        # leave a ring of fifteen pointers to the same, latest, frame.
+
         ring = section(self.recorder, "val talking = WebSocketManager.isTalkingNow()",
                        "private fun handleVoxLogic")
         self.assertHas(
@@ -429,8 +389,7 @@ class VoxKeepsTheWordThatTriggeredItTest(VoxTestCase):
         )
 
     def test_the_ring_is_dropped_when_it_can_no_longer_be_sent(self):
-        # A transmission that ends, or a recorder that stops, must not leave
-        # last week's syllable to be prepended to next week's transmission.
+
         self.assertHas(
             self.recorder, r"preTrigger\.clear\(\)",
             "the ring outlives the transmission it was collected for",
@@ -492,10 +451,7 @@ class VoxIsNotTriggeredByItsOwnLoudspeakerTest(VoxTestCase):
         )
 
     def test_the_playback_signal_vox_now_reads_is_published(self):
-        # isActuallyPlaying() reads audioTrack and totalFramesWritten, both
-        # written on the playback thread. Asking it from the recording thread
-        # adds a reader, so the fields have to be published -- a plain Long is
-        # not even guaranteed to be read whole on 32-bit.
+
         player = (JAVA / "AudioPlayer.kt").read_text()
         for field in ("audioTrack", "totalFramesWritten"):
             self.assertHas(
@@ -505,8 +461,7 @@ class VoxIsNotTriggeredByItsOwnLoudspeakerTest(VoxTestCase):
             )
 
     def test_the_hold_off_lasts_as_long_as_the_tone_does(self):
-        # MediaPlayer knows the clip length. A guessed constant is what this
-        # codebase has had to remove twice.
+
         self.assertHas(
             self.sounds, r"fun isWithinToneHoldoff\(\)",
             "SoundManager cannot say whether a tone is sounding",
@@ -534,9 +489,7 @@ class VoxDoesNotStormTheServiceTest(VoxTestCase):
 
     def test_a_trigger_clears_the_count_that_produced_it(self):
         vox = section(self.recorder, "private fun handleVoxLogic", "private fun triggerServiceAction")
-        # The whole branch that fires, and nothing after it. The reset in the
-        # *below-threshold* branch is a different reset and must not be allowed
-        # to satisfy this -- it is the one the original already had.
+
         fired = section(vox, "voxTriggerCount >= VOX_TRIGGER_REQUIRED", "} else voxTriggerCount")
         self.assertHas(fired, r"ACTION_START_PTT", "sliced the wrong branch")
         self.assertHas(
@@ -600,8 +553,7 @@ class VoxSensitivityIsConfigurableTest(VoxTestCase):
         )
 
     def test_the_operator_can_actually_set_it(self):
-        # A preference nothing writes is a setting that does not exist. That is
-        # how the update channel shipped inert, and it is worth one assertion.
+
         settings = (JAVA / "SettingActivity.kt").read_text()
         layout = (ROOT / "app/src/main/res/layout/activity_setting.xml").read_text()
         self.assertHas(
@@ -615,8 +567,7 @@ class VoxSensitivityIsConfigurableTest(VoxTestCase):
         )
 
     def test_changing_it_reaches_the_running_recorder(self):
-        # Same as the VOX checkbox: without this the new value waits for the
-        # next service start, which on a radio left switched on is never.
+
         settings = (JAVA / "SettingActivity.kt").read_text()
         listener = section(
             settings, "sbVoxSensitivity.setOnSeekBarChangeListener", "binding.cbShowVirtualPtt",

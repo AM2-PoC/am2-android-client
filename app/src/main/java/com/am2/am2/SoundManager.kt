@@ -138,14 +138,6 @@ object SoundManager {
         }
     }
 
-    /**
-     * A press that was heard and refused.
-     *
-     * Quieter than the transmit tone and reusing the existing end sound, so it
-     * reads as "not now" rather than as a second confirmation. It ignores the
-     * transmit mute, because the whole point is to answer a press made while
-     * something else is still finishing.
-     */
     fun playRefused() {
         if (prefs?.getBoolean("sound_push", true) == false) return
         /*

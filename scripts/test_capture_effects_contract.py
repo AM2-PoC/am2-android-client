@@ -62,8 +62,7 @@ class CaptureEffectsContractTest(unittest.TestCase):
         )
 
     def test_the_recorder_still_reports_what_vox_measured(self):
-        # The telemetry stays. It is what identified this, and it costs the
-        # capture path nothing.
+
         self.assertRegex(
             self.recorder, r'WebSocketManager\.emit\(\s*"vox_level"',
             "removing the effects also removed the measurement that found them",

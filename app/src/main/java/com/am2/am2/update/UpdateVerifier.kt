@@ -9,19 +9,6 @@ import java.io.File
 import java.io.FileInputStream
 import java.security.MessageDigest
 
-/**
- * Whether a downloaded APK may be installed, and when not, which check said so.
- *
- * This used to answer with a Boolean. Eight different questions collapsed into
- * it and AboutActivity turned the result into one sentence about signatures, so
- * a truncated download and a genuine certificate mismatch reached the operator
- * identically. A handset in the field then refused an update whose signing
- * certificate was afterwards proven byte-identical to the build already
- * installed, and nothing on the device or off it could name the reason.
- *
- * Every refusal is named now, and the name carries the value it saw, because
- * the person reading it is holding a radio and not a debugger.
- */
 sealed class UpdateCheck {
     object Ok : UpdateCheck()
 
@@ -59,9 +46,7 @@ object UpdateVerifier {
             }
             val digest = sha256(file)
             if (digest != metadata.sha256) {
-                // Named apart from every signature check. This is what a
-                // truncated or rewritten download looks like, and it was
-                // previously reported to the operator as a signature problem.
+
                 outcome = UpdateCheck.Refused("bytes_differ_${digest.take(12)}")
                 return outcome
             }

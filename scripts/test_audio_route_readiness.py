@@ -29,8 +29,7 @@ class AudioRouteReadinessTest(unittest.TestCase):
         self.ws = WS.read_text()
 
     def test_sco_state_is_read_from_the_broadcast_extra(self):
-        # The receiver already subscribes to the action; the defect was that it
-        # discarded the state extra and so could not tell CONNECTING from CONNECTED.
+
         self.assertIn("ACTION_SCO_AUDIO_STATE_UPDATED", self.device)
         self.assertIn("EXTRA_SCO_AUDIO_STATE", self.device)
         self.assertIn("SCO_AUDIO_STATE_CONNECTED", self.device)
@@ -38,10 +37,7 @@ class AudioRouteReadinessTest(unittest.TestCase):
     def test_route_readiness_is_exposed_and_is_true_without_bluetooth(self):
         self.assertIn("fun isCaptureRouteReady()", self.device)
         ready = section(self.device, "fun isCaptureRouteReady()", "\n    }")
-        # Only a Bluetooth device that can carry a microphone has an
-        # asynchronous handshake worth waiting for. Wired, USB, the built-in
-        # microphone and an A2DP speaker are all usable immediately — the
-        # speaker because it has no input to wait for at all.
+
         self.assertIn("isBluetoothScoCapable", ready)
 
     def test_capture_requires_authorization_and_a_ready_route(self):
@@ -51,8 +47,7 @@ class AudioRouteReadinessTest(unittest.TestCase):
         self.assertIn("isCaptureRouteReady()", gate)
 
     def test_becoming_ready_later_starts_a_waiting_capture(self):
-        # Readiness usually arrives after the press, so the route change has to
-        # drive capture rather than only being polled once at press time.
+
         self.assertIn("onCaptureRouteReady()", self.device)
         self.assertIn("fun onCaptureRouteReady()", self.ws)
 
@@ -63,12 +58,7 @@ class AudioRouteReadinessTest(unittest.TestCase):
         self.assertNotIn("executeStartRecording()", handler)
 
     def test_bluetooth_keeps_the_original_worst_case_bound(self):
-        # The fallback still guarantees audio, but the longer bound is only paid
-        # when a route that can actually carry a microphone has not reported
-        # ready. It used to key off mere Bluetooth presence, which made an
-        # A2DP-only speaker -- a device with no input to wait for -- extend the
-        # bound as though a headset were still connecting. The bound now asks
-        # the same question isCaptureRouteReady() asks.
+
         self.assertIn("private const val AUTHORIZATION_FALLBACK_MS = 500L", self.ws)
         self.assertIn("private const val BLUETOOTH_ROUTE_FALLBACK_MS = 700L", self.ws)
         arm = section(self.ws, "private fun armAuthorizationFallback()", "\n    }")

@@ -86,35 +86,7 @@ object AudioRecorder {
     @Volatile
     private var audioRecord: AudioRecord? = null
 
-    /*
-     * The processing the platform was only ever asked for indirectly.
-     *
-     * VOICE_COMMUNICATION is a request, and on many handsets it is honoured
-     * with gain control, noise suppression and echo cancellation. On many
-     * others it is not, and nothing here ever asked directly -- which is the
-     * shape of the report: audio arriving quiet on *some* devices, VOX deaf on
-     * *some* devices. Both follow from a capture level nobody set.
-     *
-     * AudioFilter cannot fix it. It multiplies by 1.0, 1.0 and 0.8 -- unity,
-     * with the treble pulled down -- and its own comment records why: a fixed
-     * boost was there and came out because it clipped. A fixed boost is
-     * precisely what cannot serve a loud handset and a quiet one at once. Gain
-     * that follows the signal can.
-     *
-     * Held so they can be released with the recorder: each holds a native
-     * session, and VOX restarts every time a phone call takes the microphone.
-     */
 
-    /*
-     * Held so a restart can wait for it.
-     *
-     * stopRecording only ever set a flag, and the thread was usually still
-     * blocked inside AudioRecord.read(). A restart in that window recreated the
-     * shared encoder under the old thread and published a new AudioRecord that
-     * the old thread's cleanup then released — leaving the new transmission
-     * with nothing to read from. It sent zero frames while the UI showed TX,
-     * and nothing threw or logged.
-     */
     @Volatile
     private var recordingThread: Thread? = null
     @Volatile
@@ -219,11 +191,6 @@ object AudioRecorder {
         val userIdStr = WebSocketManager.myUserId ?: "0"
         val userIdTruncated = userIdStr.toLongOrNull()?.toInt() ?: userIdStr.hashCode()
 
-        /*
-         * Wait for the previous recording to finish before touching anything it
-         * shares. A flag cannot express this: the old thread is inside a
-         * blocking read and has not reached its cleanup yet.
-         */
         recordingThread?.let { previous ->
             if (previous.isAlive) {
                 try {
@@ -249,19 +216,7 @@ object AudioRecorder {
             recordingThread = thread(priority = Thread.MAX_PRIORITY, name = "AudioRecordThread") {
                 try {
                     var success = false
-                    /*
-                     * VOICE_COMMUNICATION first, always.
-                     *
-                     * It is the source that asks the platform for echo
-                     * cancellation, and this preference used to be keyed off
-                     * the *output* route: a headset got it, and the built-in
-                     * loudspeaker — the one route with an acoustic path back
-                     * into this microphone — got raw MIC instead. In VOX, where
-                     * the microphone stays open while the radio is talking,
-                     * that closed a loop through the room.
-                     *
-                     * MIC remains as the fallback for a device that refuses.
-                     */
+
                     val sources = arrayOf(
                         MediaRecorder.AudioSource.VOICE_COMMUNICATION,
                         MediaRecorder.AudioSource.MIC,
@@ -287,15 +242,7 @@ object AudioRecorder {
                     }
 
                     if (!success) {
-                        /*
-                         * Every source refused. That is what a Bluetooth route
-                         * in the wrong state looks like, and it used to end
-                         * here: the thread fell through to `finally`, the
-                         * talking state it was started for was never cleared,
-                         * and the UI held TX while no frame was ever sent. The
-                         * operator was told nothing -- the failure that looks
-                         * exactly like working.
-                         */
+
                         SafeLog.e(TAG, "No audio source could be opened; capture refused")
                         WebSocketManager.onCaptureFailed()
                     }
@@ -385,18 +332,7 @@ object AudioRecorder {
                 } catch (e: Exception) {
                     SafeLog.e(TAG, "Recording loop failed", e)
                 } finally {
-                    /*
-                     * isRecording is still set when the loop left on its own: a
-                     * negative read, a source that never opened, an exception.
-                     * Only stopRecording clears it. That is the whole
-                     * difference between a stop somebody asked for and a
-                     * microphone that was taken away -- by an incoming call,
-                     * usually -- and until this was read, the second case ended
-                     * VOX permanently: the thread is all of VOX, nothing
-                     * restarted it, and checkVoxState runs on service start, a
-                     * settings toggle and a socket reconnect, none of which a
-                     * lost microphone causes.
-                     */
+
                     val unrequested = isRecording
                     isRecording = false
                     cleanup()
@@ -441,17 +377,6 @@ object AudioRecorder {
         while (preRoll.size > VOX_PREROLL_FRAMES) preRoll.removeFirst()
     }
 
-    /**
-     * Ask this device for the capture processing it has, and say what it gave.
-     *
-     * Availability is per device and per effect, so isAvailable() decides and
-     * a create() that returns null or throws is simply an effect this handset
-     * does not have. None of it is fatal: capture without them is what every
-     * build before this one did.
-     *
-     * The line it logs is the point. "Sebagian device" cannot be answered by
-     * reading source, and this is the only place that knows.
-     */
     private fun flushPreTrigger(filter: AudioFilter, userIdTruncated: Int) {
         while (preTrigger.isNotEmpty()) {
             val pcm = preTrigger.removeFirst()
@@ -617,14 +542,7 @@ object AudioRecorder {
                 voxTriggerCount++
                 if (voxTriggerCount >= VOX_TRIGGER_REQUIRED) {
                     val now = System.currentTimeMillis()
-                    /*
-                     * One trigger per onset. The count used to survive its own
-                     * trigger, so every later frame above the threshold sent
-                     * another service intent while talking had not started yet
-                     * -- and for an RX-only operator, who is always refused, it
-                     * never starts: fifty intents a second, each rebuilding the
-                     * foreground notification, for as long as they spoke.
-                     */
+
                     voxTriggerCount = 0
                     if (now - lastVoxTriggerAt < VOX_TRIGGER_INTERVAL_MS) {
                         noteVoxBlock(BLOCK_INTERVAL, amplitude)

@@ -30,8 +30,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 GRADLE = ROOT / "app/build.gradle.kts"
 
-# Names that would carry a credential. SIGNER is excluded by exact name below,
-# not by pattern, so a field called SIGNER_KEY still fails.
 SECRET_NAME = re.compile(
     r"(KEY|SECRET|PASSWORD|PASSPHRASE|TOKEN|CREDENTIAL|PRIVATE|KEYSTORE|ALIAS)",
     re.I,
@@ -47,8 +45,7 @@ class NoSecretReachesTheApkTest(unittest.TestCase):
         return re.findall(r'buildConfigField\(\s*"[^"]+"\s*,\s*"([A-Z0-9_]+)"', self.gradle)
 
     def test_the_build_declares_the_fields_this_test_expects(self):
-        # A rename or a refactor that stops this matching would silence every
-        # assertion below without failing anything.
+
         fields = self._fields()
         self.assertGreaterEqual(len(fields), 8, f"only found {fields}")
         self.assertIn("APPROVED_UPDATE_SIGNER_SHA256", fields)
@@ -74,8 +71,7 @@ class NoSecretReachesTheApkTest(unittest.TestCase):
                 )
 
     def test_the_approved_signer_is_a_digest_and_not_a_key(self):
-        # It is published on purpose. A digest is safe to publish; anything with
-        # a private half is not, and a field of this name must stay the former.
+
         self.assertRegex(
             self.gradle,
             r'"APPROVED_UPDATE_SIGNER_SHA256"[\s\S]{0,120}?approvedSigner',

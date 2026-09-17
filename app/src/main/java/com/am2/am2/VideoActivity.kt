@@ -36,15 +36,7 @@ class VideoActivity : BaseActivity(), SurfaceHolder.Callback, Camera.PreviewCall
     private lateinit var prefs: SharedPreferences
     private var pttHardwareKey: Int = -1
     private var pttToggleEnabled = false
-    /*
-     * Backpressure, not a schedule. The capture callback used to submit work
-     * every 200 ms of wall clock regardless of whether the previous frame had
-     * finished, and the executor queue was unbounded, so any device that took
-     * longer than that to encode fell behind live and never caught up.
-     *
-     * With this gate a frame is captured only while the encoder is free, so at
-     * most one frame is ever in flight and the newest frame always wins.
-     */
+
     private val encoding = AtomicBoolean(false)
 
     /* The receive-side twin of [encoding]: at most one frame decoding at a time,

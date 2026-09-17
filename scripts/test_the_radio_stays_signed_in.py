@@ -51,7 +51,7 @@ class TheRadioStaysSignedInTest(unittest.TestCase):
                          "the login screen still reads the choice")
 
     def test_an_interactive_login_is_always_kept(self):
-        # login() used to take the answer and pass it straight through.
+
         self.assertNotRegex(
             self.socket, r"fun login\([^)]*remember\s*:",
             "signing in still takes a remember flag, so a caller can still "
@@ -67,9 +67,7 @@ class TheRadioStaysSignedInTest(unittest.TestCase):
         )
 
     def test_the_username_survives_signing_out(self):
-        # Both halves. An earlier version of this matched the write alone and
-        # survived deleting the read, which would have shipped a unit id that
-        # is stored and never used.
+
         self.assertRegex(
             self.login, r"edit\(\)[\s\S]{0,80}?putString\(LAST_USERNAME",
             "the unit id is never recorded when it is typed",

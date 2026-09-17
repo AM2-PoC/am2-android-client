@@ -81,8 +81,7 @@ class PlayDistributionContractTest(unittest.TestCase):
         )
 
     def test_the_sideload_flavour_still_updates_itself(self):
-        # The transition needs both. Taking self-update out of production here
-        # would strand every device already in the field.
+
         self.assertTrue(
             re.search(
                 r'buildConfigField\("Boolean",\s*"SELF_UPDATE_ENABLED",\s*"true"\)',
@@ -111,8 +110,7 @@ class PlayFlavourIsBuiltContractTest(unittest.TestCase):
         )
 
     def test_it_rides_the_existing_job_rather_than_a_new_one(self):
-        # Adding a job would cost a runner on every push. The constraint is
-        # deliberate, and the cheap fix is also the tempting one to undo.
+
         line = next(
             (l for l in self.workflow.splitlines() if ":app:assemblePlayDebug" in l),
             "",

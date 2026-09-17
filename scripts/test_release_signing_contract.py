@@ -57,8 +57,7 @@ class ReleaseSigningContractTest(unittest.TestCase):
         )
 
     def test_an_unconfigured_build_is_still_valid(self):
-        # CI builds the production artifact unsigned by design. Requiring the
-        # key unconditionally would break that on the very first run.
+
         self.assertTrue(
             self.has(r"signingProps\.values\.all\s*\{\s*it\s*==\s*null\s*\}"),
             "an unconfigured build is not recognised as legitimate",

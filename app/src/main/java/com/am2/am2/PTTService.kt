@@ -457,13 +457,7 @@ class PTTService : Service() {
         val isPtpActive = WebSocketManager.ptpTargetId.value != null
 
         if (voxEnabled && !fromVox && !isPtpActive) {
-            /*
-             * VOX owns the transmit decision, so the press is refused -- but
-             * say so. The on-screen button is dimmed and explains itself; a
-             * Bluetooth or wired PTT button arrives here with no affordance at
-             * all and used to get nothing back, which is indistinguishable
-             * from a button that has stopped working.
-             */
+
             SoundManager.playRefused()
             return
         }

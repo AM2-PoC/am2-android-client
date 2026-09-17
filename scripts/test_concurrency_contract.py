@@ -47,11 +47,10 @@ class ConcurrencyContractTest(unittest.TestCase):
 
     def test_the_socket_reader_never_builds_an_audio_track(self):
         play = section(self.player, "fun playAudio(", "private fun requestAudioTrack()")
-        # playAudio runs on the OkHttp reader thread. Building an AudioTrack
-        # there stalls every inbound frame, audio and video alike.
+
         self.assertNotIn("setupAudioTrack(", play,
                          "the reader thread still builds the track inline")
-        # And the request has to hand the work somewhere else, not merely rename it.
+
         request = section(self.player, "private fun requestAudioTrack()", "\n    fun stop()")
         self.assertIn("setupExecutor.execute", request)
         self.assertLess(request.index("setupExecutor.execute"), request.index("setupAudioTrack("))
@@ -69,8 +68,7 @@ class ConcurrencyContractTest(unittest.TestCase):
     def test_the_mixer_backs_off_when_it_cannot_write(self):
         mixer = section(self.player, "private fun startMixerThread()", "fun playAudio(")
         frames = section(mixer, "if (activeFrames.isNotEmpty())", "} else {")
-        # Without this the loop re-enters immediately, decodes every handler and
-        # discards the PCM, draining the jitter buffer at CPU speed.
+
         self.assertIn("sleep", frames,
                       "the mixer spins when the track is unusable")
 
@@ -80,8 +78,7 @@ class ConcurrencyContractTest(unittest.TestCase):
 
     def test_a_late_camera_frame_cannot_crash_the_camera_thread(self):
         frame = section(self.video, "override fun onPreviewFrame(", "override fun onKeyDown(")
-        # onDestroy shuts the executor down, but surfaceDestroyed can run after,
-        # so a frame can still arrive and be rejected.
+
         self.assertIn("RejectedExecutionException", frame)
 
     def test_a_real_release_cancels_the_volume_key_timer(self):
@@ -93,8 +90,7 @@ class ConcurrencyContractTest(unittest.TestCase):
         ui = section(self.ws, "private fun updateTalkingStatusUI()", "\n    private fun ")
         guarded = re.search(r"synchronized\(activeSpeakers\) \{", ui)
         self.assertIsNotNone(guarded, "the speaker snapshot is no longer taken under the lock")
-        # The LiveData write reaches PTTService and AudioManager synchronously.
-        # It must happen after the lock is released, not inside it.
+
         body = ui[guarded.end():]
         closing = body.index("\n        }")
         self.assertNotIn("_isCommunicationActive", body[:closing],

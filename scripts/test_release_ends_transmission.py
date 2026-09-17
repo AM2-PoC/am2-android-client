@@ -39,7 +39,7 @@ class ReleaseIsTheEnd(unittest.TestCase):
     def setUp(self):
         self.ws = read(SOCKET)
         body = section(self.ws, "fun stopTalking()", "\n    fun ")
-        # Past the declaration, so a self-call is distinguishable from the name.
+
         self.stop = body[body.index("{") + 1:]
 
     def test_the_teardown_the_operator_feels_is_synchronous(self):

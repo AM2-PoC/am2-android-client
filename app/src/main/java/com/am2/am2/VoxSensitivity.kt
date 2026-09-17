@@ -4,38 +4,6 @@ import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-/**
- * The slider the operator moves, and the amplitude VOX compares against.
- *
- * These are inverses: a fuller bar means VOX keys on a quieter voice, which is
- * a *smaller* threshold. Getting that backwards would leave the control working
- * in the wrong direction — a setting that appears to respond, and makes the
- * radio deafer the further right you push it.
- *
- * The direction was right and the *curve* was wrong, which reads the same from
- * the operator's seat. Mapped linearly from 500 to 12000, the default of 2200
- * sat at position 85 of 100: eighty-five steps made VOX deafer and fifteen made
- * it keener. For a control whose only reported fault is "not sensitive enough",
- * almost all of its travel went the other way, and the fifteen steps that
- * remained were the whole answer.
- *
- * The steps are proportional now. Doubling a quiet sound and doubling a loud
- * one are the same perceptual step, so the bar moves by ratio rather than by
- * difference — which is also why a linear map spent most of itself between
- * "shout" and "loud speech", a range nobody speaks in. The same default now
- * sits near the middle with real travel on both sides.
- *
- * The floor is deliberately unchanged. Lowering it is the change that could
- * make VOX key on room noise, and no amplitude any handset has actually
- * reported has been recorded anywhere yet — the reachable range here is exactly
- * the range that was reachable before. Only its distribution across the bar
- * moved.
- *
- * Kept out of the settings screen and off AudioRecorder because both are
- * unreachable from a JVM test: AudioRecorder initialises MIN_BUFFER_SIZE from
- * `AudioRecord.getMinBufferSize`, and touching it under unit test throws. This
- * is arithmetic, so it belongs somewhere arithmetic can be checked.
- */
 object VoxSensitivity {
 
     /** Loud speech only. The bar at its left end. */

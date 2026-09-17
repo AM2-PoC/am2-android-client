@@ -54,8 +54,7 @@ class StagingSigningContractTest(unittest.TestCase):
             )
 
     def test_it_signs_the_debug_build_type_not_a_new_one(self):
-        # staging is a product flavour on the debug build type. Inventing a
-        # `staging` build type would create a fourth nobody assembles.
+
         self.assertTrue(
             self.has(r'getByName\("debug"\)'),
             "the staging key is not applied to the debug build type, so "
@@ -77,18 +76,14 @@ class StagingSigningContractTest(unittest.TestCase):
         )
 
     def test_an_unconfigured_staging_build_still_works(self):
-        # A developer without the key must still be able to build and run.
-        # Falling back to the runner's own debug key is the correct behaviour
-        # there; it is only in CI that continuity matters.
+
         self.assertTrue(
             self.has(r"stagingSigningProps\.values\.all\s*\{\s*it\s*==\s*null\s*\}"),
             "an unconfigured staging build is not recognised as legitimate",
         )
 
     def test_the_release_key_is_still_separate(self):
-        # Two keys on purpose: the staging key must live in CI, and the upload
-        # key must not. Collapsing them would put the upload key on every
-        # runner that builds a staging APK.
+
         self.assertTrue(
             "AM2_KEYSTORE_FILE" in self.gradle and "AM2_STAGING_KEYSTORE_FILE" in self.gradle,
             "the staging key and the release key are no longer distinct",
@@ -117,8 +112,7 @@ class StagingKeyReachesCiContractTest(unittest.TestCase):
         )
 
     def test_no_keystore_is_committed(self):
-        # This repository is public. A committed key would let anyone sign a
-        # package as com.am2.tik.staging and talk to the real staging relay.
+
         found = [
             str(p.relative_to(ROOT))
             for p in ROOT.rglob("*")

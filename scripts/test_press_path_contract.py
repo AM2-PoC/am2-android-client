@@ -54,10 +54,7 @@ class PressPathContractTest(unittest.TestCase):
                         "the tone is played before the relay is even asked")
 
     def test_no_spacing_rule_stands_between_two_presses(self):
-        # Two timers used to compound here: the second measured from a value the
-        # first kept moving, so a 50 ms tap locked the button for 800 ms. The
-        # compounding went first and the remaining 500 ms floor went with it --
-        # release is the end of a transmission, and the next press is immediate.
+
         self.assertNotIn("MIN_TRANSMISSION_MS", self.ws,
                          "a minimum transmission length still gates the release")
         self.assertNotRegex(self.ws, r"now - lastPttEndTime < \d+",
@@ -67,10 +64,7 @@ class PressPathContractTest(unittest.TestCase):
                              f"a bare {literal} is still deciding press behaviour")
 
     def test_the_release_is_not_deferred_at_all(self):
-        # There is nothing left to cancel or to queue twice, because the release
-        # no longer schedules any part of itself. What remains deferred is the
-        # end *signal*, which only lets the last frames land; see
-        # test_release_ends_transmission.py.
+
         stop = section(self.ws, "fun stopTalking()", "fun startVideoStreaming()")
         self.assertNotIn("pendingStop", self.ws,
                          "the deferred-stop machinery is still present")
@@ -80,8 +74,7 @@ class PressPathContractTest(unittest.TestCase):
     def test_a_bluetooth_route_with_no_microphone_is_ready_immediately(self):
         device = DEVICE.read_text()
         ready = section(device, "fun isCaptureRouteReady()", "\n    }")
-        # A2DP is output only. Waiting for an SCO link it will never establish
-        # made every press pay the full fallback.
+
         self.assertIn("ScoCapable", device)
         self.assertIn("ScoCapable", ready)
 

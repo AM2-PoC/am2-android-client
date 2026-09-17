@@ -59,8 +59,7 @@ class ReleasePipelineContractTest(unittest.TestCase):
         )
 
     def test_the_passwords_do_not_travel_on_the_command_line(self):
-        # -P puts them in the process list. Gradle reads ORG_GRADLE_PROJECT_*
-        # environment variables as project properties instead.
+
         self.assertTrue(
             self.has(r"ORG_GRADLE_PROJECT_AM2_KEYSTORE_PASSWORD"),
             "signing material is not passed through the environment",
@@ -72,8 +71,7 @@ class ReleasePipelineContractTest(unittest.TestCase):
         )
 
     def test_the_keystore_is_written_outside_the_workspace(self):
-        # An artifact-upload step globs the workspace. A key inside it would
-        # be published with the build.
+
         self.assertTrue(
             self.has(r"RUNNER_TEMP"),
             "the keystore is written into the workspace, where an upload step "
@@ -81,16 +79,14 @@ class ReleasePipelineContractTest(unittest.TestCase):
         )
 
     def test_the_published_artifact_is_no_longer_called_unsigned(self):
-        # The name is a claim. Leaving it would describe the artifact wrongly
-        # to whoever downloads it.
+
         self.assertFalse(
             "am2-client-production-unsigned" in self.job,
             "the artifact is still named unsigned although the lane signs it",
         )
 
     def test_the_signer_is_recorded_rather_than_assumed(self):
-        # apksigner already runs; the point is that a failure to verify must
-        # not pass silently as it did when unsigned was the expected state.
+
         self.assertTrue(
             "apksigner" in self.job,
             "nothing records which key actually signed the artifact",

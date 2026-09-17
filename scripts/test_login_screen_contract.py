@@ -15,12 +15,10 @@ holding it.
 
 Two behaviours behind it were wrong as well:
 
-  * Ticking it disabled the username and password fields. The lock only makes
     sense once credentials are filled in for you; the listener applied it on
     any tick, so on a fresh install an operator who ticked the box first could
     no longer type anything.
 
-  * It re-filled the password field from storage. Since the relay issues a
     device token there is no stored password to fill, and the line survives as
     the last place that would put one back on screen.
 """
