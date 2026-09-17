@@ -117,7 +117,7 @@ class EnvironmentConfigTest(unittest.TestCase):
             self.assertIn(f'"api":{api}', text)
         self.assertIn("github.event.inputs.lane == 'staging'", text)
         self.assertIn("github.event.inputs.lane == 'release'", text)
-        self.assertIn("startsWith(github.ref, 'refs/tags/v')", text)
+        self.assertIn("startsWith(github.ref, 'refs/tags/client/v')", text)
         self.assertIn('KERNEL=="kvm", GROUP="kvm", MODE="0666"', text)
         self.assertIn("build-staging-candidate:", text)
         self.assertIn("staging-compatibility:", text)
