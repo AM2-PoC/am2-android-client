@@ -1,6 +1,6 @@
 # Contributing
 
-Repository access and contributions require authorization. Do not change visibility, grant access, weaken repository controls, or distribute source or release artifacts outside approved channels.
+Changes to this repository must follow the workflow below and satisfy the applicable review, verification, and release controls.
 
 ## Workflow
 
@@ -12,6 +12,12 @@ Repository access and contributions require authorization. Do not change visibil
 6. Merge only after review and required checks pass.
 
 Do not push directly to `main`. Production publication requires signer continuity, install-over verification against the active release, affected physical-device acceptance, explicit approval, and rollback evidence.
+
+## Releases
+
+- Use Semantic Versioning for externally meaningful behavior: breaking change = major, compatible feature = minor, compatible fix = patch. Documentation, comments, tests, and behavior-neutral chores do not force a version bump.
+- Create immutable annotated `client/vX.Y.Z` tags only at the exact source SHA for an accepted signed artifact. Record package, versionCode/versionName, APK digest, signer, and CI evidence; never move an accepted tag.
+- Build and sign once in the release CI lane; GitHub Release publication and update-channel promotion must consume those exact bytes without rebuilding.
 
 ## Local checks
 
@@ -27,4 +33,4 @@ Use the affected CI lane for compatibility or release-sensitive changes. Documen
 
 Do not commit APK/AAB files, keystores, credentials, personal or production data, `local.properties`, generated build output, local IDE state, or assistant workspaces. Keep comments focused on current contracts and non-obvious compatibility constraints.
 
-Report vulnerabilities through the team's security channel; do not place undisclosed details in issues or pull requests.
+See [SECURITY.md](SECURITY.md) for vulnerability reporting; do not place undisclosed details in issues or pull requests.
