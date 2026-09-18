@@ -8,5 +8,5 @@
 /build.gradle.kts @cipheraenys @riskyprsty
 /settings.gradle.kts @cipheraenys @riskyprsty
 /gradle.properties @cipheraenys @riskyprsty
-/version.properties @cipheraenys @riskyprsty
+/app/version.properties @cipheraenys @riskyprsty
 /.github/CODEOWNERS @cipheraenys @riskyprsty

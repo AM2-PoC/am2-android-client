@@ -4,7 +4,7 @@
 
 ## Scope
 
-- [ ] No confidential source, credentials, personal/production data, signing material, or unapproved artifact is exposed
+- [ ] No credentials, personal/production data, signing material, or unapproved artifact is included
 - Affected packages, flavors, and API levels:
 - Compatibility or protocol impact:
 - Signing, update, or session impact:
