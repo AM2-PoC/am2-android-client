@@ -21,6 +21,14 @@ Do not push directly to `main`. Production publication requires signer continuit
 
 ## Local checks
 
+Enable the repository-managed hooks once per clone:
+
+```bash
+git config --local core.hooksPath .githooks
+```
+
+The hooks run fast static checks only; GitHub Actions remains authoritative. Standard `--no-verify` bypasses a local hook when necessary and must not be treated as CI approval.
+
 ```bash
 python3 scripts/check_log_policy.py
 ./gradlew --no-daemon :app:testDevDebugUnitTest :app:assembleDevDebug

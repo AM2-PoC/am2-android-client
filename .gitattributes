@@ -16,3 +16,4 @@
 *.aab binary
 *.jks binary
 *.keystore binary
+.githooks/* text eol=lf
