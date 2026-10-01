@@ -34,12 +34,12 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platform-tools
       - name: Install Android toolchain
@@ -80,12 +80,12 @@ jobs:
         include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"api":25,"variant":"Dev","package":"com.am2.tik.dev"},{"api":34,"variant":"Dev","package":"com.am2.tik.dev"}]' || (github.event_name == 'schedule' || github.event.inputs.lane == 'nightly') && '[{"api":16,"variant":"Dev","package":"com.am2.tik.dev"},{"api":19,"variant":"Dev","package":"com.am2.tik.dev"},{"api":25,"variant":"Dev","package":"com.am2.tik.dev"},{"api":26,"variant":"Dev","package":"com.am2.tik.dev"},{"api":34,"variant":"Dev","package":"com.am2.tik.dev"}]' || (startsWith(github.ref, 'refs/tags/') || github.event.inputs.lane == 'release') && '[{"api":16,"variant":"Production","package":"com.am2.tik"},{"api":19,"variant":"Production","package":"com.am2.tik"},{"api":25,"variant":"Production","package":"com.am2.tik"},{"api":26,"variant":"Production","package":"com.am2.tik"},{"api":34,"variant":"Production","package":"com.am2.tik"}]' || '[{"api":16,"variant":"Dev","package":"com.am2.tik.dev"},{"api":19,"variant":"Dev","package":"com.am2.tik.dev"},{"api":25,"variant":"Dev","package":"com.am2.tik.dev"},{"api":26,"variant":"Dev","package":"com.am2.tik.dev"},{"api":34,"variant":"Dev","package":"com.am2.tik.dev"}]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platform-tools
       - name: Install Android toolchain
@@ -122,12 +122,12 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platform-tools
       - name: Install Android toolchain
@@ -312,7 +312,7 @@ jobs:
           BADGED_CODE=$(sed -n "s/.*versionCode='\([0-9]\+\)'.*/\1/p" apk-badging.txt | head -1)
           test "$MANIFEST_CODE" = "$BADGED_CODE" \
             || { echo "::error::manifest says $MANIFEST_CODE, APK says $BADGED_CODE"; exit 1; }
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platform-tools
       - name: Install Android platform tools
@@ -380,12 +380,12 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platform-tools
       - name: Install Android toolchain
