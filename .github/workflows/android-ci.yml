@@ -34,12 +34,12 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platform-tools
       - name: Install Android toolchain
@@ -80,12 +80,12 @@ jobs:
         include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"api":25,"variant":"Dev","package":"com.am2.tik.dev"},{"api":34,"variant":"Dev","package":"com.am2.tik.dev"}]' || (github.event_name == 'schedule' || github.event.inputs.lane == 'nightly') && '[{"api":16,"variant":"Dev","package":"com.am2.tik.dev"},{"api":19,"variant":"Dev","package":"com.am2.tik.dev"},{"api":25,"variant":"Dev","package":"com.am2.tik.dev"},{"api":26,"variant":"Dev","package":"com.am2.tik.dev"},{"api":34,"variant":"Dev","package":"com.am2.tik.dev"}]' || (startsWith(github.ref, 'refs/tags/') || github.event.inputs.lane == 'release') && '[{"api":16,"variant":"Production","package":"com.am2.tik"},{"api":19,"variant":"Production","package":"com.am2.tik"},{"api":25,"variant":"Production","package":"com.am2.tik"},{"api":26,"variant":"Production","package":"com.am2.tik"},{"api":34,"variant":"Production","package":"com.am2.tik"}]' || '[{"api":16,"variant":"Dev","package":"com.am2.tik.dev"},{"api":19,"variant":"Dev","package":"com.am2.tik.dev"},{"api":25,"variant":"Dev","package":"com.am2.tik.dev"},{"api":26,"variant":"Dev","package":"com.am2.tik.dev"},{"api":34,"variant":"Dev","package":"com.am2.tik.dev"}]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platform-tools
       - name: Install Android toolchain
@@ -122,12 +122,12 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platform-tools
       - name: Install Android toolchain
@@ -254,7 +254,7 @@ jobs:
           echo "--- published manifest"
           cat staging-candidate/version.json
       - name: Upload immutable staging handoff
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: am2-client-staging-handoff-${{ github.sha }}-${{ github.run_attempt }}
           path: staging-candidate/
@@ -274,7 +274,7 @@ jobs:
         package: [com.am2.tik.staging]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: am2-client-staging-handoff-${{ github.sha }}-${{ github.run_attempt }}
           path: staging-candidate
@@ -312,7 +312,7 @@ jobs:
           BADGED_CODE=$(sed -n "s/.*versionCode='\([0-9]\+\)'.*/\1/p" apk-badging.txt | head -1)
           test "$MANIFEST_CODE" = "$BADGED_CODE" \
             || { echo "::error::manifest says $MANIFEST_CODE, APK says $BADGED_CODE"; exit 1; }
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platform-tools
       - name: Install Android platform tools
@@ -340,7 +340,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: am2-client-staging-handoff-${{ github.sha }}-${{ github.run_attempt }}
           path: staging-candidate
@@ -360,7 +360,7 @@ jobs:
           )
           printf 'validated_api=16,19,25,26,34\n' >> staging-artifact/build-metadata.txt
       - name: Upload proven staging candidate
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: am2-client-staging-debug-${{ github.sha }}
           path: staging-artifact/
@@ -380,12 +380,12 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platform-tools
       - name: Install Android toolchain
@@ -473,7 +473,7 @@ jobs:
           cat release-artifact/version.json
           printf 'approved_signer=%s\n' "$DECLARED" >> release-artifact/build-metadata.txt
       - name: Upload release candidate only
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: am2-client-release-${{ github.sha }}
           path: release-artifact/
